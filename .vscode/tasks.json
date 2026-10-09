@@ -1,0 +1,62 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Frontend: dev",
+      "type": "npm",
+      "script": "dev",
+      "path": "frontend",
+      "isBackground": true,
+      "problemMatcher": [],
+      "presentation": {
+        "panel": "dedicated"
+      }
+    },
+    {
+      "label": "Backend: dev",
+      "type": "shell",
+      "command": "./gradlew bootRun",
+      "windows": {
+        "command": "$env:JAVA_HOME = Split-Path (Split-Path (Get-Command javac).Source); .\\gradlew.bat bootRun"
+      },
+      "options": {
+        "cwd": "${workspaceFolder}/backend"
+      },
+      "isBackground": true,
+      "problemMatcher": [],
+      "presentation": {
+        "panel": "dedicated"
+      }
+    },
+    {
+      "label": "Dev: start both",
+      "dependsOn": [
+        "Frontend: dev",
+        "Backend: dev"
+      ],
+      "dependsOrder": "parallel",
+      "problemMatcher": []
+    },
+    {
+      "label": "Frontend: build",
+      "type": "npm",
+      "script": "build",
+      "path": "frontend",
+      "group": "build",
+      "problemMatcher": []
+    },
+    {
+      "label": "Backend: build and test",
+      "type": "shell",
+      "command": "./gradlew clean build",
+      "windows": {
+        "command": "$env:JAVA_HOME = Split-Path (Split-Path (Get-Command javac).Source); .\\gradlew.bat clean build"
+      },
+      "options": {
+        "cwd": "${workspaceFolder}/backend"
+      },
+      "group": "build",
+      "problemMatcher": []
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+**/node_modules/
+**/dist/
+**/.gradle/
+**/build/
+**/.env
+**/.env.*
+!**/.env.example
+*.log
+.DS_Store
+Thumbs.db
+.idea/
+*.iml
+.classpath
+.project
+.settings/
+
+# Local build cache used during setup
+.gradle-user-home/
