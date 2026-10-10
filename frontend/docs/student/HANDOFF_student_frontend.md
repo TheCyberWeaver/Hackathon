@@ -167,7 +167,7 @@ Ranking: `score = votes + min(ageMinutes, 60) / 10`, descending; `answered` sort
 | Text                                                             | Votes | Status   |
 | ---------------------------------------------------------------- | ----- | -------- |
 | Could you go through the base case of the induction proof again? | 42    | open     |
-| Is this going to be on the exam, or just the idea behind it?     | 37    | selected |
+| How does the induction hypothesis help prove the next case?      | 37    | selected |
 | What is the difference between a relation and a function here?   | 29    | open     |
 | Why does the pumping lemma not apply to this language?           | 24    | open     |
 | Can we see one more worked example of the greedy argument?       | 19    | open     |

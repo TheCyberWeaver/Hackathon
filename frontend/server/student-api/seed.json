@@ -7,8 +7,8 @@
     "ageMinutes": 40
   },
   {
-    "id": "q-exam",
-    "text": "Is this going to be on the exam, or just the idea behind it?",
+    "id": "q-induction-step",
+    "text": "How does the induction hypothesis help prove the next case?",
     "votes": 37,
     "status": "selected",
     "ageMinutes": 37

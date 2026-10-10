@@ -4,7 +4,12 @@ import { QuestionCard } from './components/QuestionCard'
 import { SendIcon } from './components/Icons'
 import SidePanel, { type SidePanelPage } from '../components/SidePanel'
 import { ViewSwitchButton } from './components/ViewSwitchButton'
+import StudentTutorial from './components/StudentTutorial'
 import { animateScrollTo, prefersReducedMotion } from './lib/motion'
+import {
+  readTutorialCompleted,
+  saveTutorialCompleted,
+} from './lib/tutorialProgress'
 import type { CurrentUser } from '../lib/api'
 import LecturePicker from '../components/LecturePicker'
 import {
@@ -74,10 +79,15 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
   const [reportTarget, setReportTarget] = useState<Question | null>(null)
   const [toast, setToast] = useState('')
   const [newQuestionId, setNewQuestionId] = useState<string | null>(null)
+  const [tutorialOpen, setTutorialOpen] = useState(false)
+  const [tutorialCompleted, setTutorialCompleted] = useState(() =>
+    readTutorialCompleted(user.id),
+  )
   const [placeholder] = useState(
     () => examples[Math.floor(Math.random() * examples.length)],
   )
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const heroHeadingRef = useRef<HTMLHeadingElement>(null)
   const mobileListRef = useRef<HTMLElement>(null)
   const pendingVotes = useRef(new Set<string>())
   const pendingDeletes = useRef(new Set<string>())
@@ -86,6 +96,31 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
   const pendingSend = useRef(false)
   const switchingView = useRef(false)
   const toastTimer = useRef<number | undefined>(undefined)
+  const tutorialReturnFocus = useRef<HTMLElement | null>(null)
+
+  function openTutorial() {
+    tutorialReturnFocus.current =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null
+    textareaRef.current?.blur()
+    setFocused(false)
+    setTutorialOpen(true)
+  }
+
+  function closeTutorial(completed: boolean) {
+    if (completed) {
+      setTutorialCompleted(true)
+      saveTutorialCompleted(user.id)
+    }
+    setTutorialOpen(false)
+    window.requestAnimationFrame(() => {
+      const target = tutorialReturnFocus.current?.isConnected
+        ? tutorialReturnFocus.current
+        : heroHeadingRef.current
+      target?.focus()
+    })
+  }
 
   function showToast(message: string) {
     window.clearTimeout(toastTimer.current)
@@ -445,7 +480,6 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
         onNavigate={navigate}
         launcherClassName="side-panel-launcher--student"
       />
-
       {page === 'questions' ? (
         <main>
           <section
@@ -453,7 +487,7 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
             aria-label="Ask a question"
           >
             <div className="hero__content page-column">
-              <h1>
+              <h1 ref={heroHeadingRef} tabIndex={-1}>
                 {selectedLecture?.endedAt
                   ? 'This lecture has ended'
                   : questionsPaused
@@ -517,7 +551,7 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
                   >
                     {questionsPaused
                       ? 'Submissions are unavailable until the professor opens this lecture.'
-                      : 'Your name is not shown on question cards. Professors can view authors.'}
+                      : 'Your name is not shown on question cards.'}
                   </span>
                   <div className="composer__send">
                     <button
@@ -544,6 +578,27 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
                   </div>
                 </div>
               </div>
+              {!tutorialCompleted && (
+                <div className="student-tutorial-invite">
+                  <svg aria-hidden="true" viewBox="0 0 72 38" fill="none">
+                    <path
+                      d="M3 3c18 0 20 27 52 27m-9-9 10 9-11 6"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                  <button
+                    type="button"
+                    className="student-tutorial-trigger"
+                    aria-haspopup="dialog"
+                    onClick={openTutorial}
+                  >
+                    New here? Need a quick tutorial?
+                  </button>
+                </div>
+              )}
             </div>
           </section>
 
@@ -594,43 +649,57 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
                   ? 'Profile'
                   : 'Settings'}
             </h1>
-            <div className="placeholder-page__card">
-              <h2>
-                {page === 'pastLectures'
-                  ? 'Past lectures'
-                  : page === 'profile'
-                    ? 'Your profile'
-                    : 'Settings page'}
-              </h2>
-              <p>
-                {page === 'pastLectures'
-                  ? 'Choose a saved lecture to review its question pool.'
-                  : page === 'profile'
-                    ? 'Your profile will appear here.'
-                    : 'This is a placeholder for your settings.'}
-              </p>
-              {page === 'pastLectures' &&
-                lectures.map((lecture) => (
-                  <p key={lecture.id}>
-                    <button
-                      type="button"
-                      className="text-blue-700 underline"
-                      disabled={
-                        sending || votePendingCount > 0 || deletingIds.size > 0
-                      }
-                      onClick={() => {
-                        setQuestions([])
-                        setLectureId(lecture.id)
-                        rememberLecture(lecture.id)
-                        navigate('questions')
-                      }}
-                    >
-                      {lecture.title} —{' '}
-                      {new Date(lecture.lectureTime).toLocaleString()}
-                    </button>
+            {page === 'settings' ? (
+              <div className="placeholder-page__card student-settings-card">
+                <div>
+                  <h2>Tutorial</h2>
+                  <p>
+                    Need a refresher? You can replay the student guide anytime.
                   </p>
-                ))}
-            </div>
+                </div>
+                <button
+                  type="button"
+                  className="student-settings-open-tutorial"
+                  onClick={openTutorial}
+                >
+                  Open tutorial <span aria-hidden="true">→</span>
+                </button>
+              </div>
+            ) : (
+              <div className="placeholder-page__card">
+                <h2>
+                  {page === 'pastLectures' ? 'Past lectures' : 'Your profile'}
+                </h2>
+                <p>
+                  {page === 'pastLectures'
+                    ? 'Choose a saved lecture to review its question pool.'
+                    : 'Your profile will appear here.'}
+                </p>
+                {page === 'pastLectures' &&
+                  lectures.map((lecture) => (
+                    <p key={lecture.id}>
+                      <button
+                        type="button"
+                        className="text-blue-700 underline"
+                        disabled={
+                          sending ||
+                          votePendingCount > 0 ||
+                          deletingIds.size > 0
+                        }
+                        onClick={() => {
+                          setQuestions([])
+                          setLectureId(lecture.id)
+                          rememberLecture(lecture.id)
+                          navigate('questions')
+                        }}
+                      >
+                        {lecture.title} —{' '}
+                        {new Date(lecture.lectureTime).toLocaleString()}
+                      </button>
+                    </p>
+                  ))}
+              </div>
+            )}
           </section>
         </main>
       )}
@@ -668,6 +737,7 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
       <div className="toast-region" role="status" aria-live="polite">
         {toast && <div className="toast">{toast}</div>}
       </div>
+      {tutorialOpen && <StudentTutorial onClose={closeTutorial} />}
     </div>
   )
 }
