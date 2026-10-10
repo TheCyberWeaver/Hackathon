@@ -3,6 +3,7 @@ package com.example.backend;
 import java.nio.charset.StandardCharsets;
 import java.util.UUID;
 import org.flywaydb.core.Flyway;
+import org.flywaydb.core.api.MigrationVersion;
 import org.junit.jupiter.api.Test;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -24,8 +25,15 @@ class MigrationTests extends PostgresTestSupport {
             db.update("INSERT INTO lectures (title, lecture_time) VALUES ('Existing lecture', CURRENT_TIMESTAMP)");
             db.update("INSERT INTO questions (lecture_id, author_id, text) SELECT l.id, u.id, 'Existing question' FROM lectures l CROSS JOIN users u");
             assertThrows(Exception.class, () -> Flyway.configure().dataSource(source).schemas(schema).load().migrate());
-            var result = Flyway.configure().dataSource(source).schemas(schema).baselineOnMigrate(true).baselineVersion("1").load().migrate();
-            assertEquals(5, result.migrationsExecuted);
+            var flyway = Flyway.configure().dataSource(source).schemas(schema).baselineOnMigrate(true).baselineVersion("1").load();
+            // V1 is already installed. Count discovered later migrations so new versions do not stale this assertion.
+            long expectedMigrations = java.util.Arrays.stream(flyway.info().all())
+                .filter(migration -> migration.getVersion() != null && migration.getVersion().compareTo(MigrationVersion.fromVersion("1")) > 0)
+                .count();
+            assertTrue(expectedMigrations > 0);
+            var result = flyway.migrate();
+            assertEquals(expectedMigrations, result.migrationsExecuted);
+            assertEquals(0, flyway.info().pending().length);
             assertEquals("Existing question", db.queryForObject("SELECT text FROM questions", String.class));
             assertEquals(false, db.queryForObject("SELECT selected FROM questions", Boolean.class));
             assertTrue(db.queryForObject("SELECT started_at = lecture_time FROM lectures", Boolean.class));
