@@ -56,7 +56,7 @@ The sketch defines **layout and behavior only**. Styling:
 
 ## 5. Screens and behavior
 
-Design mobile first at **390x844**, then desktop at **1920x1080**. One scrollable page plus a left sidebar overlay. Same behavior on both unless stated.
+Design mobile first at **390x844**, then desktop at **1920x1080**. The scrollable questions page and the two placeholder pages share one left sidebar overlay. Same behavior on both unless stated.
 
 ### 5.1 Resting state
 
@@ -69,7 +69,8 @@ Design mobile first at **390x844**, then desktop at **1920x1080**. One scrollabl
 ### 5.2 Sidebar
 
 - Tapping the trigger opens a sidebar **over the left part of the screen (about 60% of width on mobile)**. The rest is **dimmed** with a scrim. Tapping the scrim or the trigger closes it.
-- **Content: just the word "placeholder"** (small, muted, near the top). Nothing else for now.
+- The sidebar follows the professor page reference: ASKPOOL wordmark next to the trigger, a circular student avatar and **Student** label, a divider, and **Questions**, **Profile**, and **Settings** links. The selected page is highlighted. The sidebar has the same navigation on every page; the wordmark also returns to Questions.
+- **Profile** opens `/profile`, a separate page with a profile settings placeholder. **Settings** opens `/settings`, a separate settings placeholder page. **Questions** opens `/`. Browser Back and Forward restore the corresponding page.
 - Animation: **fade in, out-quadratic, 250 ms**.
 - Desktop: same overlay behavior, not a permanent column.
 
@@ -179,7 +180,7 @@ A running app in `frontend/student-frontend/` with a short `README.md` (install,
 - [ ] Separate Vite app on 5174, thin server on 3001, one command starts both
 - [ ] Light theme, blue accent tokens in one place, no indigo
 - [ ] Mobile (390x844) and desktop (1920x1080) match section 5
-- [ ] Sidebar: left overlay, dimmed rest, content "placeholder", 250 ms out-quad
+- [ ] Sidebar: left overlay, dimmed rest, Student avatar and navigation, 250 ms out-quad; Questions, Profile, and Settings use separate URLs with shared navigation
 - [ ] Textbox moves up, grows and shrinks with content, collapses on send, send lights up after 1 character, `n/200` counter fades in linearly, hard stop at 200
 - [ ] Optimistic send places the question at the bottom of Other Questions and under Your questions; after 200 ms, the page scrolls to the bottom over 1000 ms without interruption; server result is checked after the reveal; scrolling back up works
 - [ ] Mobile switch button toggles Other and Your questions; desktop shows both with a peek at 1080p

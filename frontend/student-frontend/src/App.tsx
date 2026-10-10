@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type MouseEvent } from 'react'
 import { flushSync } from 'react-dom'
 import { QuestionCard } from './components/QuestionCard'
-import { PanelIcon, SendIcon } from './components/Icons'
+import { PanelIcon, ProfileIcon, SendIcon } from './components/Icons'
 import { ViewSwitchButton } from './components/ViewSwitchButton'
 import { animateScrollTo, prefersReducedMotion } from './lib/motion'
 import {
@@ -20,6 +20,20 @@ const examples = [
   'Where does this step in the proof come from?',
 ]
 
+type Page = 'questions' | 'profile' | 'settings'
+
+const navigation: { page: Page; label: string; href: string }[] = [
+  { page: 'questions', label: 'Questions', href: '/' },
+  { page: 'profile', label: 'Profile', href: '/profile' },
+  { page: 'settings', label: 'Settings', href: '/settings' },
+]
+
+function currentPage(): Page {
+  if (window.location.pathname === '/profile') return 'profile'
+  if (window.location.pathname === '/settings') return 'settings'
+  return 'questions'
+}
+
 async function runTransition(update: () => void): Promise<void> {
   if (!prefersReducedMotion() && document.startViewTransition) {
     await document.startViewTransition(() => flushSync(update))
@@ -34,6 +48,7 @@ function sleep(ms: number) {
 }
 
 export default function App() {
+  const [page, setPage] = useState<Page>(currentPage)
   const [questions, setQuestions] = useState<Question[]>([])
   const [draft, setDraft] = useState('')
   const [focused, setFocused] = useState(false)
@@ -57,6 +72,57 @@ export default function App() {
     setToast(message)
     toastTimer.current = window.setTimeout(() => setToast(''), 3500)
   }
+
+  function navigate(nextPage: Page) {
+    const path = nextPage === 'questions' ? '/' : `/${nextPage}`
+    if (window.location.pathname !== path) {
+      window.history.pushState(null, '', path)
+    }
+    setPage(nextPage)
+    setSidebarOpen(false)
+    setFocused(false)
+    window.scrollTo(0, 0)
+  }
+
+  function handleNavigation(
+    event: MouseEvent<HTMLAnchorElement>,
+    nextPage: Page,
+  ) {
+    if (
+      event.button !== 0 ||
+      event.metaKey ||
+      event.ctrlKey ||
+      event.shiftKey ||
+      event.altKey
+    )
+      return
+    event.preventDefault()
+    navigate(nextPage)
+  }
+
+  useEffect(() => {
+    function syncPage() {
+      setPage(currentPage())
+      setSidebarOpen(false)
+      setFocused(false)
+      window.scrollTo(0, 0)
+    }
+    window.addEventListener('popstate', syncPage)
+    return () => window.removeEventListener('popstate', syncPage)
+  }, [])
+
+  useEffect(() => {
+    if (!sidebarOpen) return
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key === 'Escape') setSidebarOpen(false)
+    }
+    window.addEventListener('keydown', closeOnEscape)
+    return () => window.removeEventListener('keydown', closeOnEscape)
+  }, [sidebarOpen])
+
+  useEffect(() => {
+    document.title = `AskPool — ${page === 'questions' ? 'Student demo' : page === 'profile' ? 'Profile' : 'Settings'}`
+  }, [page])
 
   useEffect(() => {
     let active = true
@@ -283,7 +349,13 @@ export default function App() {
       >
         <PanelIcon width="22" height="22" />
       </button>
-      <span className="brand-mark">ASKPOOL</span>
+      <a
+        className="brand-mark"
+        href="/"
+        onClick={(event) => handleNavigation(event, 'questions')}
+      >
+        ASKPOOL
+      </a>
       <div
         className={`sidebar-scrim ${sidebarOpen ? 'sidebar-scrim--open' : ''}`}
         onClick={() => setSidebarOpen(false)}
@@ -293,107 +365,144 @@ export default function App() {
         className={`sidebar ${sidebarOpen ? 'sidebar--open' : ''}`}
         aria-hidden={!sidebarOpen}
       >
-        <span>placeholder</span>
+        <div className="sidebar__identity">
+          <span className="sidebar__avatar">
+            <ProfileIcon width="25" height="25" />
+          </span>
+          <span className="sidebar__name">Student</span>
+        </div>
+        <div className="sidebar__divider" />
+        <nav className="sidebar__nav" aria-label="Main navigation">
+          {navigation.map((item) => (
+            <a
+              key={item.page}
+              href={item.href}
+              className={`sidebar__link ${page === item.page ? 'sidebar__link--active' : ''}`}
+              aria-current={page === item.page ? 'page' : undefined}
+              onClick={(event) => handleNavigation(event, item.page)}
+            >
+              {item.label}
+            </a>
+          ))}
+        </nav>
       </aside>
 
-      <main>
-        <section
-          className={`hero ${focused ? 'hero--focused' : ''}`}
-          aria-label="Ask a question"
-        >
-          <div className="hero__content page-column">
-            <h1>What&apos;s your question?</h1>
-            <div className={`composer ${focused ? 'composer--focused' : ''}`}>
-              <label className="sr-only" htmlFor="question-input">
-                Your anonymous question
-              </label>
-              <textarea
-                id="question-input"
-                ref={textareaRef}
-                rows={1}
-                maxLength={200}
-                value={draft}
-                placeholder={placeholder}
-                onFocus={() => setFocused(true)}
-                onBlur={() => setFocused(false)}
-                onChange={(event) => {
-                  const next = event.target.value.slice(0, 200)
-                  event.target.value = next
-                  setDraft(next)
-                  growTextarea(event.target)
-                }}
-                onKeyDown={(event) => {
-                  if (
-                    event.key === 'Enter' &&
-                    (event.metaKey || event.ctrlKey)
-                  ) {
-                    event.preventDefault()
-                    void handleSend()
-                  }
-                }}
-              />
-              <div className="composer__bottom">
-                <span className="anonymous-note">Fully anonymous.</span>
-                <div className="composer__send">
-                  <button
-                    type="button"
-                    className="send-button"
-                    aria-label="Send question"
-                    disabled={!draft.trim() || sending}
-                    onClick={() => void handleSend()}
-                  >
-                    <SendIcon width="23" height="23" />
-                  </button>
-                  <span
-                    className="character-counter"
-                    style={{ opacity: counterOpacity }}
-                    aria-hidden={counterOpacity === 0}
-                  >
-                    {draft.length}/200
-                  </span>
+      {page === 'questions' ? (
+        <main>
+          <section
+            className={`hero ${focused ? 'hero--focused' : ''}`}
+            aria-label="Ask a question"
+          >
+            <div className="hero__content page-column">
+              <h1>What&apos;s your question?</h1>
+              <div className={`composer ${focused ? 'composer--focused' : ''}`}>
+                <label className="sr-only" htmlFor="question-input">
+                  Your anonymous question
+                </label>
+                <textarea
+                  id="question-input"
+                  ref={textareaRef}
+                  rows={1}
+                  maxLength={200}
+                  value={draft}
+                  placeholder={placeholder}
+                  onFocus={() => setFocused(true)}
+                  onBlur={() => setFocused(false)}
+                  onChange={(event) => {
+                    const next = event.target.value.slice(0, 200)
+                    event.target.value = next
+                    setDraft(next)
+                    growTextarea(event.target)
+                  }}
+                  onKeyDown={(event) => {
+                    if (
+                      event.key === 'Enter' &&
+                      (event.metaKey || event.ctrlKey)
+                    ) {
+                      event.preventDefault()
+                      void handleSend()
+                    }
+                  }}
+                />
+                <div className="composer__bottom">
+                  <span className="anonymous-note">Fully anonymous.</span>
+                  <div className="composer__send">
+                    <button
+                      type="button"
+                      className="send-button"
+                      aria-label="Send question"
+                      disabled={!draft.trim() || sending}
+                      onClick={() => void handleSend()}
+                    >
+                      <SendIcon width="23" height="23" />
+                    </button>
+                    <span
+                      className="character-counter"
+                      style={{ opacity: counterOpacity }}
+                      aria-hidden={counterOpacity === 0}
+                    >
+                      {draft.length}/200
+                    </span>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-        </section>
+          </section>
 
-        <section
-          className="desktop-your page-column"
-          aria-labelledby="your-heading"
-        >
-          <h2 id="your-heading" className="section-heading">
-            Your questions
-          </h2>
-          {cards(mine, true)}
-        </section>
-
-        <section
-          className="desktop-other page-column"
-          aria-labelledby="other-heading-desktop"
-        >
-          <h2 id="other-heading-desktop" className="section-heading">
-            Other Questions
-          </h2>
-          {cards(others, false)}
-        </section>
-
-        <section
-          ref={mobileListRef}
-          className="mobile-questions page-column"
-          aria-labelledby="mobile-questions-heading"
-        >
-          <div className="mobile-section-heading">
-            <h2 id="mobile-questions-heading" className="section-heading">
-              {mobileView === 'other' ? 'Other Questions' : 'Your questions'}
+          <section
+            className="desktop-your page-column"
+            aria-labelledby="your-heading"
+          >
+            <h2 id="your-heading" className="section-heading">
+              Your questions
             </h2>
-            <ViewSwitchButton
-              showingMine={mobileView === 'mine'}
-              onClick={() => void switchMobileView()}
-            />
-          </div>
-          {mobileView === 'other' ? cards(others, false) : cards(mine, true)}
-        </section>
-      </main>
+            {cards(mine, true)}
+          </section>
+
+          <section
+            className="desktop-other page-column"
+            aria-labelledby="other-heading-desktop"
+          >
+            <h2 id="other-heading-desktop" className="section-heading">
+              Other Questions
+            </h2>
+            {cards(others, false)}
+          </section>
+
+          <section
+            ref={mobileListRef}
+            className="mobile-questions page-column"
+            aria-labelledby="mobile-questions-heading"
+          >
+            <div className="mobile-section-heading">
+              <h2 id="mobile-questions-heading" className="section-heading">
+                {mobileView === 'other' ? 'Other Questions' : 'Your questions'}
+              </h2>
+              <ViewSwitchButton
+                showingMine={mobileView === 'mine'}
+                onClick={() => void switchMobileView()}
+              />
+            </div>
+            {mobileView === 'other' ? cards(others, false) : cards(mine, true)}
+          </section>
+        </main>
+      ) : (
+        <main className="placeholder-page">
+          <section className="placeholder-page__content page-column">
+            <h1>{page === 'profile' ? 'Profile' : 'Settings'}</h1>
+            <div className="placeholder-page__card">
+              <h2>
+                {page === 'profile' ? 'Profile settings' : 'Settings page'}
+              </h2>
+              <p>
+                {page === 'profile'
+                  ? 'This is a placeholder for your profile settings.'
+                  : 'This is a placeholder for your settings.'}
+              </p>
+            </div>
+          </section>
+        </main>
+      )}
 
       {reportTarget && (
         <div className="dialog-backdrop" onClick={() => setReportTarget(null)}>

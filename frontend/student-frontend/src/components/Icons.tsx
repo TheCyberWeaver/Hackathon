@@ -30,6 +30,15 @@ export function PanelIcon(props: IconProps) {
   )
 }
 
+export function ProfileIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <circle cx="12" cy="8" r="3.5" />
+      <path d="M5 21v-1a7 7 0 0 1 14 0v1" />
+    </Icon>
+  )
+}
+
 export function SendIcon(props: IconProps) {
   return (
     <Icon {...props}>

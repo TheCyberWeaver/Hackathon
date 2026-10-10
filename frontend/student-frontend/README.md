@@ -22,6 +22,10 @@ npm run lint
 
 The API is isolated in `src/lib/studentApi.ts` for later replacement. This demo does not use the Java backend.
 
+## Pages and sidebar
+
+The sidebar is shared by the questions page (`/`), profile placeholder (`/profile`), and settings placeholder (`/settings`). Use the Questions, Profile, and Settings links to move between them; the ASKPOOL wordmark also returns to Questions. Browser Back and Forward work with these routes. The Student profile row and both secondary pages are visual placeholders for now.
+
 ## Send interaction
 
 The question box grows as lines are added and shrinks as lines are deleted or after sending. Sending immediately clears the box and places the new question at the bottom of **Other Questions** (also under **Your questions**). After 200 ms, the page scrolls all the way to the bottom with a 1000 ms in-out quadratic animation. The UI assumes the question was accepted; it checks the server response after the animation and only then shows an error and removes the temporary question if saving failed.
