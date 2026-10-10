@@ -70,10 +70,10 @@
 
 .student-tutorial-invite {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   justify-content: flex-end;
-  gap: 2px;
-  margin-top: 5px;
+  gap: 4px;
+  margin-top: 4px;
   color: var(--color-accent);
 }
 
@@ -81,12 +81,18 @@
   flex: 0 0 58px;
   width: 58px;
   height: 34px;
-  margin-top: -2px;
+}
+
+.student-tutorial-invite__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 14px;
 }
 
 .student-tutorial-trigger {
-  align-self: flex-end;
-  padding: 8px 0 3px;
+  min-height: 44px;
+  padding: 8px 0;
   border: 0;
   background: transparent;
   color: inherit;
@@ -107,6 +113,22 @@
   outline: 2px solid var(--color-accent);
   outline-offset: 4px;
   border-radius: 2px;
+}
+
+.student-tutorial-dismiss {
+  min-height: 44px;
+  padding: 8px 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-secondary);
+  font-size: 13px;
+  line-height: 1.25;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.student-tutorial-dismiss:hover {
+  color: var(--color-ink);
 }
 
 .student-settings-card {
@@ -132,6 +154,12 @@
 
 .student-settings-open-tutorial:hover {
   background: #dbeafe;
+}
+
+@media (max-width: 600px) {
+  .student-tutorial-invite svg {
+    display: none;
+  }
 }
 
 @media (max-width: 480px) {
@@ -209,8 +237,8 @@ html:has(.student-settings-card) {
 }
 .composer {
   width: 100%;
-  min-height: 112px;
-  padding: 12px 17px 6px;
+  min-height: 102px;
+  padding: 12px 17px 10px;
   border: 1px solid var(--color-border);
   border-radius: 20px;
   background: var(--color-surface);
@@ -267,23 +295,21 @@ html:has(.student-settings-card) {
 }
 .composer__bottom {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 10px;
-  margin-top: 0;
+  margin-top: 4px;
 }
 .anonymous-note {
-  display: flex;
-  align-items: center;
-  min-height: 44px;
   color: var(--color-secondary);
   font-size: 12px;
+  line-height: 1.35;
 }
 .composer__send {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
-  gap: 0;
+  gap: 10px;
   min-width: 44px;
 }
 .send-button {
@@ -308,11 +334,9 @@ html:has(.student-settings-card) {
   color: var(--color-placeholder);
 }
 .character-counter {
-  min-height: 14px;
   color: var(--color-secondary);
   font-size: 11px;
-  line-height: 14px;
-  transition: opacity 170ms linear;
+  white-space: nowrap;
 }
 .question-moderation-warning {
   display: grid;
@@ -665,8 +689,8 @@ html:has(.student-settings-card) {
     font-size: clamp(42px, 3.2vw, 58px);
   }
   .composer {
-    min-height: 120px;
-    padding: 14px 22px 8px;
+    min-height: 106px;
+    padding: 14px 22px 10px;
   }
   .composer textarea {
     font-size: 18px;

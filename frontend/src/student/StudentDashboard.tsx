@@ -8,7 +8,9 @@ import StudentTutorial from './components/StudentTutorial'
 import { animateScrollTo, prefersReducedMotion } from './lib/motion'
 import {
   readTutorialCompleted,
+  readTutorialDismissed,
   saveTutorialCompleted,
+  saveTutorialDismissed,
 } from './lib/tutorialProgress'
 import type { CurrentUser } from '../lib/api'
 import LecturePicker from '../components/LecturePicker'
@@ -87,6 +89,9 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
   const [tutorialCompleted, setTutorialCompleted] = useState(() =>
     readTutorialCompleted(user.id),
   )
+  const [tutorialDismissed, setTutorialDismissed] = useState(() =>
+    readTutorialDismissed(user.id),
+  )
   const [placeholder] = useState(
     () => examples[Math.floor(Math.random() * examples.length)],
   )
@@ -124,6 +129,11 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
         : heroHeadingRef.current
       target?.focus()
     })
+  }
+
+  function dismissTutorialInvite() {
+    setTutorialDismissed(true)
+    saveTutorialDismissed(user.id)
   }
 
   function showToast(message: string) {
@@ -443,7 +453,6 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
     .filter((question) => question.mine)
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
   const others = questions
-  const counterOpacity = Math.max(0, Math.min(1, (draft.length - 160) / 40))
 
   function cards(items: Question[], isMine: boolean) {
     if (isMine && items.length === 0) {
@@ -549,10 +558,15 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
                     aria-live="polite"
                   >
                     {questionsPaused
-                      ? 'Submissions are unavailable until the professor opens this lecture.'
-                      : 'Your name is not shown on question cards.'}
+                      ? 'Submissions are closed right now.'
+                      : "Your name isn't shown on cards."}
                   </span>
                   <div className="composer__send">
+                    {draft.length > 160 && (
+                      <span className="character-counter">
+                        {draft.length}/200
+                      </span>
+                    )}
                     <button
                       type="button"
                       className="send-button"
@@ -567,13 +581,6 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
                     >
                       <SendIcon width="23" height="23" />
                     </button>
-                    <span
-                      className="character-counter"
-                      style={{ opacity: counterOpacity }}
-                      aria-hidden={counterOpacity === 0}
-                    >
-                      {draft.length}/200
-                    </span>
                   </div>
                 </div>
               </div>
@@ -599,7 +606,7 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
                   </span>
                 </div>
               )}
-              {!tutorialCompleted && (
+              {!tutorialCompleted && !tutorialDismissed && (
                 <div className="student-tutorial-invite">
                   <svg aria-hidden="true" viewBox="0 0 72 38" fill="none">
                     <path
@@ -610,14 +617,23 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
                       strokeLinejoin="round"
                     />
                   </svg>
-                  <button
-                    type="button"
-                    className="student-tutorial-trigger"
-                    aria-haspopup="dialog"
-                    onClick={openTutorial}
-                  >
-                    New here? Need a quick tutorial?
-                  </button>
+                  <div className="student-tutorial-invite__actions">
+                    <button
+                      type="button"
+                      className="student-tutorial-trigger"
+                      aria-haspopup="dialog"
+                      onClick={openTutorial}
+                    >
+                      New here? Need a quick tutorial?
+                    </button>
+                    <button
+                      type="button"
+                      className="student-tutorial-dismiss"
+                      onClick={dismissTutorialInvite}
+                    >
+                      Ignore
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
