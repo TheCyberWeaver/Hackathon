@@ -29,6 +29,34 @@ IDs in JSON are decimal strings, avoiding JavaScript BIGINT precision loss. Time
 | PATCH  | `/api/questions/{id}/status`                | `ProfessorQuestion`             | Owner/admin                        |
 | DELETE | `/api/questions/{id}`                       | 204                             | Question author or lecture owner/admin |
 
+| Method | Additional route | Success | Permission |
+| ------ | ---------------- | ------- | ---------- |
+| PATCH | `/api/lectures/{id}/session` | Lecture | Lecture owner/admin |
+| GET | `/api/professor/summary` | Counts | Professor/admin, scoped to manageable lectures |
+| GET | `/api/professor/lectures/archive` | Ended lectures and questions | Professor/admin, scoped to manageable lectures |
+| POST | `/api/questions/{id}/restore` | ProfessorQuestion | Lecture owner/admin |
+| DELETE | `/api/questions/{id}/permanent` | 204 | Lecture owner/admin, already deleted question only |
+| DELETE | `/api/lectures/{id}/questions/trash` | 204 | Lecture owner/admin, only that lecture's deleted questions |
+
+New lectures are scheduled: create with `title`, `lectureTime`, and optional
+`course` (up to 200 characters), then start with `{ "action": "start" }`.
+Lecture responses include `course`, `startedAt`, `endedAt`, and
+`questionsPaused`. Session actions also accept `pause`, `resume`, and `end`.
+Start and end are idempotent and preserve their original timestamps. Ended
+lectures cannot restart. Pausing/resuming/ending requires a started lecture.
+Submissions to scheduled, paused, or ended lectures return 409, including in
+testing-permission mode. Session updates and submissions lock the same lecture
+row. Existing lecture pools are migrated as started sessions to preserve access.
+
+Professor question lists accept `?includeDeleted=true` and return `deletedAt`
+and optional `answer`; student lists always exclude deleted questions and never
+return identities or report counts. Restoring preserves status, written answer,
+votes, and reports. Permanent deletion removes the question and dependent votes
+and reports; it cannot be restored. Emptying trash leaves live questions and
+other lectures untouched. Ending a lecture preserves its question history.
+Archives omit trash. Profile counts include manageable lectures and their
+non-deleted questions, including ended sessions.
+
 Lecture creation body:
 
 ```json
@@ -84,7 +112,15 @@ Professor response:
 }
 ```
 
-Status body: `{ "status": "answered" }` (also `open` or `selected`). Answering sets the timestamp; repeats preserve it. Reopening/selecting clears it. No written answers are stored in this schema. Deletion hides content from both dashboards and preserves attribution, votes, and reports for audit purposes. Actions on hidden questions return 404.
+Status body: `{ "status": "answered", "answer": "Use induction." }` (also
+`open` or `selected`). Written answers are optional, trimmed, and limited to
+4000 characters; they require answered status. Omitting `answer` preserves an
+existing answer when staying answered; an empty answer clears it. Answering
+sets the timestamp; repeats preserve it. Reopening/selecting clears the answer
+and timestamp. Student question responses also contain the saved answer text.
+Deletion hides content from both live pools and preserves attribution, votes,
+and reports in the professor's Deleted tab. Ordinary actions on hidden questions
+return 404; only the restricted restore/purge/trash routes act on them.
 
 Pool errors use `{ "error": "Human-readable message." }`: 400 invalid body/parameter; 401 missing identity; 403 role/ownership/self-vote; 404 missing or hidden resource; 409 data conflict; 500 unexpected database constraint failure.
 

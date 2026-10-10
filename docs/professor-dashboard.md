@@ -1,11 +1,15 @@
-# Professor dashboard integration
+# Professor dashboard
 
-The dashboard at `/professor` receives identity from `/api/me` and uses Java/PostgreSQL for all lecture pools. `professorApi.ts` defines wire models and operations; `ProfessorDashboard.tsx` renders them. Old mock files remain unused fixtures.
+The merged dashboard uses the Java API through `frontend/src/professor/professorApi.ts` and the shared transport. Mock question/archive data and browser-local session controls have been replaced with PostgreSQL records.
 
-A database professor role is required to create lectures. Only the lecture owner or an admin can fetch authors/report counts, select questions, answer/reopen them, or hide them. Changing the dashboard does not elevate an account. See [API contract](API.md) and [database setup](../deploy/README.md).
+Create a lecture with a title and optional course, then start it. The lecture picker preserves join links and selection. Start, pause, resume, and end are shared across browsers. Pausing disables the student composer and the API rejects new submissions. Ending preserves the question pool in Past Lectures instead of resetting it.
 
-The lecture picker supports creation and student join links. Open/Answered tabs sort by votes descending, submission time ascending, then ID. Questions expand to show real authors, status, report count, and submission time. The pool refreshes every five seconds. Mutations are confirmed by the API before local state is updated. Deletion hides content and preserves attribution, votes, and reports. Students can also delete their own questions.
+Open, Answered, and Deleted tabs use saved status and deletion timestamps. Sort by most votes (earlier questions first on ties) or newest first; ID resolves remaining ties. The top-three decoration continues to use vote ranking regardless of display sort. Cards display question text, votes, and submission time without student names. Expanded cards show report counts and an optional written-answer editor. Marking unanswered clears the saved answer and answer timestamp.
 
-Past Lectures opens persisted lecture pools. Answer status is stored; written answer text is not part of the current schema. The profile displays the signed-in user's name. Both dashboards use the shared navigation panel.
+Moving a question to Deleted keeps its status, answer, votes, and reports. Restore returns it to Open or Answered. Permanent deletion and Delete all remove only already-deleted questions, with dependent votes and reports. The dialog preserves the incoming cancel/Escape/focus behavior, and mutations are confirmed by the API before state changes. Students may also hide their own questions.
 
-Run frontend `npm run build` and `npm run lint`, and backend `./gradlew test bootJar`. Local development needs Java/PostgreSQL and an explicitly assigned professor role for the Vite demo identity.
+Past Lectures uses the persisted ended-session archive, including unanswered questions and saved written answers. Profile uses the signed-in user's name and server counts across manageable lecture pools, excluding Deleted. Polling refreshes the active lecture, questions, archive, and profile data every five seconds as applicable.
+
+Normal mode permits only lecture owners/admins to manage sessions, read private moderation data, restore, and purge. Existing hackathon testing permissions continue to allow all signed-in accounts to manage pools; they still cannot submit to scheduled/paused/ended lectures or vote for themselves. See [the API contract](API.md).
+
+Verify with frontend `npm run test:api`, `npm run build`, and `npm run lint`, and backend `./gradlew test bootJar`. Unit tests cover session transitions and ownership rules; PostgreSQL-backed tests cover lifecycle persistence, intake races, archive retention, written answers, counts, restore, scoped purging, privacy, and legacy schema adoption. See [local development](Local_Development.md) for the no-Docker runner.

@@ -60,6 +60,12 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
   const [questions, setQuestions] = useState<Question[]>([])
   const [lectures, setLectures] = useState<Lecture[]>([])
   const [lectureId, setLectureId] = useState(initialLectureId)
+  const selectedLecture = lectures.find((lecture) => lecture.id === lectureId)
+  const questionsPaused =
+    !selectedLecture ||
+    !selectedLecture.startedAt ||
+    !!selectedLecture.endedAt ||
+    selectedLecture.questionsPaused
   const [draft, setDraft] = useState('')
   const [focused, setFocused] = useState(false)
   const [sending, setSending] = useState(false)
@@ -120,10 +126,23 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
   }, [page])
 
   useEffect(() => {
+    if (questionsPaused) {
+      textareaRef.current?.blur()
+    }
+  }, [questionsPaused])
+
+  useEffect(() => {
     return watchLectures(
       (items) => {
         setLectures(items)
-        setLectureId((id) => id || items[0]?.id || '')
+        setLectureId(
+          (id) =>
+            id ||
+            items.find((lecture) => lecture.startedAt && !lecture.endedAt)
+              ?.id ||
+            items[0]?.id ||
+            '',
+        )
       },
       (error) =>
         showToast(
@@ -200,7 +219,7 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
 
   async function handleSend() {
     const text = draft.trim()
-    if (!text || pendingSend.current || !lectureId) return
+    if (!text || pendingSend.current || !lectureId || questionsPaused) return
     setSending(true)
     pendingSend.current = true
     mutationVersion.current++
@@ -292,7 +311,8 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
       !question.mine ||
       question.id.startsWith('pending-') ||
       pendingDeletes.current.has(question.id)
-    ) return
+    )
+      return
     pendingDeletes.current.add(question.id)
     setDeletingIds(new Set(pendingDeletes.current))
     mutationVersion.current++
@@ -352,15 +372,21 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
 
     try {
       if (
-        !lectureId || pendingSend.current ||
-        pendingVotes.current.size || pendingDeletes.current.size
-      ) return
+        !lectureId ||
+        pendingSend.current ||
+        pendingVotes.current.size ||
+        pendingDeletes.current.size
+      )
+        return
       const version = mutationVersion.current
       const refreshed = await listQuestions(lectureId)
       if (
-        version !== mutationVersion.current || pendingSend.current ||
-        pendingVotes.current.size || pendingDeletes.current.size
-      ) return
+        version !== mutationVersion.current ||
+        pendingSend.current ||
+        pendingVotes.current.size ||
+        pendingDeletes.current.size
+      )
+        return
       await runTransition(() => setQuestions(refreshed))
     } catch {
       showToast(
@@ -427,18 +453,28 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
             aria-label="Ask a question"
           >
             <div className="hero__content page-column">
-              <h1>What&apos;s your question?</h1>
+              <h1>
+                {selectedLecture?.endedAt
+                  ? 'This lecture has ended'
+                  : questionsPaused
+                    ? 'Questions are paused'
+                    : "What's your question?"}
+              </h1>
               <LecturePicker
                 lectures={lectures}
                 lectureId={lectureId}
-                disabled={sending || votePendingCount > 0 || deletingIds.size > 0}
+                disabled={
+                  sending || votePendingCount > 0 || deletingIds.size > 0
+                }
                 onSelect={(id) => {
                   setQuestions([])
                   setLectureId(id)
                   setReportTarget(null)
                 }}
               />
-              <div className={`composer ${focused ? 'composer--focused' : ''}`}>
+              <div
+                className={`composer ${focused ? 'composer--focused' : ''} ${questionsPaused ? 'composer--paused' : ''}`}
+              >
                 <label className="sr-only" htmlFor="question-input">
                   Your anonymous question
                 </label>
@@ -448,7 +484,13 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
                   rows={1}
                   maxLength={200}
                   value={draft}
-                  placeholder={placeholder}
+                  placeholder={
+                    questionsPaused
+                      ? 'Question submissions are closed'
+                      : placeholder
+                  }
+                  disabled={questionsPaused}
+                  aria-describedby="question-input-status"
                   onFocus={() => setFocused(true)}
                   onBlur={() => setFocused(false)}
                   onChange={(event) => {
@@ -468,8 +510,14 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
                   }}
                 />
                 <div className="composer__bottom">
-                  <span className="anonymous-note">
-                    Anonymous to classmates. Professors can view authors.
+                  <span
+                    id="question-input-status"
+                    className="anonymous-note"
+                    aria-live="polite"
+                  >
+                    {questionsPaused
+                      ? 'Submissions are unavailable until the professor opens this lecture.'
+                      : 'Your name is not shown on question cards. Professors can view authors.'}
                   </span>
                   <div className="composer__send">
                     <button
@@ -479,7 +527,8 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
                       disabled={
                         !draft.trim() ||
                         sending ||
-                        !lectureId
+                        !lectureId ||
+                        questionsPaused
                       }
                       onClick={() => void handleSend()}
                     >
@@ -566,7 +615,9 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
                     <button
                       type="button"
                       className="text-blue-700 underline"
-                      disabled={sending || votePendingCount > 0 || deletingIds.size > 0}
+                      disabled={
+                        sending || votePendingCount > 0 || deletingIds.size > 0
+                      }
                       onClick={() => {
                         setQuestions([])
                         setLectureId(lecture.id)

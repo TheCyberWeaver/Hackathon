@@ -27,6 +27,7 @@ class TestingPermissionsTests extends PostgresTestSupport {
             "{\"title\":\"Testing permissions\",\"lectureTime\":\"2026-10-10T10:00:00Z\"}");
         assertEquals(201, lecture.statusCode(), lecture.body());
         String lectureId = tree(lecture).get("id").asText();
+        assertEquals(200, send("PATCH", "/lectures/" + lectureId + "/session", owner, "{\"action\":\"start\"}").statusCode());
         String path = "/lectures/" + lectureId + "/questions";
         var original = send("POST", path, owner, "{\"text\":\"Can I use both dashboards?\"}");
         assertEquals(201, original.statusCode(), original.body());

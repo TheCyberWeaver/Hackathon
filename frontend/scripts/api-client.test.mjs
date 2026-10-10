@@ -121,7 +121,9 @@ test('shared transport handles no-content responses and useful API errors', asyn
     'fetch',
     async () =>
       new Response(
-        JSON.stringify({ error: 'This operation conflicts with existing data.' }),
+        JSON.stringify({
+          error: 'This operation conflicts with existing data.',
+        }),
         { status: 409 },
       ),
   )
@@ -135,6 +137,83 @@ test('shared transport handles no-content responses and useful API errors', asyn
     async () => new Response('Proxy unavailable', { status: 502 }),
   )
   await assert.rejects(api.pool.listLectures(), /Request failed \(502\)/)
+})
+
+test('session, archive, summary and trash clients match the Java API contract', async (t) => {
+  const api = await clients()
+  const calls = []
+  t.mock.method(globalThis, 'fetch', async (url, init) => {
+    calls.push([
+      init.method ?? 'GET',
+      url,
+      init.body ? JSON.parse(init.body) : null,
+    ])
+    return new Response(JSON.stringify({}), { status: 200 })
+  })
+  for (const action of ['start', 'pause', 'resume', 'end'])
+    await api.pool.changeLectureSession('lecture/1', action)
+  await api.professor.listProfessorQuestions('lecture/1', true)
+  await api.professor.restoreQuestion('question/1')
+  await api.professor.permanentlyDeleteQuestion('question/1')
+  await api.professor.emptyTrash('lecture/1')
+  await api.professor.changeQuestionStatus(
+    'question/1',
+    'answered',
+    'A saved answer',
+  )
+  await api.professor.getSummary()
+  await api.professor.listArchive()
+  assert.deepEqual(calls, [
+    ...['start', 'pause', 'resume', 'end'].map((action) => [
+      'PATCH',
+      '/api/lectures/lecture%2F1/session',
+      { action },
+    ]),
+    [
+      'GET',
+      '/api/lectures/lecture%2F1/professor/questions?includeDeleted=true',
+      null,
+    ],
+    ['POST', '/api/questions/question%2F1/restore', null],
+    ['DELETE', '/api/questions/question%2F1/permanent', null],
+    ['DELETE', '/api/lectures/lecture%2F1/questions/trash', null],
+    [
+      'PATCH',
+      '/api/questions/question%2F1/status',
+      { status: 'answered', answer: 'A saved answer' },
+    ],
+    ['GET', '/api/professor/summary', null],
+    ['GET', '/api/professor/lectures/archive', null],
+  ])
+})
+
+test('lecture polling discards a response started before a local session mutation', async (t) => {
+  const api = await clients()
+  let version = 0
+  let resolve
+  t.mock.method(
+    globalThis,
+    'fetch',
+    () =>
+      new Promise((done) => {
+        resolve = done
+      }),
+  )
+  const updates = []
+  const stop = api.pool.watchLectures(
+    (items) => updates.push(items),
+    assert.fail,
+    () => version,
+  )
+  t.after(stop)
+  version++
+  resolve(
+    new Response(JSON.stringify([{ id: '1', questionsPaused: false }]), {
+      status: 200,
+    }),
+  )
+  await setImmediate()
+  assert.deepEqual(updates, [])
 })
 
 test('shared transport honors base URL and encodes route identifiers', async (t) => {

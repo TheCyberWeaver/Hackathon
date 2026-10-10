@@ -112,5 +112,11 @@ compatibility function belongs to the migration role. The subsequent Flyway
 migration safely repeats it. V4 removes the one-question-per-student constraint
 without deleting existing questions.
 
+V5 adds shared lecture start/end and intake state, course labels, and optional
+written answers. Existing pools become started sessions; new lectures must be
+started explicitly. The older VM `votes` foreign key is changed to cascade only
+when a question is permanently purged. Ordinary deletion still retains votes
+and reports for restoration. This frontend and backend must be released together.
+
 The ignored `deploy-local.ps1` contains the VM SSH configuration;
 `dev-local.ps1` runs locally and does not connect to the VM.

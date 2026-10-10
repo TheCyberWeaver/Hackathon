@@ -30,6 +30,7 @@ class PoolApiTests extends PostgresTestSupport {
         promote(professor);
         var lecture = send("POST", "/lectures", professor, "{\"title\":\"Lecture\",\"lectureTime\":\"2026-10-10T10:00:00Z\"}");
         assertEquals(201, lecture.statusCode());
+        start(tree(lecture).get("id").asText());
         String path = "/lectures/" + tree(lecture).get("id").asText() + "/questions";
         assertEquals(400, send("POST", path, student, "{\"text\":\"   \"}").statusCode());
         assertEquals(400, send("POST", path, student, "{\"text\":\"" + "x".repeat(201) + "\"}").statusCode());
@@ -78,6 +79,7 @@ class PoolApiTests extends PostgresTestSupport {
     void ranksVotesFirstAndEarlierQuestionsFirstOnTies() throws Exception {
         promote(professor);
         String lecture = tree(send("POST", "/lectures", professor, "{\"title\":\"Ranking\",\"lectureTime\":\"2026-10-10T11:00:00Z\"}")).get("id").asText();
+        start(lecture);
         String path = "/lectures/" + lecture + "/questions";
         String first = tree(send("POST", path, student, "{\"text\":\"Earlier\"}")).get("id").asText();
         String second = tree(send("POST", path, peer, "{\"text\":\"Later\"}")).get("id").asText();
@@ -92,6 +94,7 @@ class PoolApiTests extends PostgresTestSupport {
     void concurrentSubmissionsBothSucceedAndVotesRemainUnique() throws Exception {
         promote(professor);
         String lecture = tree(send("POST", "/lectures", professor, "{\"title\":\"Concurrency\",\"lectureTime\":\"2026-10-10T11:00:00Z\"}")).get("id").asText();
+        start(lecture);
         String path = "/lectures/" + lecture + "/questions";
         var a = CompletableFuture.supplyAsync(() -> uncheckedSend("POST", path, student, "{\"text\":\"First?\"}"));
         var b = CompletableFuture.supplyAsync(() -> uncheckedSend("POST", path, student, "{\"text\":\"Second?\"}"));
@@ -107,6 +110,7 @@ class PoolApiTests extends PostgresTestSupport {
         assertEquals(200, v2.get().statusCode());
         assertEquals(1, tree(send("GET", path, peer, null)).get(0).get("votes").asLong());
         String other = tree(send("POST", "/lectures", professor, "{\"title\":\"Separate\",\"lectureTime\":\"2026-10-10T12:00:00Z\"}")).get("id").asText();
+        start(other);
         assertEquals(0, tree(send("GET", "/lectures/" + other + "/questions", peer, null)).size());
         assertEquals(201, send("POST", "/lectures/" + other + "/questions", student, "{\"text\":\"Allowed here?\"}").statusCode());
     }
@@ -114,6 +118,7 @@ class PoolApiTests extends PostgresTestSupport {
     void studentsDeleteOnlyTheirOwnQuestionsAndCanKeepSubmitting() throws Exception {
         promote(professor);
         String lecture = tree(send("POST", "/lectures", professor, "{\"title\":\"Student deletion\",\"lectureTime\":\"2026-10-10T11:00:00Z\"}")).get("id").asText();
+        start(lecture);
         String path = "/lectures/" + lecture + "/questions";
         String id = tree(send("POST", path, student, "{\"text\":\"My first question\"}")).get("id").asText();
         assertEquals(201, send("POST", path, student, "{\"text\":\"My second question\"}").statusCode());
@@ -134,6 +139,9 @@ class PoolApiTests extends PostgresTestSupport {
         assertEquals(201, send("POST", path, student, "{\"text\":\"After deletion\"}").statusCode());
     }
 
+    void start(String lecture) throws Exception {
+        assertEquals(200, send("PATCH", "/lectures/" + lecture + "/session", professor, "{\"action\":\"start\"}").statusCode());
+    }
     void promote(String identity) {
         jdbc.update("INSERT INTO users (eth_identity_ref, role) VALUES (?, 'professor')", identity);
     }

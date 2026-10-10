@@ -23,6 +23,10 @@ export type Lecture = {
   title: string
   lectureTime: string
   canManage: boolean
+  course: string
+  startedAt: string | null
+  endedAt: string | null
+  questionsPaused: boolean
 }
 export function listLectures() {
   return request<Lecture[]>('/lectures')
@@ -31,15 +35,17 @@ export function listLectures() {
 export function watchLectures(
   onLectures: (lectures: Lecture[]) => void,
   onError: (error: unknown) => void,
+  currentVersion: () => number = () => 0,
 ) {
   let active = true
   let pending = false
   const refresh = async () => {
     if (!active || pending) return
     pending = true
+    const version = currentVersion()
     try {
       const lectures = await listLectures()
-      if (active) onLectures(lectures)
+      if (active && version === currentVersion()) onLectures(lectures)
     } catch (error) {
       if (active) onError(error)
     } finally {
@@ -58,10 +64,19 @@ export function watchLectures(
       window.removeEventListener('focus', refresh)
   }
 }
-export function createLecture(title: string, lectureTime: string) {
+export function createLecture(title: string, lectureTime: string, course = '') {
   return request<Lecture>('/lectures', {
     method: 'POST',
-    body: JSON.stringify({ title, lectureTime }),
+    body: JSON.stringify({ title, lectureTime, course }),
+  })
+}
+export function changeLectureSession(
+  id: string,
+  action: 'start' | 'pause' | 'resume' | 'end',
+) {
+  return request<Lecture>(`/lectures/${encodeURIComponent(id)}/session`, {
+    method: 'PATCH',
+    body: JSON.stringify({ action }),
   })
 }
 export function initialLectureId(): string {

@@ -22,7 +22,7 @@ It binds to loopback, uses a separate database, and never connects to the VM.
 The local Java runtime is excluded from the production JAR.
 
 Vite supplies the demo identity and all signed-in users have testing permissions,
-so you can create a lecture in the professor dashboard and submit a question in
+so you can create and start a lecture in the professor dashboard and submit a question in
 the student dashboard using the same account. Students can submit multiple
 questions per lecture and delete their own questions. Self-voting is still disabled.
 To test another identity, change
@@ -31,6 +31,12 @@ To test another identity, change
 New lectures appear in both dashboards' selectors within five seconds, and the
 list refreshes when the browser regains focus. A chosen lecture stays selected.
 The first lecture is automatically selected when an initially empty list fills.
+
+New lectures need **Start lecture** before they accept questions. **Pause
+questions** closes intake for that lecture across browsers; **Resume questions**
+opens it again. **End lecture** preserves the pool in Past Lectures. The professor
+Deleted tab supports restore and permanent deletion. Expanded questions allow
+an optional written answer, which students can read without author identities.
 
 ## Connect a SQL client
 

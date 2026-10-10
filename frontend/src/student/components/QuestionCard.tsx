@@ -33,6 +33,7 @@ export function QuestionCard({
           <span className="question-card__owner">Your Question</span>
         )}
         <p>{question.text}</p>
+        {question.answer && <p className="mt-3 text-sm"><strong>Answer:</strong> {question.answer}</p>}
         {question.status === 'selected' && (
           <span className="status status--selected">Being answered</span>
         )}

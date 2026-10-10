@@ -17,6 +17,7 @@ export default function LecturePicker({
   disabled,
 }: Props) {
   const [title, setTitle] = useState('')
+  const [course, setCourse] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const joinLink = lectureId
@@ -54,9 +55,11 @@ export default function LecturePicker({
               const lecture = await createLecture(
                 title.trim(),
                 new Date().toISOString(),
+                course.trim(),
               )
               onCreated(lecture)
               setTitle('')
+              setCourse('')
             } catch (cause) {
               setError(
                 cause instanceof Error
@@ -78,11 +81,20 @@ export default function LecturePicker({
             onChange={(event) => setTitle(event.target.value)}
           />
           <button
+            type="submit"
             className="rounded bg-blue-600 px-3 py-2 text-white disabled:opacity-50"
             disabled={disabled || busy || !title.trim()}
           >
             Create lecture
           </button>
+          <input
+            className="rounded border border-slate-300 p-2"
+            aria-label="Course name"
+            placeholder="Course (optional)"
+            maxLength={200}
+            value={course}
+            onChange={(event) => setCourse(event.target.value)}
+          />
         </form>
       )}
       {onCreated && joinLink && (

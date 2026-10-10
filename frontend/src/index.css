@@ -5,6 +5,7 @@
 }
 
 :root {
+  scrollbar-gutter: stable;
   font-family: var(--font-sans);
   color: #0f172a;
   background: #f7f8fc;

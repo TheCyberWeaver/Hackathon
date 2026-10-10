@@ -53,8 +53,9 @@ public class PoolController {
         return ResponseEntity.noContent().build();
     }
     @GetMapping("/lectures/{lecture}/professor/questions")
-    public List<ProfessorQuestion> professorQuestions(@RequestHeader(value = "X-User-Id", required = false) String identity, @PathVariable long lecture) {
-        return service.professorQuestions(service.identify(identity), lecture);
+    public List<ProfessorQuestion> professorQuestions(@RequestHeader(value = "X-User-Id", required = false) String identity, @PathVariable long lecture,
+                                                     @RequestParam(defaultValue = "false") boolean includeDeleted) {
+        return service.professorQuestions(service.identify(identity), lecture, includeDeleted);
     }
     @PatchMapping("/questions/{id}/status")
     public ProfessorQuestion status(@RequestHeader(value = "X-User-Id", required = false) String identity, @PathVariable long id, @RequestBody Status body) {
@@ -63,6 +64,26 @@ public class PoolController {
     @DeleteMapping("/questions/{id}")
     public ResponseEntity<Void> delete(@RequestHeader(value = "X-User-Id", required = false) String identity, @PathVariable long id) {
         service.delete(service.identify(identity), id);
+        return ResponseEntity.noContent().build();
+    }
+    @PatchMapping("/lectures/{lecture}/session")
+    public Lecture session(@RequestHeader(value = "X-User-Id", required = false) String identity, @PathVariable long lecture, @RequestBody SessionAction body) {
+        return service.session(service.identify(identity), lecture, body);
+    }
+    @GetMapping("/professor/summary")
+    public Summary summary(@RequestHeader(value = "X-User-Id", required = false) String identity) { return service.summary(service.identify(identity)); }
+    @GetMapping("/professor/lectures/archive")
+    public List<ArchivedLecture> archive(@RequestHeader(value = "X-User-Id", required = false) String identity) { return service.archive(service.identify(identity)); }
+    @PostMapping("/questions/{id}/restore")
+    public ProfessorQuestion restore(@RequestHeader(value = "X-User-Id", required = false) String identity, @PathVariable long id) { return service.restore(service.identify(identity), id); }
+    @DeleteMapping("/questions/{id}/permanent")
+    public ResponseEntity<Void> purge(@RequestHeader(value = "X-User-Id", required = false) String identity, @PathVariable long id) {
+        service.purge(service.identify(identity), id);
+        return ResponseEntity.noContent().build();
+    }
+    @DeleteMapping("/lectures/{lecture}/questions/trash")
+    public ResponseEntity<Void> emptyTrash(@RequestHeader(value = "X-User-Id", required = false) String identity, @PathVariable long lecture) {
+        service.emptyTrash(service.identify(identity), lecture);
         return ResponseEntity.noContent().build();
     }
 }
