@@ -21,7 +21,7 @@ const questionTabs = ['open', 'answered', 'trash'] as const
 type Tab = (typeof questionTabs)[number]
 type SortMode = 'votes' | 'newest'
 type DeleteTarget = { kind: 'question'; id: string } | { kind: 'allTrash' }
-type ProfessorPage = 'questions' | 'pastLectures' | 'profile' | 'settings'
+type ProfessorPage = SidePanelPage
 
 const professorRoutes: Record<ProfessorPage, string> = {
   questions: '/professor',
@@ -81,12 +81,6 @@ function ChevronIcon({ expanded }: { expanded: boolean }) {
   )
 }
 
-export default function ProfessorDashboard({ user }: { user: CurrentUser }) {
-  const [lectureStartedAt, setLectureStartedAt] = useState<string | null>(() =>
-    readLectureStart(user.id),
-  )
-}
-
 function QuestionStatusSummary({
   lectureCount,
   unansweredCount,
@@ -139,20 +133,25 @@ function QuestionStatusSummary({
   )
 }
 
-export default function ProfessorDashboard() {
-  const [page, setPage] = useState<ProfessorPage>(() =>
-    pageFromPath(window.location.pathname),
+export default function ProfessorDashboard({ user }: { user: CurrentUser }) {
+  const [lectureStartedAt, setLectureStartedAt] = useState<string | null>(() =>
+    readLectureStart(user.id),
+  )
+  const [questionsPaused, setQuestionsPaused] = useState(
+    readQuestionIntakePaused,
   )
   const [questions, setQuestions] = useState<Question[]>(() => [
     ...mockQuestions,
   ])
   const [trashedIds, setTrashedIds] = useState<Set<string>>(() => new Set())
   const [selectedTab, setSelectedTab] = useState<Tab>('open')
+  const [page, setPage] = useState<ProfessorPage>(() =>
+    pageFromPath(window.location.pathname),
+  )
   const [sortMode, setSortMode] = useState<SortMode>('votes')
   const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set())
-  const [drawerOpen, setDrawerOpen] = useState(false)
-  const [drawerClosing, setDrawerClosing] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null)
+  const [endConfirmationOpen, setEndConfirmationOpen] = useState(false)
   const [notice, setNotice] = useState('')
   const dialogRef = useRef<HTMLDialogElement>(null)
   const endDialogRef = useRef<HTMLDialogElement>(null)
@@ -289,7 +288,9 @@ export default function ProfessorDashboard() {
       setLectureStartedAt(null)
       setQuestionsPaused(false)
       setQuestions([...mockQuestions])
+      setTrashedIds(new Set())
       setSelectedTab('open')
+      setSortMode('votes')
       setExpandedIds(new Set())
       setNotice(
         cleared && intakeReset
@@ -387,31 +388,13 @@ export default function ProfessorDashboard() {
   return (
     <div className="min-h-screen bg-white font-sans text-slate-900">
       <header className="bg-[#f7f8fc]">
-        <div className="flex h-20 items-center gap-3 px-6">
-          <button
-            ref={menuButtonRef}
-            type="button"
-            aria-label="Open navigation"
-            aria-expanded={drawerOpen}
-            aria-controls="professor-drawer"
-            onClick={() => setDrawerOpen(true)}
-            className="flex size-10 items-center justify-center rounded-xl bg-white text-slate-500 shadow-[0_3px_12px_rgba(15,23,42,0.09)] hover:text-blue-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
-          >
-            <svg
-              aria-hidden="true"
-              className="size-5"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.8"
-            >
-              <rect x="4" y="4.5" width="16" height="15" rx="2" />
-              <path d="M10 4.5v15" />
-            </svg>
-          </button>
-          <span className="text-lg font-bold tracking-[0.12em] text-blue-700">
-            ASKPOOL
-          </span>
+        <div className="flex h-20 items-center px-6">
+          <SidePanel
+            user={user}
+            role="professor"
+            page={page}
+            onNavigate={navigateTo}
+          />
         </div>
       </header>
 
@@ -464,64 +447,33 @@ export default function ProfessorDashboard() {
                 <path d="M5 12h14m-6-6 6 6-6 6" />
               </svg>
             </button>
-            <span className="text-lg font-bold tracking-[0.12em] text-blue-700">
-              ASKPOOL
-            </span>
-          </div>
-          <nav
-            aria-label="Professor navigation"
-            className="mt-12 flex flex-col gap-1"
-          >
-            {(
-              [
-                ['questions', 'Current Lecture'],
-                ['pastLectures', 'Past Lectures'],
-              ] as const
-            ).map(([destination, label]) => (
-              <button
-                key={destination}
-                type="button"
-                onClick={() => navigateTo(destination)}
-                aria-current={page === destination ? 'page' : undefined}
-                className={`rounded-lg px-3 py-3 text-left text-sm font-medium hover:bg-white focus-visible:outline-2 focus-visible:outline-blue-600 ${page === destination ? 'bg-white text-blue-700' : 'bg-slate-100 text-slate-700'}`}
-              >
-                {label}
-              </button>
-            ))}
-          </nav>
-          <div className="mt-auto border-t border-slate-200 pt-5">
-            <div className="flex items-center gap-1 rounded-xl border border-slate-200 bg-white p-1.5">
-              <button
-                type="button"
-                onClick={() => navigateTo('profile')}
-                aria-current={page === 'profile' ? 'page' : undefined}
-                className={`flex min-w-0 flex-1 items-center gap-2.5 rounded-lg px-2 py-2 text-left hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-blue-600 ${page === 'profile' ? 'bg-blue-50' : ''}`}
+          </section>
+        </main>
+      )}
+
+      {page === 'questions' && lectureStartedAt !== null && (
+        <main className="professor-page-enter mx-auto max-w-[848px] px-5 pb-20 pt-8 sm:px-6 sm:pt-10">
+          <div className="min-[720px]:flex min-[720px]:items-center min-[720px]:justify-between min-[720px]:gap-6">
+            <div className="min-w-0">
+              <h1
+                ref={mainHeadingRef}
+                tabIndex={-1}
+                className="text-[28px] leading-tight font-semibold tracking-tight outline-none sm:text-[30px]"
               >
                 Lecture questions
               </h1>
-              <p className="mt-3 text-sm text-slate-600">
-                Started{' '}
-                <time dateTime={lectureStartedAt}>
-                  {timestampFormatter.format(new Date(lectureStartedAt))}
-                </time>
-              </p>
-            </div>
-            <section
-              aria-labelledby="session-control-title"
-              className={`mt-6 flex flex-col gap-5 rounded-2xl border px-5 py-5 transition-colors min-[720px]:mt-0 min-[720px]:w-[328px] min-[720px]:shrink-0 min-[720px]:gap-3 min-[720px]:py-4 ${questionsPaused ? 'border-amber-200 bg-amber-50' : 'border-emerald-200 bg-emerald-50'}`}
-            >
-              <div className="flex min-w-0 flex-wrap items-center gap-3">
-                <h2
-                  id="session-control-title"
-                  className="text-sm font-semibold text-slate-900"
-                >
-                  Session Control
-                </h2>
+              <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2">
+                <p className="text-sm text-slate-500">
+                  Started{' '}
+                  <time dateTime={lectureStartedAt}>
+                    {timestampFormatter.format(new Date(lectureStartedAt))}
+                  </time>
+                </p>
                 <span className="group relative inline-flex">
                   <span
                     tabIndex={0}
                     aria-describedby="pool-status-description"
-                    className={`inline-flex cursor-help items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 ${questionsPaused ? 'border-amber-300 bg-amber-100 text-amber-900' : 'border-emerald-300 bg-emerald-100 text-emerald-900'}`}
+                    className={`inline-flex cursor-help items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 ${questionsPaused ? 'bg-amber-100 text-amber-900' : 'bg-emerald-100 text-emerald-900'}`}
                   >
                     <span
                       aria-hidden="true"
@@ -532,7 +484,7 @@ export default function ProfessorDashboard() {
                   <span
                     id="pool-status-description"
                     role="tooltip"
-                    className="pointer-events-none invisible absolute left-0 top-full z-30 mt-2 w-64 rounded-lg bg-slate-900 px-3 py-2 text-xs leading-5 font-medium text-white opacity-0 shadow-lg transition-opacity group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100"
+                    className="pointer-events-none invisible absolute right-0 top-full z-30 mt-2 w-60 max-w-[calc(100vw-2rem)] rounded-lg bg-slate-900 px-3 py-2 text-xs leading-5 font-medium text-white opacity-0 shadow-lg transition-opacity group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100"
                   >
                     {questionsPaused
                       ? 'Students cannot submit new questions until you resume the pool.'
@@ -540,78 +492,160 @@ export default function ProfessorDashboard() {
                   </span>
                 </span>
               </div>
-              <div className="flex flex-wrap gap-3 sm:shrink-0">
-                <button
-                  type="button"
-                  aria-pressed={questionsPaused}
-                  onClick={toggleQuestionIntake}
-                  className="min-h-11 rounded-lg border border-blue-300 bg-white px-4 py-2.5 text-sm font-semibold text-blue-700 transition-colors hover:border-blue-600 hover:bg-blue-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 min-[720px]:px-3"
-                >
-                  {questionsPaused ? 'Resume questions' : 'Pause questions'}
-                </button>
-                <button
-                  ref={endTriggerRef}
-                  type="button"
-                  onClick={() => setEndConfirmationOpen(true)}
-                  className="min-h-11 rounded-lg border border-rose-300 bg-white px-4 py-2.5 text-sm font-semibold text-rose-700 transition-colors hover:border-rose-700 hover:bg-rose-700 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-700 min-[720px]:px-3"
-                >
-                  End lecture
-                </button>
-              </div>
-            </section>
-          </div>
-          <div
-            role="tablist"
-            aria-label="Question sections"
-            className="mt-8 flex gap-6 overflow-x-auto border-b border-slate-200"
-          >
-            {questionTabs.map((tab) => (
+            </div>
+            <div
+              role="group"
+              aria-label="Session controls"
+              className="mt-5 flex flex-wrap gap-2 min-[720px]:mt-0 min-[720px]:shrink-0"
+            >
               <button
-                key={tab}
-                ref={tabRefs[tab]}
                 type="button"
-                role="tab"
-                id={`${tab}-tab`}
-                aria-controls="questions-panel"
-                aria-selected={selectedTab === tab}
-                tabIndex={selectedTab === tab ? 0 : -1}
-                onClick={() => setSelectedTab(tab)}
-                onKeyDown={(event) => {
-                  if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight')
-                    return
-                  event.preventDefault()
-                  const currentIndex = questionTabs.indexOf(tab)
-                  const direction = event.key === 'ArrowRight' ? 1 : -1
-                  const next =
-                    questionTabs[
-                      (currentIndex + direction + questionTabs.length) %
-                        questionTabs.length
-                    ]
-                  setSelectedTab(next)
-                  tabRefs[next].current?.focus()
-                }}
-                className={`-mb-px flex min-h-12 shrink-0 items-center gap-2 border-b-2 text-sm font-semibold focus-visible:rounded-t focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 ${selectedTab === tab ? 'border-blue-600 text-blue-700' : 'border-transparent text-slate-600 hover:text-slate-900'}`}
+                aria-pressed={questionsPaused}
+                onClick={toggleQuestionIntake}
+                className="min-h-11 rounded-lg border border-blue-200 bg-blue-50 px-3.5 py-2 text-sm font-semibold text-blue-700 transition-colors hover:border-blue-300 hover:bg-blue-100 hover:text-blue-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
               >
-                {tab === 'open'
-                  ? 'Open'
-                  : tab === 'answered'
-                    ? 'Answered'
-                    : 'Deleted'}
-                <span
-                  className={`rounded-full px-2 py-0.5 text-xs tabular-nums ${selectedTab === tab ? 'bg-blue-50 text-blue-700' : 'bg-slate-100 text-slate-700'}`}
-                >
-                  {tab === 'open'
-                    ? openQuestions.length
-                    : tab === 'answered'
-                      ? answeredQuestions.length
-                      : trashQuestions.length}
-                </span>
+                {questionsPaused ? 'Resume questions' : 'Pause questions'}
               </button>
-            ))}
+              <button
+                ref={endTriggerRef}
+                type="button"
+                onClick={() => setEndConfirmationOpen(true)}
+                className="min-h-11 rounded-lg border border-rose-200 bg-rose-100 px-3.5 py-2 text-sm font-semibold text-rose-800 transition-colors hover:border-rose-300 hover:bg-rose-200 hover:text-rose-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-700"
+              >
+                End lecture
+              </button>
+            </div>
+          </div>
+          <div className="professor-question-toolbar mt-8 min-[720px]:mt-6">
+            <div className="professor-question-toolbar__layout">
+              <div
+                role="tablist"
+                aria-label="Question sections"
+                className="professor-question-tabs flex min-w-0 flex-wrap gap-x-3 sm:gap-x-5"
+              >
+                {questionTabs.map((tab) => (
+                  <button
+                    key={tab}
+                    ref={tabRefs[tab]}
+                    type="button"
+                    role="tab"
+                    id={`${tab}-tab`}
+                    aria-controls="questions-panel"
+                    aria-selected={selectedTab === tab}
+                    tabIndex={selectedTab === tab ? 0 : -1}
+                    onClick={() => setSelectedTab(tab)}
+                    onKeyDown={(event) => {
+                      if (
+                        event.key !== 'ArrowLeft' &&
+                        event.key !== 'ArrowRight'
+                      )
+                        return
+                      event.preventDefault()
+                      const currentIndex = questionTabs.indexOf(tab)
+                      const direction = event.key === 'ArrowRight' ? 1 : -1
+                      const next =
+                        questionTabs[
+                          (currentIndex + direction + questionTabs.length) %
+                            questionTabs.length
+                        ]
+                      setSelectedTab(next)
+                      tabRefs[next].current?.focus()
+                    }}
+                    className={`-mb-px flex min-h-12 shrink-0 items-center gap-2 border-b-2 text-sm font-semibold focus-visible:rounded-t focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 ${selectedTab === tab ? 'border-blue-600 text-blue-700' : 'border-transparent text-slate-600 hover:text-slate-900'}`}
+                  >
+                    {tab === 'open'
+                      ? 'Open'
+                      : tab === 'answered'
+                        ? 'Answered'
+                        : 'Deleted'}
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-xs tabular-nums ${selectedTab === tab ? 'bg-blue-50 text-blue-700' : 'bg-slate-100 text-slate-700'}`}
+                    >
+                      {tab === 'open'
+                        ? openQuestions.length
+                        : tab === 'answered'
+                          ? answeredQuestions.length
+                          : trashQuestions.length}
+                    </span>
+                  </button>
+                ))}
+              </div>
+              <details
+                ref={sortMenuRef}
+                className="professor-question-sort relative w-full max-w-[204px]"
+                onBlur={(event) => {
+                  if (
+                    !event.currentTarget.contains(
+                      event.relatedTarget as Node | null,
+                    )
+                  )
+                    event.currentTarget.open = false
+                }}
+                onKeyDown={(event) => {
+                  if (event.key !== 'Escape') return
+                  event.preventDefault()
+                  event.currentTarget.open = false
+                  event.currentTarget.querySelector('summary')?.focus()
+                }}
+              >
+                <summary className="relative flex min-h-10 cursor-pointer list-none items-center gap-1 rounded-lg border border-slate-200 bg-white py-2 pr-8 pl-3 text-slate-700 transition-colors hover:border-slate-300 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 [&::-webkit-details-marker]:hidden">
+                  <span className="text-xs text-slate-500">Sort:</span>
+                  <span className="text-sm font-medium">
+                    {sortMode === 'votes' ? 'Most votes' : 'Newest first'}
+                  </span>
+                  <svg
+                    aria-hidden="true"
+                    className="pointer-events-none absolute top-1/2 right-2.5 size-4 -translate-y-1/2 text-slate-500"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="m6 9 6 6 6-6"
+                    />
+                  </svg>
+                </summary>
+                <div
+                  role="group"
+                  aria-label="Sort questions by"
+                  className="absolute right-0 left-0 z-30 mt-1 rounded-lg border border-slate-200 bg-white p-1 shadow-lg"
+                >
+                  {(
+                    [
+                      ['votes', 'Most votes'],
+                      ['newest', 'Time asked (newest first)'],
+                    ] as const
+                  ).map(([mode, label]) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      aria-pressed={sortMode === mode}
+                      onClick={() => {
+                        setSortMode(mode)
+                        if (sortMenuRef.current)
+                          sortMenuRef.current.open = false
+                        sortMenuRef.current?.querySelector('summary')?.focus()
+                      }}
+                      className={`flex w-full cursor-pointer items-center justify-between gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors focus-visible:outline-2 focus-visible:outline-blue-600 ${sortMode === mode ? 'bg-blue-50 font-semibold text-blue-700' : 'text-slate-700 hover:bg-slate-100'}`}
+                    >
+                      <span>{label}</span>
+                      {sortMode === mode && (
+                        <span aria-hidden="true" className="text-blue-700">
+                          ✓
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </details>
+            </div>
           </div>
 
-          <div className="mt-4 flex flex-wrap items-end justify-between gap-3">
-            {selectedTab === 'trash' && (
+          {selectedTab === 'trash' && (
+            <div className="mt-4">
               <button
                 type="button"
                 disabled={trashQuestions.length === 0}
@@ -635,82 +669,8 @@ export default function ProfessorDashboard() {
                 </svg>
                 Delete all
               </button>
-            )}
-            <details
-              ref={sortMenuRef}
-              className="relative ml-auto w-full max-w-[240px]"
-              onBlur={(event) => {
-                if (
-                  !event.currentTarget.contains(
-                    event.relatedTarget as Node | null,
-                  )
-                )
-                  event.currentTarget.open = false
-              }}
-              onKeyDown={(event) => {
-                if (event.key !== 'Escape') return
-                event.preventDefault()
-                event.currentTarget.open = false
-                event.currentTarget.querySelector('summary')?.focus()
-              }}
-            >
-              <summary className="relative cursor-pointer list-none rounded-lg border border-[#d8c6d3] bg-[#faf6f9] pt-1.5 pr-9 pb-1.5 pl-3 text-[#61395c] shadow-sm transition-colors hover:border-[#a6809f] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#70476a] [&::-webkit-details-marker]:hidden">
-                <span className="block text-[10px] font-bold uppercase tracking-wide text-[#8d6b83]">
-                  Sort questions
-                </span>
-                <span className="mt-0.5 block text-sm font-semibold">
-                  {sortMode === 'votes'
-                    ? 'Most votes'
-                    : 'Time asked (newest first)'}
-                </span>
-                <svg
-                  aria-hidden="true"
-                  className="pointer-events-none absolute top-1/2 right-3 size-4 -translate-y-1/2 text-[#70476a]"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="m6 9 6 6 6-6"
-                  />
-                </svg>
-              </summary>
-              <div
-                role="group"
-                aria-label="Sort questions by"
-                className="absolute right-0 left-0 z-30 mt-1 rounded-lg border border-[#d8c6d3] bg-white p-1 shadow-lg"
-              >
-                {(
-                  [
-                    ['votes', 'Most votes'],
-                    ['newest', 'Time asked (newest first)'],
-                  ] as const
-                ).map(([mode, label]) => (
-                  <button
-                    key={mode}
-                    type="button"
-                    aria-pressed={sortMode === mode}
-                    onClick={() => {
-                      setSortMode(mode)
-                      if (sortMenuRef.current) sortMenuRef.current.open = false
-                      sortMenuRef.current?.querySelector('summary')?.focus()
-                    }}
-                    className={`flex w-full cursor-pointer items-center justify-between gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors focus-visible:outline-2 focus-visible:outline-[#70476a] ${sortMode === mode ? 'bg-[#f5edf3] font-semibold text-[#61395c]' : 'text-slate-700 hover:bg-slate-100'}`}
-                  >
-                    <span>{label}</span>
-                    {sortMode === mode && (
-                      <span aria-hidden="true" className="text-[#70476a]">
-                        ✓
-                      </span>
-                    )}
-                  </button>
-                ))}
-              </div>
-            </details>
-          </div>
+            </div>
+          )}
 
           <section
             id="questions-panel"

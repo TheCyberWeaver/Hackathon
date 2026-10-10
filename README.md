@@ -46,11 +46,7 @@ cd frontend
 npm.cmd ci
 ```
 
-On macOS/Linux, use `npm ci`. Also run this once from the repository root:
-
-```bash
-chmod +x backend/gradlew
-```
+On macOS/Linux, use `npm ci`. The committed Gradle wrapper is executable.
 
 No `.env` file is required for the default local setup.
 
