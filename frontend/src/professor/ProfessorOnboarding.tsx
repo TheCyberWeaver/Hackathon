@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from 'react'
-import type { FormEvent, PointerEvent } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
+import type { CSSProperties, FormEvent, PointerEvent } from 'react'
 import type { CurrentUser } from '../lib/api'
 import {
   normalizedCourseTitle,
@@ -9,6 +10,28 @@ import {
 import './professorOnboarding.css'
 
 type Stage = 'welcome' | 'courses' | 'finishing' | 'success'
+
+type CourseDrag = {
+  course: ProfessorCourse
+  x: number
+  y: number
+  width: number
+  height: number
+  dropping: boolean
+}
+
+function CourseGrip() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 16 20" fill="currentColor">
+      <circle cx="5" cy="4" r="1.5" />
+      <circle cx="11" cy="4" r="1.5" />
+      <circle cx="5" cy="10" r="1.5" />
+      <circle cx="11" cy="10" r="1.5" />
+      <circle cx="5" cy="16" r="1.5" />
+      <circle cx="11" cy="16" r="1.5" />
+    </svg>
+  )
+}
 
 function moveCourse(
   courses: ProfessorCourse[],
@@ -39,10 +62,108 @@ export default function ProfessorOnboarding({
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editValue, setEditValue] = useState('')
   const [editError, setEditError] = useState('')
-  const [draggingId, setDraggingId] = useState<string | null>(null)
-  const dragIdRef = useRef<string | null>(null)
+  const [courseDrag, setCourseDrag] = useState<CourseDrag | null>(null)
+  const [courseRise, setCourseRise] = useState(0)
+  const setupRef = useRef<HTMLElement>(null)
+  const dragSessionRef = useRef<{
+    courseId: string
+    pointerId: number
+    offsetX: number
+    offsetY: number
+  } | null>(null)
   const addInputRef = useRef<HTMLInputElement>(null)
   const successTitleRef = useRef<HTMLHeadingElement>(null)
+  const setupVisible = stage === 'courses' || stage === 'finishing'
+  const hasCourses = courses.length > 0
+  const dragVisible = courseDrag !== null
+  const dropping = courseDrag?.dropping ?? false
+
+  useEffect(() => {
+    if (!dropping) return
+    // Also finish when no transition fires (e.g. releasing in the same slot).
+    const timeout = window.setTimeout(() => setCourseDrag(null), 280)
+    return () => window.clearTimeout(timeout)
+  }, [dropping])
+
+  useEffect(() => {
+    if (!dragVisible) return
+    const stopOnBlur = () => {
+      const session = dragSessionRef.current
+      dragSessionRef.current = null
+      if (session && setupRef.current?.hasPointerCapture(session.pointerId)) {
+        setupRef.current.releasePointerCapture(session.pointerId)
+      }
+      setCourseDrag(null)
+    }
+    window.addEventListener('blur', stopOnBlur)
+    return () => window.removeEventListener('blur', stopOnBlur)
+  }, [dragVisible])
+
+  useLayoutEffect(() => {
+    const setup = setupRef.current
+    if (!setupVisible || !setup) return
+    const measurePosition = () => {
+      const main = setup.parentElement!
+      const footer = main.nextElementSibling as HTMLElement
+      const mainStyle = getComputedStyle(main)
+      const heading = setup.querySelector<HTMLElement>(
+        '.professor-onboarding__setup-heading',
+      )!
+      const panel = setup.querySelector<HTMLElement>(
+        '.professor-onboarding__course-panel',
+      )!
+      const listSection = setup.querySelector<HTMLElement>(
+        '.professor-onboarding__list-section',
+      )
+      const list = setup.querySelector<HTMLElement>(
+        '.professor-onboarding__list',
+      )
+      const listHeight = listSection
+        ? listSection.offsetHeight +
+          parseFloat(getComputedStyle(listSection).marginTop)
+        : 0
+      const headingHeight =
+        heading.offsetHeight +
+        parseFloat(getComputedStyle(heading).marginBottom)
+      const panelBaseHeight = panel.offsetHeight - listHeight
+      const besideHeading = getComputedStyle(setup).display === 'grid'
+      // Only the empty form establishes the desktop anchor. The list gets
+      // the remaining viewport space, including on compact landscape screens.
+      const emptyHeight = besideHeading
+        ? Math.max(headingHeight, panelBaseHeight)
+        : headingHeight + panelBaseHeight
+      const availableHeight =
+        window.innerHeight -
+        (main.getBoundingClientRect().top + window.scrollY) -
+        footer.offsetHeight -
+        parseFloat(mainStyle.paddingTop) -
+        parseFloat(mainStyle.paddingBottom)
+      setup.style.setProperty(
+        '--setup-start-offset',
+        `${Math.max(0, (availableHeight - emptyHeight) / 2)}px`,
+      )
+      setup.style.setProperty(
+        '--course-list-space',
+        `${availableHeight - (besideHeading ? panelBaseHeight : emptyHeight) - (listHeight - (list?.offsetHeight ?? 0))}px`,
+      )
+    }
+    measurePosition()
+    const frame = window.requestAnimationFrame(() => {
+      setup.dataset.positioned = 'true'
+    })
+    const observer = new ResizeObserver(measurePosition)
+    setup
+      .querySelectorAll(
+        '.professor-onboarding__setup-heading, form, .professor-onboarding__panel-footer',
+      )
+      .forEach((element) => observer.observe(element))
+    window.addEventListener('resize', measurePosition)
+    return () => {
+      window.cancelAnimationFrame(frame)
+      observer.disconnect()
+      window.removeEventListener('resize', measurePosition)
+    }
+  }, [setupVisible, hasCourses])
 
   useEffect(() => {
     if (stage === 'success')
@@ -89,10 +210,14 @@ export default function ProfessorOnboarding({
       return
     }
     setCourses((current) => [...current, { id: crypto.randomUUID(), title }])
+    // Keep the highest reached position, including after courses are removed.
+    setCourseRise((current) =>
+      Math.max(current, Math.min(courses.length + 1, 5) / 5),
+    )
     setDraft('')
     setAddError('')
     setSaveError('')
-    addInputRef.current?.focus()
+    addInputRef.current?.focus({ preventScroll: true })
   }
 
   function beginRename(course: ProfessorCourse) {
@@ -146,32 +271,88 @@ export default function ProfessorOnboarding({
   }
 
   function startDrag(event: PointerEvent<HTMLButtonElement>, courseId: string) {
-    if (event.pointerType === 'mouse' && event.button !== 0) return
-    event.currentTarget.setPointerCapture(event.pointerId)
-    dragIdRef.current = courseId
-    setDraggingId(courseId)
-  }
-
-  function dragOverCourse(event: PointerEvent<HTMLButtonElement>) {
-    const sourceId = dragIdRef.current
-    if (!sourceId) return
-    const target = document
-      .elementFromPoint(event.clientX, event.clientY)
-      ?.closest<HTMLElement>('[data-course-id]')
-    const targetId = target?.dataset.courseId
-    if (targetId && targetId !== sourceId) {
-      setCourses((current) => moveCourse(current, sourceId, targetId))
+    if (!event.isPrimary || event.button !== 0 || courseDrag || editingId)
+      return
+    const course = courses.find((item) => item.id === courseId)
+    const row = event.currentTarget.closest('li')
+    const setup = setupRef.current
+    if (!course || !row || !setup) return
+    event.preventDefault()
+    event.currentTarget.focus({ preventScroll: true })
+    const rect = row.getBoundingClientRect()
+    dragSessionRef.current = {
+      courseId,
+      pointerId: event.pointerId,
+      offsetX: event.clientX - rect.left,
+      offsetY: event.clientY - rect.top,
     }
+    // This section never moves in the DOM when React reorders course rows.
+    setup.setPointerCapture(event.pointerId)
+    setCourseDrag({
+      course,
+      x: rect.left,
+      y: rect.top,
+      width: rect.width,
+      height: rect.height,
+      dropping: false,
+    })
   }
 
-  function endDrag() {
-    dragIdRef.current = null
-    setDraggingId(null)
+  function dragOverCourse(event: PointerEvent<HTMLElement>) {
+    const session = dragSessionRef.current
+    if (!session || event.pointerId !== session.pointerId) return
+    setCourseDrag(
+      (current) =>
+        current && {
+          ...current,
+          x: event.clientX - session.offsetX,
+          y: event.clientY - session.offsetY,
+        },
+    )
+    // Vertical slots still work when the pointer is beside/outside the panel.
+    const rows = Array.from(
+      event.currentTarget.querySelectorAll<HTMLElement>('[data-course-id]'),
+    ).filter((row) => row.dataset.courseId !== session.courseId)
+    const insertionIndex = rows.filter((row) => {
+      const rect = row.getBoundingClientRect()
+      return event.clientY > rect.top + rect.height / 2
+    }).length
+    setCourses((current) => {
+      const from = current.findIndex((course) => course.id === session.courseId)
+      if (from < 0 || from === insertionIndex) return current
+      const reordered = [...current]
+      const [course] = reordered.splice(from, 1)
+      reordered.splice(insertionIndex, 0, course)
+      return reordered
+    })
+  }
+
+  function endDrag(event: PointerEvent<HTMLElement>) {
+    const session = dragSessionRef.current
+    if (!session || event.pointerId !== session.pointerId) return
+    dragSessionRef.current = null
+    const setup = setupRef.current
+    if (setup?.hasPointerCapture(session.pointerId)) {
+      setup.releasePointerCapture(session.pointerId)
+    }
+    const row = setup?.querySelector<HTMLElement>(
+      `[data-course-id="${session.courseId}"]`,
+    )
+    if (!row || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      setCourseDrag(null)
+      return
+    }
+    const rect = row.getBoundingClientRect()
+    setCourseDrag(
+      (current) =>
+        current && { ...current, x: rect.left, y: rect.top, dropping: true },
+    )
   }
 
   function finishSetup() {
     if (
       stage !== 'courses' ||
+      courseDrag ||
       editingId ||
       draft.trim() ||
       courses.length === 0
@@ -189,7 +370,8 @@ export default function ProfessorOnboarding({
     )
   }
 
-  const canFinish = courses.length > 0 && !editingId && !draft.trim()
+  const canFinish =
+    courses.length > 0 && !editingId && !draft.trim() && !courseDrag
 
   return (
     <div className={`professor-onboarding professor-onboarding--${stage}`}>
@@ -214,11 +396,19 @@ export default function ProfessorOnboarding({
           </section>
         )}
 
-        {(stage === 'courses' || stage === 'finishing') && (
+        {setupVisible && (
           <section
+            ref={setupRef}
             className="professor-onboarding__setup"
+            style={{ '--course-rise': courseRise } as CSSProperties}
             aria-labelledby="course-setup-title"
             inert={stage === 'finishing'}
+            onPointerMove={dragOverCourse}
+            onPointerUp={endDrag}
+            onPointerCancel={endDrag}
+            onLostPointerCapture={(event) => {
+              if (event.target === event.currentTarget) endDrag(event)
+            }}
             onAnimationEnd={(event) => {
               if (stage === 'finishing' && event.target === event.currentTarget)
                 setStage('success')
@@ -230,10 +420,7 @@ export default function ProfessorOnboarding({
                 className="professor-onboarding__underline"
                 aria-hidden="true"
               />
-              <p>
-                Add the courses you want to use with AskPool. You can change
-                them later in Settings.
-              </p>
+              <p>You can change them later in Settings.</p>
             </div>
 
             <div className="professor-onboarding__course-panel">
@@ -277,11 +464,7 @@ export default function ProfessorOnboarding({
                 <div className="professor-onboarding__list-section">
                   <div className="professor-onboarding__list-heading">
                     <h2>Your courses</h2>
-                    <span>{courses.length} added</span>
                   </div>
-                  <p className="professor-onboarding__list-help">
-                    Drag to change the order. Select a name to edit it.
-                  </p>
                   <ul
                     className="professor-onboarding__list"
                     aria-label="Your courses"
@@ -291,7 +474,9 @@ export default function ProfessorOnboarding({
                         key={course.id}
                         data-course-id={course.id}
                         className={
-                          draggingId === course.id ? 'is-dragging' : ''
+                          courseDrag?.course.id === course.id
+                            ? 'is-dragging'
+                            : ''
                         }
                       >
                         <button
@@ -313,23 +498,8 @@ export default function ProfessorOnboarding({
                             }
                           }}
                           onPointerDown={(event) => startDrag(event, course.id)}
-                          onPointerMove={dragOverCourse}
-                          onPointerUp={endDrag}
-                          onPointerCancel={endDrag}
-                          onLostPointerCapture={endDrag}
                         >
-                          <svg
-                            aria-hidden="true"
-                            viewBox="0 0 16 20"
-                            fill="currentColor"
-                          >
-                            <circle cx="5" cy="4" r="1.5" />
-                            <circle cx="11" cy="4" r="1.5" />
-                            <circle cx="5" cy="10" r="1.5" />
-                            <circle cx="11" cy="10" r="1.5" />
-                            <circle cx="5" cy="16" r="1.5" />
-                            <circle cx="11" cy="16" r="1.5" />
-                          </svg>
+                          <CourseGrip />
                         </button>
                         {editingId === course.id ? (
                           <div className="professor-onboarding__edit-wrap">
@@ -440,6 +610,30 @@ export default function ProfessorOnboarding({
       <footer className="professor-onboarding__footer">
         <span>ASKPOOL / PROFESSOR</span>
       </footer>
+      {courseDrag &&
+        createPortal(
+          <div className="professor-onboarding__drag-layer" aria-hidden="true">
+            <div
+              className={`professor-onboarding__drag-position${courseDrag.dropping ? ' is-dropping' : ''}`}
+              style={{
+                width: courseDrag.width,
+                height: courseDrag.height,
+                transform: `translate3d(${courseDrag.x}px, ${courseDrag.y}px, 0)`,
+              }}
+            >
+              <div className="professor-onboarding__drag-card">
+                <span className="professor-onboarding__drag">
+                  <CourseGrip />
+                </span>
+                <span className="professor-onboarding__course-title">
+                  {courseDrag.course.title}
+                </span>
+                <span className="professor-onboarding__drag-remove">×</span>
+              </div>
+            </div>
+          </div>,
+          document.body,
+        )}
     </div>
   )
 }

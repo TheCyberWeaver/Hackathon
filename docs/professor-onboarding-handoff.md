@@ -16,11 +16,47 @@ The flow is a responsive full page: animated welcome, course setup, and success 
 - The upper-left wordmark matches the dashboard's `.side-panel-brand` typography. There is no logo icon, upper-right label, blue text above headings, or lower-left slogan. The remaining lower-right label is faint, and the background is plain.
 - Timing/keyframes live in `professorOnboarding.css`; stage transitions live in `ProfessorOnboarding.tsx`. Course data and the JSON contract are unchanged by this visual revision.
 
+On desktops at least 1024 px wide and taller than 500 px, adding the first five courses smoothly raises the heading and course panel together. At five courses they have covered 80% of the gap between the empty form's centred position and the top of the main content area. The highest reached position is retained for the rest of that onboarding run, including after removal; further rows scroll inside the capped course list instead of recentering the heading or panel. The move takes 700 ms, with no animation for reduced motion. Viewport resizing recalculates the available space. The anchor is transient UI state and resets when onboarding restarts. Narrow and short-window behavior is described below.
+
 **Done** is enabled after at least one valid course is present and any draft or rename is resolved. It writes the entire JSON profile in one local-storage operation and then shows “You’re all set.” If writing fails, the professor stays on the course step with an error, and onboarding remains incomplete. **Continue to dashboard** opens `/professor`. Reloading after Done also goes to the dashboard, because Done already marked completion. An unfinished draft is never stored; leaving before Done restarts onboarding. There is no production skip or replay. Settings is intended to be the only way to change courses later; the colleague's course editor is still pending. The existing Settings placeholder has a development reset control described below.
 
 The student tutorial chat was a visual reference for smooth animation and mobile polish. This onboarding is live form UI, not a screenshot carousel.
 
 After annotation review, the success page no longer exposes a JSON download. Done still saves the same formatted JSON in browser storage, and `serializeProfessorProfile` remains the shared serializer for integration. The synthetic `.json` example below documents the contract. The decorative left-hand plus, input hint, and footer status text are also removed; validation errors remain visible. Success copy reads “You can always make changes in the Settings.”
+
+The next visual cleanup removes the added-course count, visible drag/edit instructions, and divider above Done. “Your courses” sits 8 px closer to the input. The heading's supporting text is now just “You can change them later in Settings.” in smaller, muted text. Dragging, inline renaming, keyboard reordering, and storage behavior are unchanged.
+
+### Course pickup and drop
+
+Pressing a six-dot handle lifts the course card by 6 px, scales it to 1.025, and tilts it by −1.5° over 180 ms with a stronger shadow. A dashed placeholder retains its slot while the floating card follows the pointer. Releasing settles it into the selected slot over 260 ms. Reduced motion keeps pointer tracking and the placeholder, but skips lift/tilt and drop animation.
+
+The preview is a noninteractive, screen-reader-hidden React portal under `document.body`, so the list and course panel cannot clip it. Pointer capture belongs to the stable setup section, not a handle that React moves during sorting. Leaving the panel does not end the drag; row midpoints along the vertical axis determine the destination even with the pointer beside the panel. Pointer release/cancellation settles into the current slot, and window focus loss clears the drag. Done is disabled until the card has settled. Keyboard reordering remains available on the handles. This is transient presentation state; course IDs and the saved array contract are unchanged. There is still no edge auto-scroll during dragging.
+
+### Responsive layout audit
+
+The final responsive pass fixes the app's one-sided scrollbar gutter shifting onboarding left, and the global body minimum width clipping the form in a 320 px desktop window. The onboarding stylesheet scopes balanced scrollbar gutters on desktop and a zero body minimum to this flow only. On viewports below 1024 px or devices with a coarse pointer, the gutter is `auto`: reserving strips on both sides is unnecessary for mobile overlay scrollbars and can expose device-preview edge artifacts. The root and body use the same onboarding background, and the flow explicitly uses a light color scheme for native browser surfaces. Leaving for the dashboard restores the existing app rules. Explicit shrinking grid columns prevent inputs or long titles from widening the page.
+
+Header and footer reserve equal, viewport-relative space, and the main area's vertical padding is balanced. Welcome retains its slightly raised position; its offset reduces to zero on short screens. Headings wrap deliberately, and long login names can break within a word. The course panel stays capped at 750 px on standard desktop layouts; large monitors retain readable content widths.
+
+The setup measurement calculates the empty form height separately from the course list. The list uses the remaining viewport height, with a 322 px desktop / 260 px mobile cap and a 58 px minimum. A ResizeObserver watches heading, form and button-footer size changes, and window resizing also recalculates the measurements. This accommodates validation text, responsive type and device rotation without making additional courses move the desktop anchor. Screens up to 640 px use the mobile spacing and full-width Done button. At widths of at least 560 px and heights up to 500 px, the heading sits beside the form; that compact landscape layout uses normal centering instead of the desktop rise. The success icon and spacing also shrink on short screens.
+
+Very short viewports, such as 568 × 320 or a 360 × 400 window, can scroll the page to reach Done. Course rows scroll within the list. Controls are kept at usable sizes rather than shrinking the entire interface. A long list can show fewer rows on small screens; the existing no-auto-scroll-during-drag limitation still applies.
+
+The visual and geometry matrix covered five states (welcome, empty setup, five courses, twelve courses, success) at each of these **33 viewport sizes: 165 checks**:
+
+| Group | Viewports in CSS pixels |
+| --- | --- |
+| Phone portrait | 320 × 568, 360 × 640, 375 × 667, 390 × 844, 391 × 847, 412 × 915, 430 × 932 |
+| Phone landscape | 568 × 320, 667 × 375, 844 × 390, 932 × 430 |
+| Tablet and breakpoint boundaries | 600 × 960, 640 × 800, 641 × 800, 768 × 1024, 820 × 1180, 1023 × 768, 1024 × 768, 1025 × 768, 1180 × 820 |
+| Desktop and large monitors | 1280 × 720, 1309 × 818, 1366 × 768, 1440 × 900, 1440 × 1000, 1536 × 864, 1920 × 1080, 2560 × 1440, 3440 × 1440, 3840 × 2160 |
+| Short windows | 1024 × 600, 1280 × 500, 360 × 400 |
+
+Every case had zero horizontal stage-center offset, no horizontal overflow and no clipped stage. Representative screenshots from all viewport groups were inspected. Additional mobile contexts at seven sizes verified long course titles, duplicate/rename errors, list/page scrolling, reachable Done and Continue, and restored dashboard styles. Normal-motion checks confirmed the 80% rise at five and the anchor through twelve; additional checks covered the 559/560 px landscape boundary, rotation, long unbroken login names, and desktop/touch pickup and drop.
+
+The built-in browser control failed to initialize with “failed to write kernel assets,” so these checks ran in isolated local Chrome against the same localhost app. They do not constitute physical-device, Safari or Firefox verification; native keyboard and browser-toolbar behavior still needs a physical-device pass. Build, ESLint and changed-file formatting passed after the responsive fixes.
+
+**Phone edge follow-up:** The iPhone 15 Pro Max / Galaxy S24 Ultra report prompted the mobile gutter override above. Before it, desktop-backed previews at 430 × 932 and 412 × 915 reserved 15 px on each side; afterwards the onboarding surface fills the viewport. Checks also cover 384 × 824, dark preference, phone landscape and the normal desktop gutter. The black coloring itself was not reproduced in isolated Chrome, so confirmation in the affected built-in preview/physical browser remains necessary. On very short desktop-backed mobile previews with classic scrollbars, a normal single scrollbar may appear while scrolling; actual mobile overlay scrollbars do not reserve layout space.
 
 ## Files to start from
 
@@ -97,5 +133,7 @@ Run `npm run build`, `npm run lint`, `npm run test:professor-profile`, and `npm 
 - Formatting: onboarding files pass. Full `npm run format:check` still reports the existing `frontend/src/student/components/QuestionCard.tsx`, which this feature does not modify.
 
 - After annotation cleanup: build and lint passed; browser checks verified all requested removals, the accessible plus button, Enter-to-add, duplicate validation, keyboard/pointer reordering, 300/550 ms completion fades, corrected copy, saved JSON ordering and Continue. Desktop/mobile form and mobile success screenshots were visually inspected.
+- Desktop anchoring: build/lint passed; browser position measurements verified the 80% rise at five courses, stable heading/panel tops through ten courses and subsequent removals, recalculation at 1309 × 818, scrollable overflow, and the original layout at mobile width. Pointer checks use physical clicks to avoid the automation tool's automatic page-centering scroll.
+- Course pickup/drop: build, lint and changed-file formatting passed. Isolated Chrome checks verified the lifted portal beyond the panel, capture through repeated reorders, release outside the panel, 260 ms drop, stationary release cleanup, keyboard ordering and saved JSON. Mobile touch emulation covered dragging outside the panel, release and pointer cancellation without horizontal overflow. Reduced-motion checks confirmed immediate release and no tilt. Desktop/mobile drag screenshots were inspected; no uncaught browser errors occurred.
 
 For a manual acceptance pass, start with a fresh demo identity, abandon one draft and return, create two courses, try a duplicate, rename and reorder them, then click Done. Inspect the identity's JSON in browser local storage and confirm the array matches the visible order and IDs survive rename/reorder. Continue should open the existing professor page, and a reload after Done should skip onboarding.
