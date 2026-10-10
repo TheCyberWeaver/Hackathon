@@ -1,52 +1,50 @@
 # Java + PostgreSQL deployment
 
-## Moderation service
+## Two independent deployments
 
-The release now includes a private CPU moderation container. Java checks a
-question for abusive language before saving it; general and off-topic questions
-are accepted. Service failures
-allow submissions. See [the moderation API and policy](../moderation/README.md).
-
-The tracked [deploy-moderation.ps1](../deploy-moderation.ps1) follows the existing
-local deployment workflow and deploys frontend, Java, and moderation together:
+Use [deploy-webapp.ps1](../deploy-webapp.ps1) for frontend and Java, and
+[deploy-moderation.ps1](../deploy-moderation.ps1) for moderation only.
+Both entry points support `-BuildOnly`, `-CheckConnection`, `-ValidateOnly`,
+and `-SkipInstall`. These modes are mutually exclusive except `-SkipInstall`.
 
 ```powershell
-# Build, test and package locally, without connecting to the VM.
+# Build/test/package locally without contacting the VM.
+.\deploy-webapp.ps1 -BuildOnly -SkipInstall
 .\deploy-moderation.ps1 -BuildOnly -SkipInstall
-# Check VM prerequisites, without deploying.
-.\deploy-moderation.ps1 -CheckConnection
-# Validate a candidate with its own disposable database.
-.\deploy-moderation.ps1 -ValidateOnly -SkipInstall
-# Deploy the integrated release.
+
+# Deploy moderation first when moving from the old combined deployment.
 .\deploy-moderation.ps1 -SkipInstall
+.\deploy-webapp.ps1 -SkipInstall
 ```
 
-Authentication defaults to your OpenSSH keys/agent and the `viscon-2026` alias.
-If this VM uses password authentication, set `ASKPOOL_VM_PASSWORD` in your local
-terminal or supply `-VmPassword`; it uses the same Paramiko transport as the
-ignored local helper. Host keys must already be verified in `known_hosts`.
-The tracked script contains no credentials and does not package credentials.
-`-SshHost`, `-JdkPath`, `-DatabaseUrl`, `-AppPasswordFile`, and
-`-BaselineDatabase` work like the existing helper. `-SkipInstall` reuses existing
-frontend and moderation dependencies; a missing Python environment is created.
-Python 3.12+ is needed locally for moderation tests, alongside JDK 21, Node,
-OpenSSH, and tar. The server needs Docker Compose with image build support.
+The web app stays in Compose project `hackathon`; moderation uses the independent
+`askpool-moderation` project. Java reaches `http://askpool-moderation:8090` on
+`askpool_shared`, without a public moderation port. Web releases include only
+frontend assets, the Java JAR, and web configuration. Moderation releases include
+only its source, Dockerfile, and service configuration. Updating moderation
+does not build or restart Java/frontend, run migrations, or touch PostgreSQL.
+Updating the web app does not build or restart independent moderation.
 
-The bundle contains moderation source and its Dockerfile. On the server the
-script builds a release-tagged image, baking in the quantized model from Hugging
-Face. The image explicitly grants its app user read access to source and model
-files, then checks API import and model inference as that user during the build.
-The running service uses only cached model files. A healthy candidate must
-pass real-model HTTP smoke checks and a Java submission check (accepted saved,
-rejected not saved) before production is changed. Production is
-checked again after switching; failure restores the previous application release
-and its moderation image tag. Database backup/adoption behavior is retained.
+The former `deploy-local.ps1` has been retired. Existing VM settings were moved
+to ignored `deploy.local.json`, read by both scripts. Explicit command arguments
+override that file; `ASKPOOL_VM_PASSWORD` overrides its password value. Without
+a password, SSH uses your keys/agent. Host keys must be verified in `known_hosts`.
+Credentials are never packaged. Shared SSH transport lives in `deploy/Deployment.psm1`.
 
-Use `-ModerationThreshold 0.98` to make the filter more permissive, or adjust
-`MODERATION_THRESHOLD` in a release's `.env` and recreate its moderation service.
-The default `0.95` rejects only high-confidence toxicity predictions. Tune it
-with real questions. The smoke check must still pass at the chosen setting. The model image
-build requires package/model download access. No public moderation port is added.
+Web deployment needs Node/npm, JDK 21, and tar locally. Moderation needs Python
+3.12+ and tar locally; it runs moderation unit tests without building the web app.
+`-SkipInstall` reuses dependencies; a missing moderation environment is installed.
+Both need OpenSSH for VM operations. The server needs Docker Compose with
+`--wait` support and the existing `askpool_shared` network.
+
+Moderation deployment builds a release-tagged CPU image on the VM, baking in
+the pinned quantized model. Its candidate uses a distinct network alias so
+production Java cannot reach the candidate. It must become healthy and pass
+the real-model smoke checks before switching. `-ValidateOnly` stops there.
+Production is checked again; a failure restores the previous moderation image
+and threshold without changing the web app. Model builds require package/model
+download access. See [moderation policy](../moderation/README.md).
+Use `-ModerationThreshold 0.98` to adjust filtering (default `0.95`).
 
 ## Application deployment
 
@@ -113,25 +111,25 @@ WHERE id = 123;
 
 Java tests start an isolated PostgreSQL instance and test empty databases, V1 adoption, permissions, privacy, voting, quota races, and moderation without contacting the VM. Verify `/api/hello`, unauthenticated 401 for `/api/lectures`, managed login, professor creation, student joining/submission, voting/reports, and answer synchronization.
 
-The ignored local `deploy-local.ps1` builds/lints the frontend, runs `test:api`,
+The tracked `deploy-webapp.ps1` builds/lints the frontend, runs `test:api`,
 tests/builds Java, and packages only Java and frontend assets. It prepares the
-tracked `deploy/deploy-vm.sh` template, uploads with the existing SSH helper, and
+tracked `deploy/deploy-webapp-vm.sh` template, uploads with the existing SSH helper, and
 checks `/api/me`, `/api/lectures`, and frontend assets. Credentials remain in the
-ignored local helper and the existing VM secret; they are excluded from bundles.
+ignored local config and the existing VM secret; they are excluded from bundles.
 
 ```powershell
 # Local checks and packaging only; no VM connection.
-.\deploy-local.ps1 -BuildOnly
+.\deploy-webapp.ps1 -BuildOnly
 
 # Candidate validation only, using a disposable PostgreSQL database.
-.\deploy-local.ps1 -ValidateOnly
+.\deploy-webapp.ps1 -ValidateOnly
 
 # First adoption, AFTER verifying the supplied V1 schema and table ownership.
-.\deploy-local.ps1 -ValidateOnly -BaselineDatabase
-.\deploy-local.ps1 -BaselineDatabase
+.\deploy-webapp.ps1 -ValidateOnly -BaselineDatabase
+.\deploy-webapp.ps1 -BaselineDatabase
 
 # Subsequent deployments after Flyway tracks the database.
-.\deploy-local.ps1
+.\deploy-webapp.ps1
 ```
 
 The helper discovers `secrets/app_password` beneath the VM user's home only
@@ -168,5 +166,5 @@ started explicitly. The older VM `votes` foreign key is changed to cascade only
 when a question is permanently purged. Ordinary deletion still retains votes
 and reports for restoration. This frontend and backend must be released together.
 
-The ignored `deploy-local.ps1` contains the VM SSH configuration;
+The ignored `deploy.local.json` contains the VM SSH configuration;
 `dev-local.ps1` runs locally and does not connect to the VM.

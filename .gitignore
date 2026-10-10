@@ -18,6 +18,7 @@ Thumbs.db
 .gradle-user-home/
 deploy/artifacts/
 /deploy-local.ps1
+/deploy.local.json
 frontend/server/student-api/data/
 backend/.local-postgres/
 **/.venv/

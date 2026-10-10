@@ -1,0 +1,17 @@
+services:
+  moderation:
+    image: askpool-moderation:${MODERATION_IMAGE_TAG:-local}
+    build: ./moderation
+    environment:
+      MODERATION_THRESHOLD: ${MODERATION_THRESHOLD:-0.95}
+    cpus: 1.0
+    mem_limit: 768m
+    restart: unless-stopped
+    networks:
+      askpool_shared:
+        aliases:
+          - ${MODERATION_NETWORK_ALIAS:-askpool-moderation}
+
+networks:
+  askpool_shared:
+    external: true

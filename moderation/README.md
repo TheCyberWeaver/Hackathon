@@ -23,8 +23,8 @@ A successful check returns exactly one field:
 The other possible decision is `reject`. No reason or score is returned.
 Extra fields, including `courseTitle`, and invalid questions return HTTP 422.
 Inference failures return 503. `GET /health` responds after loading and warmup.
-There is no public production port; Java uses `http://moderation:8090` over the
-private Compose network.
+There is no public production port; Java uses `http://askpool-moderation:8090` over the
+shared private Docker network.
 
 Spring Boot sends only the trimmed question before storing it. An explicit
 rejection returns HTTP 422 with "Please avoid abusive language." and saves
@@ -94,7 +94,7 @@ against general, off-topic, technical, critical, and abusive examples.
 ## Deploy
 
 Use [deploy-moderation.ps1](../deploy-moderation.ps1) from the project root. It
-deploys frontend, backend, and moderation together. See
+deploys only moderation, independently of frontend, Java, and PostgreSQL. See
 [deployment instructions](../deploy/README.md#moderation-service).
 Release image tags support rollback. Initial builds require package/model access.
 
