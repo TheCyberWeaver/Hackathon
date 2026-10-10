@@ -1,16 +1,16 @@
 {
-  "name": "hackathon-frontend",
+  "name": "askpool-student-demo",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0",
   "type": "module",
   "scripts": {
     "dev": "node scripts/dev.mjs",
     "build": "tsc -b && vite build",
     "lint": "eslint . --max-warnings 0",
-    "test:student-api": "node --test scripts/student-api.test.mjs",
-    "preview": "node scripts/dev.mjs --preview",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "preview": "vite preview",
+    "reset-data": "node server/reset.mjs"
   },
   "dependencies": {
     "react": "^19.2.8",

@@ -37,6 +37,7 @@ button:focus-visible {
 }
 
 .entry-page {
+  color: #203932;
   min-height: 100svh;
   display: grid;
   place-items: center;
@@ -70,6 +71,10 @@ button:focus-visible {
     background 0.18s,
     transform 0.18s;
 }
+.entry-button:focus-visible {
+  outline: 3px solid #248e79;
+  outline-offset: 5px;
+}
 .student-button {
   color: #fff;
   background: #176b59;
@@ -90,84 +95,6 @@ button:focus-visible {
 .entry-button:disabled {
   opacity: 0.5;
   cursor: wait;
-}
-
-.professor-drawer:not([open]) {
-  display: none;
-}
-
-.professor-drawer[open] {
-  animation: professor-drawer-enter 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-
-.professor-drawer[open]::backdrop {
-  animation: professor-backdrop-enter 240ms ease-out both;
-}
-
-.professor-drawer[open][data-closing='true'] {
-  animation: professor-drawer-exit 180ms ease-in both;
-}
-
-.professor-drawer[open][data-closing='true']::backdrop {
-  animation: professor-backdrop-exit 180ms ease-in both;
-}
-
-.professor-page-enter {
-  animation: professor-page-enter 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-
-@keyframes professor-drawer-enter {
-  from {
-    transform: translateX(-100%);
-  }
-
-  to {
-    transform: translateX(0);
-  }
-}
-
-@keyframes professor-backdrop-enter {
-  from {
-    opacity: 0;
-  }
-
-  to {
-    opacity: 1;
-  }
-}
-
-@keyframes professor-drawer-exit {
-  to {
-    transform: translateX(-100%);
-  }
-}
-
-@keyframes professor-backdrop-exit {
-  to {
-    opacity: 0;
-  }
-}
-
-@keyframes professor-page-enter {
-  from {
-    opacity: 0.82;
-    transform: translateY(8px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .professor-drawer[open],
-  .professor-drawer[open]::backdrop,
-  .professor-drawer[open][data-closing='true'],
-  .professor-drawer[open][data-closing='true']::backdrop,
-  .professor-page-enter {
-    animation: none;
-  }
 }
 
 /* Small dashboard handoffs, replaced when the dashboard branches merge. */
