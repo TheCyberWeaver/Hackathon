@@ -20,3 +20,6 @@ deploy/artifacts/
 /deploy-local.ps1
 frontend/server/student-api/data/
 backend/.local-postgres/
+**/.venv/
+**/__pycache__/
+moderation/.model-cache/

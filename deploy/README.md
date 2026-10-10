@@ -1,5 +1,55 @@
 # Java + PostgreSQL deployment
 
+## Moderation service
+
+The release now includes a private CPU moderation container. Java checks a
+question for abusive language before saving it; general and off-topic questions
+are accepted. Service failures
+allow submissions. See [the moderation API and policy](../moderation/README.md).
+
+The tracked [deploy-moderation.ps1](../deploy-moderation.ps1) follows the existing
+local deployment workflow and deploys frontend, Java, and moderation together:
+
+```powershell
+# Build, test and package locally, without connecting to the VM.
+.\deploy-moderation.ps1 -BuildOnly -SkipInstall
+# Check VM prerequisites, without deploying.
+.\deploy-moderation.ps1 -CheckConnection
+# Validate a candidate with its own disposable database.
+.\deploy-moderation.ps1 -ValidateOnly -SkipInstall
+# Deploy the integrated release.
+.\deploy-moderation.ps1 -SkipInstall
+```
+
+Authentication defaults to your OpenSSH keys/agent and the `viscon-2026` alias.
+If this VM uses password authentication, set `ASKPOOL_VM_PASSWORD` in your local
+terminal or supply `-VmPassword`; it uses the same Paramiko transport as the
+ignored local helper. Host keys must already be verified in `known_hosts`.
+The tracked script contains no credentials and does not package credentials.
+`-SshHost`, `-JdkPath`, `-DatabaseUrl`, `-AppPasswordFile`, and
+`-BaselineDatabase` work like the existing helper. `-SkipInstall` reuses existing
+frontend and moderation dependencies; a missing Python environment is created.
+Python 3.12+ is needed locally for moderation tests, alongside JDK 21, Node,
+OpenSSH, and tar. The server needs Docker Compose with image build support.
+
+The bundle contains moderation source and its Dockerfile. On the server the
+script builds a release-tagged image, baking in the quantized model from Hugging
+Face. The image explicitly grants its app user read access to source and model
+files, then checks API import and model inference as that user during the build.
+The running service uses only cached model files. A healthy candidate must
+pass real-model HTTP smoke checks and a Java submission check (accepted saved,
+rejected not saved) before production is changed. Production is
+checked again after switching; failure restores the previous application release
+and its moderation image tag. Database backup/adoption behavior is retained.
+
+Use `-ModerationThreshold 0.98` to make the filter more permissive, or adjust
+`MODERATION_THRESHOLD` in a release's `.env` and recreate its moderation service.
+The default `0.95` rejects only high-confidence toxicity predictions. Tune it
+with real questions. The smoke check must still pass at the chosen setting. The model image
+build requires package/model download access. No public moderation port is added.
+
+## Application deployment
+
 Caddy serves the frontend and proxies all `/api/*` to Java. Java joins the external `askpool_shared` network. The managed address https://08.hackathon.ethz.ch provides TLS/login. Java and PostgreSQL must have no public ports. The Node demo API is no longer deployed; its old data volume is neither migrated nor removed.
 
 ## Adopt the supplied VM schema
