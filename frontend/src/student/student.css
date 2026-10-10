@@ -160,6 +160,9 @@
   margin-bottom: 26px;
   text-align: left;
 }
+html:has(.student-settings-card) {
+  scrollbar-gutter: auto;
+}
 .placeholder-page__card {
   min-height: 170px;
   padding: 28px;

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { MouseEvent } from 'react'
+import { SendIcon, ThumbsUpIcon } from './Icons'
 import './student-tutorial.css'
 
 const steps = [
@@ -7,37 +8,32 @@ const steps = [
     eyebrow: '01 / JOIN',
     title: 'Join your lecture',
     description:
-      'Your professor shares a QR code. Scan it with your phone to open the lecture question pool.',
-    note: 'One scan takes you to the right session.',
+      'Scan the QR code your professor shares to join this lecture’s question pool.',
+    visual: 'join',
   },
   {
     eyebrow: '02 / ASK',
-    title: 'Ask what is on your mind',
+    title: 'Ask about this lecture',
     description:
-      'Type your question and tap the arrow to send it. Your name is hidden from classmates; professors can view authors.',
-    note: 'A good question can help the whole room.',
-    image: '/tutorial/student-ask.jpg',
-    imageAlt: 'AskPool student page with an example question in the composer',
+      'Type a question about this lecture and tap the arrow to send it. Your name is not shown with the question.',
+    visual: 'ask',
   },
   {
-    eyebrow: '03 / VOTE',
-    title: 'Like questions you share',
+    eyebrow: '03 / UPVOTE',
+    title: 'Upvote questions you want answered',
     description:
-      'Browse the question pool and tap the thumbs-up beside a question you also want answered.',
-    note: 'More likes move a question higher in the queue.',
-    image: '/tutorial/student-vote.jpg',
-    imageAlt:
-      'AskPool student question list with example questions and vote counts',
+      'Tap the thumbs-up on questions you also want the professor to answer.',
+    visual: 'vote',
   },
   {
     eyebrow: '04 / PROFESSOR POV',
-    title: 'The top question gets noticed',
+    title: 'More upvotes, more visibility',
     description:
-      'On the professor dashboard, questions with the most likes appear at the top. That puts what matters most to students where the professor sees it first.',
-    note: 'The professor can then work through and answer questions.',
+      'By default, the professor sees questions with the most upvotes first.',
+    visual: 'queue',
     image: '/tutorial/professor-queue.jpg',
     imageAlt:
-      'AskPool professor dashboard showing example questions ranked by their number of likes',
+      'AskPool professor dashboard showing example questions ranked by upvotes',
   },
 ] as const
 
@@ -94,6 +90,80 @@ function SampleQr() {
         </g>
       ))}
     </svg>
+  )
+}
+
+function AskPreview() {
+  return (
+    <div
+      className="student-tutorial-ask-preview"
+      role="img"
+      aria-label="Example question composer with a lecture question and no author name"
+    >
+      <h3>What&apos;s your question?</h3>
+      <div className="student-tutorial-ask-composer">
+        <p>How does the induction hypothesis help prove the next case?</p>
+        <div className="student-tutorial-ask-composer-bottom">
+          <span>Your name is not shown on question cards.</span>
+          <span className="student-tutorial-ask-send" aria-hidden="true">
+            <SendIcon width="26" height="26" />
+          </span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function VotePreview() {
+  return (
+    <div
+      className="student-tutorial-vote-preview"
+      role="img"
+      aria-label="Two lecture questions with 42 and 37 upvotes"
+    >
+      <h3>Other questions</h3>
+      <div className="student-tutorial-vote-question">
+        <p>Could you go through the base case of the induction proof again?</p>
+        <span>
+          <ThumbsUpIcon width="19" height="19" /> 42
+        </span>
+      </div>
+      <div className="student-tutorial-vote-question">
+        <p>How does the induction hypothesis help prove the next case?</p>
+        <span>
+          <ThumbsUpIcon width="19" height="19" /> 37
+        </span>
+      </div>
+    </div>
+  )
+}
+
+function QueuePreview() {
+  return (
+    <div
+      className="student-tutorial-queue-preview"
+      role="img"
+      aria-label="Professor question queue: a question with 24 upvotes appears above one with 18 upvotes"
+    >
+      <div className="student-tutorial-queue-heading">
+        <span>Question queue</span>
+        <span>Most upvotes</span>
+      </div>
+      <div className="student-tutorial-queue-item student-tutorial-queue-item--top">
+        <span className="student-tutorial-queue-rank">1</span>
+        <p>Could you explain correlation and causation again?</p>
+        <span className="student-tutorial-queue-votes">
+          <ThumbsUpIcon width="17" height="17" /> 24
+        </span>
+      </div>
+      <div className="student-tutorial-queue-item">
+        <span className="student-tutorial-queue-rank">2</span>
+        <p>Why does the gradient point uphill?</p>
+        <span className="student-tutorial-queue-votes">
+          <ThumbsUpIcon width="17" height="17" /> 18
+        </span>
+      </div>
+    </div>
   )
 }
 
@@ -209,25 +279,10 @@ export default function StudentTutorial({ onClose }: Props) {
               {current.title}
             </h2>
             <p id="student-tutorial-description">{current.description}</p>
-            <div className="student-tutorial-note">
-              <span aria-hidden="true">✦</span>
-              {current.note}
-            </div>
           </div>
 
           <div className="student-tutorial-visual">
-            {'image' in current ? (
-              <>
-                <img
-                  className={`student-tutorial-image student-tutorial-image--${step}`}
-                  src={current.image}
-                  alt={current.imageAlt}
-                />
-                {step === 3 && (
-                  <span className="student-tutorial-pov">PROFESSOR POV</span>
-                )}
-              </>
-            ) : (
+            {current.visual === 'join' ? (
               <div className="student-tutorial-join-scene">
                 <div className="student-tutorial-projector">
                   <div className="student-tutorial-projector-top">
@@ -244,7 +299,21 @@ export default function StudentTutorial({ onClose }: Props) {
                   <span>Point your camera at the code</span>
                 </div>
               </div>
-            )}
+            ) : current.visual === 'ask' ? (
+              <AskPreview />
+            ) : current.visual === 'vote' ? (
+              <VotePreview />
+            ) : current.visual === 'queue' ? (
+              <>
+                <img
+                  className="student-tutorial-image student-tutorial-image--queue"
+                  src={current.image}
+                  alt={current.imageAlt}
+                />
+                <QueuePreview />
+                <span className="student-tutorial-pov">PROFESSOR POV</span>
+              </>
+            ) : null}
           </div>
         </div>
 
