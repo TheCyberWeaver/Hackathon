@@ -1,5 +1,7 @@
 # Hackathon
 
+This is to test my branch :)
+
 AskPool is a classroom Q&A app built with Vite React TypeScript and Tailwind CSS v4, with a Java 21 Spring Boot Gradle REST API. The entry page identifies the signed-in user and provides student and professor entry points.
 
 ## Prerequisites
