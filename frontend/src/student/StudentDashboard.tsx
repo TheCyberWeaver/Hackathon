@@ -608,16 +608,16 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
               )}
               {!tutorialCompleted && !tutorialDismissed && (
                 <div className="student-tutorial-invite">
-                  <svg aria-hidden="true" viewBox="0 0 72 38" fill="none">
-                    <path
-                      d="M3 3c18 0 20 27 52 27m-9-9 10 9-11 6"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
-                  <div className="student-tutorial-invite__actions">
+                  <div className="student-tutorial-invite__prompt">
+                    <svg aria-hidden="true" viewBox="0 0 72 38" fill="none">
+                      <path
+                        d="M3 3c18 0 20 27 52 27m-9-9 10 9-11 6"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
                     <button
                       type="button"
                       className="student-tutorial-trigger"
@@ -626,14 +626,14 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
                     >
                       New here? Need a quick tutorial?
                     </button>
-                    <button
-                      type="button"
-                      className="student-tutorial-dismiss"
-                      onClick={dismissTutorialInvite}
-                    >
-                      Ignore
-                    </button>
                   </div>
+                  <button
+                    type="button"
+                    className="student-tutorial-dismiss"
+                    onClick={dismissTutorialInvite}
+                  >
+                    Ignore
+                  </button>
                 </div>
               )}
             </div>

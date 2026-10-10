@@ -70,29 +70,29 @@
 
 .student-tutorial-invite {
   display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 4px;
-  margin-top: 4px;
+  flex-direction: column;
+  align-items: flex-end;
+  margin-top: 5px;
   color: var(--color-accent);
+}
+
+.student-tutorial-invite__prompt {
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+  gap: 2px;
 }
 
 .student-tutorial-invite svg {
   flex: 0 0 58px;
   width: 58px;
   height: 34px;
-}
-
-.student-tutorial-invite__actions {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 14px;
+  margin-top: -2px;
 }
 
 .student-tutorial-trigger {
-  min-height: 44px;
-  padding: 8px 0;
+  align-self: flex-end;
+  padding: 8px 0 3px;
   border: 0;
   background: transparent;
   color: inherit;
@@ -117,11 +117,11 @@
 
 .student-tutorial-dismiss {
   min-height: 44px;
-  padding: 8px 0;
+  padding: 4px 0 22px;
   border: 0;
   background: transparent;
   color: var(--color-secondary);
-  font-size: 13px;
+  font-size: 12px;
   line-height: 1.25;
   text-decoration: underline;
   text-underline-offset: 3px;
@@ -154,12 +154,6 @@
 
 .student-settings-open-tutorial:hover {
   background: #dbeafe;
-}
-
-@media (max-width: 600px) {
-  .student-tutorial-invite svg {
-    display: none;
-  }
 }
 
 @media (max-width: 480px) {
