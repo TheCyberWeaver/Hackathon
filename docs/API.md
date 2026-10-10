@@ -15,31 +15,32 @@ and the self-vote restriction apply in both modes. Multiple questions per lectur
 
 IDs in JSON are decimal strings, avoiding JavaScript BIGINT precision loss. Times are ISO 8601 with an offset. Pool responses use `Cache-Control: no-store`.
 
-| Method | Route                                       | Success                         | Permission                         |
-| ------ | ------------------------------------------- | ------------------------------- | ---------------------------------- |
-| GET    | `/api/lectures`                             | `Lecture[]`, newest time first  | Signed in                          |
-| GET    | `/api/lectures/{id}`                        | `Lecture`                       | Signed in                          |
-| POST   | `/api/lectures`                             | 201 `Lecture`, Location header  | Professor/admin                    |
-| GET    | `/api/lectures/{id}/questions`              | `Question[]`                    | Signed in                          |
-| GET    | `/api/lectures/{id}/questions/{questionId}` | `Question`                      | Signed in                          |
-| POST   | `/api/lectures/{id}/questions`              | 201 `Question`, Location header | Student                            |
-| POST   | `/api/questions/{id}/vote`                  | `Question`                      | Student, another author's question |
-| POST   | `/api/questions/{id}/report`                | 204                             | Signed in                          |
-| GET    | `/api/lectures/{id}/professor/questions`    | `ProfessorQuestion[]`           | Owner/admin                        |
-| PATCH  | `/api/questions/{id}/status`                | `ProfessorQuestion`             | Owner/admin                        |
+| Method | Route                                       | Success                         | Permission                             |
+| ------ | ------------------------------------------- | ------------------------------- | -------------------------------------- |
+| GET    | `/api/lectures`                             | `Lecture[]`, newest time first  | Signed in                              |
+| GET    | `/api/lectures/{id}`                        | `Lecture`                       | Signed in                              |
+| POST   | `/api/lectures`                             | 201 `Lecture`, Location header  | Professor/admin                        |
+| GET    | `/api/lectures/{id}/questions`              | `Question[]`                    | Signed in                              |
+| GET    | `/api/lectures/{id}/questions/{questionId}` | `Question`                      | Signed in                              |
+| POST   | `/api/lectures/{id}/questions`              | 201 `Question`, Location header | Student                                |
+| POST   | `/api/questions/{id}/vote`                  | `Question`                      | Student, another author's question     |
+| POST   | `/api/questions/{id}/report`                | 204                             | Signed in                              |
+| GET    | `/api/lectures/{id}/professor/questions`    | `ProfessorQuestion[]`           | Owner/admin                            |
+| PATCH  | `/api/questions/{id}/status`                | `ProfessorQuestion`             | Owner/admin                            |
 | DELETE | `/api/questions/{id}`                       | 204                             | Question author or lecture owner/admin |
 
-| Method | Additional route | Success | Permission |
-| ------ | ---------------- | ------- | ---------- |
-| PATCH | `/api/lectures/{id}/session` | Lecture | Lecture owner/admin |
-| GET | `/api/professor/summary` | Counts | Professor/admin, scoped to manageable lectures |
-| GET | `/api/professor/lectures/archive` | Ended lectures and questions | Professor/admin, scoped to manageable lectures |
-| POST | `/api/questions/{id}/restore` | ProfessorQuestion | Lecture owner/admin |
-| DELETE | `/api/questions/{id}/permanent` | 204 | Lecture owner/admin, already deleted question only |
-| DELETE | `/api/lectures/{id}/questions/trash` | 204 | Lecture owner/admin, only that lecture's deleted questions |
-| POST | `/api/sessions/join` | Active lecture ID, code, course, start time | Student, valid numeric lecture ID |
-| GET | `/api/sessions/mine` | `{ "session": SharedSession or null }` | Signed in |
-| DELETE | `/api/sessions/mine` | 204 | Signed in |
+| Method | Additional route                          | Success                                     | Permission                                     |
+| ------ | ----------------------------------------- | ------------------------------------------- | ---------------------------------------------- |
+| PATCH  | `/api/lectures/{id}/session`              | Lecture                                     | Lecture owner/admin                            |
+| GET    | `/api/professor/summary`                  | Counts                                      | Professor/admin, scoped to manageable lectures |
+| GET    | `/api/professor/lectures/archive`         | Ended lectures and questions                | Professor/admin, scoped to manageable lectures |
+| POST   | `/api/lectures/{id}/questions/clear-open` | `{ "deletedIds": string[] }`                | Lecture owner/admin                            |
+| GET    | `/api/professor/profile`                  | Profile                                     | Professor/admin, own account only              |
+| POST   | `/api/professor/profile/initialize`       | Profile                                     | Professor/admin, own account only              |
+| PUT    | `/api/professor/profile`                  | Saved profile                               | Professor/admin, own account only              |
+| POST   | `/api/sessions/join`                      | Active lecture ID, code, course, start time | Student, valid numeric lecture ID              |
+| GET    | `/api/sessions/mine`                      | `{ "session": SharedSession or null }`      | Signed in                                      |
+| DELETE | `/api/sessions/mine`                      | 204                                         | Signed in                                      |
 
 New lectures are scheduled: create with `title`, `lectureTime`, and optional
 `course` (up to 200 characters), then start with `{ "action": "start" }`.
@@ -51,14 +52,13 @@ Submissions to scheduled, paused, or ended lectures return 409, including in
 testing-permission mode. Session updates and submissions lock the same lecture
 row. Existing lecture pools are migrated as started sessions to preserve access.
 
-Professor question lists accept `?includeDeleted=true` and return `deletedAt`
-and optional `answer`; student lists always exclude deleted questions and never
-return identities or report counts. Restoring preserves status, written answer,
-votes, and reports. Permanent deletion removes the question and dependent votes
-and reports; it cannot be restored. Emptying trash leaves live questions and
-other lectures untouched. Ending a lecture preserves its question history.
-Archives omit trash. Profile counts include manageable lectures and their
-non-deleted questions, including ended sessions.
+Deleting a question permanently removes it and its dependent votes/reports. There is no trash or restore API. Archive and summary counts use remaining questions; empty ended lectures remain visible. V9 permanently removes old trash and drops the written-answer and soft-delete columns, preserving the other questions, votes and answered statuses. Deploy the backend migration and compatible frontend together; do not run the older backend against V9.
+
+Clear Open accepts `{ "questionIds": ["42", "43"] }`, the complete unfiltered Open snapshot displayed in the confirmation (refreshed while the dialog is open). The server validates lecture ownership, locks the lecture and eligible questions, and deletes only snapshot IDs still unanswered in that lecture. It returns the IDs actually removed. Answered questions, other lectures, and submissions outside the confirmed snapshot survive; pool/session state is unchanged. A repeated request is safe. The frontend updates from returned IDs and normal polling.
+
+Professor profiles are account-scoped even with testing permissions. `POST /professor/profile/initialize` accepts `{ "onboardingCompleted": false, "courses": [] }` or a valid legacy browser profile's completion and ordered courses. Initialization serializes concurrent first-use requests; an existing database profile is returned unchanged and is always authoritative. No request accepts another professor's identity as a target.
+
+A profile response is `{ "onboardingCompleted": true, "revision": 1, "courses": [{ "id": "stable-course-id", "title": "Algebra" }] }`. `PUT` accepts those same fields and atomically replaces the ordered course list if the revision matches. Stale saves return 409 and the frontend loads the current profile before retry. Completion is monotonic, including with an empty list. Titles are trimmed, nonblank, at most 120 characters, and unique ignoring case within one account. Names, IDs and order persist in normalized profile/course tables. Course changes never update lecture snapshots or end sessions.
 
 Lecture creation body:
 
@@ -124,15 +124,9 @@ Professor response:
 }
 ```
 
-Status body: `{ "status": "answered", "answer": "Use induction." }` (also
-`open` or `selected`). Written answers are optional, trimmed, and limited to
-4000 characters; they require answered status. Omitting `answer` preserves an
-existing answer when staying answered; an empty answer clears it. Answering
-sets the timestamp; repeats preserve it. Reopening/selecting clears the answer
-and timestamp. Student question responses also contain the saved answer text.
-Deletion hides content from both live pools and preserves attribution, votes,
-and reports in the professor's Deleted tab. Ordinary actions on hidden questions
-return 404; only the restricted restore/purge/trash routes act on them.
+Status body: `{ "status": "answered" }` (also `open` or `selected`). Answers are verbal; no written text is stored or returned. Answering sets the timestamp and repeats preserve it. Reopening/selecting clears the answered timestamp without changing submission time. Delete returns 204; future requests for that question return 404.
+
+The professor's time filter applies only to Open questions and uses original submission time, with All / 5 / 10 / 15 / 30 minute windows. It recalculates every second even without network changes. Qualifying questions rank by votes, oldest submission, then stable ID; Answered retains all questions. Student lists use the API's `mine` flag to partition own and other questions.
 
 Pool errors use `{ "error": "Human-readable message." }`: 400 invalid body/parameter; 401 missing identity; 403 role/ownership/self-vote; 404 missing or hidden resource; 409 data conflict; 500 unexpected database constraint failure.
 

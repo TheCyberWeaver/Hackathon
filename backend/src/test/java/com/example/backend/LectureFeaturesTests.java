@@ -97,91 +97,102 @@ class LectureFeaturesTests extends PostgresTestSupport {
         assertEquals(0L, jdbc.queryForObject("SELECT count(*) FROM lecture_memberships WHERE lecture_id = ?", Long.class, Long.parseLong(first)));
     }
 
-    @Test void writtenAnswersAndProfileCountsUseSavedNonDeletedQuestions() throws Exception {
+    @Test void verbalStatusCountsAndArchivePreserveQuestionsWithoutAnswers() throws Exception {
         String lecture = create(owner);
         session(lecture, owner, "start", 200);
         String id = submit(lecture, student, "Explain this step");
         submit(lecture, student, "Another question");
         String status = "/questions/" + id + "/status";
-        send("PATCH", status, other, "{\"status\":\"answered\",\"answer\":\"Other owner\"}", 403);
-        send("PATCH", status, owner, "{\"status\":\"open\",\"answer\":\"Invalid state\"}", 400);
-        send("PATCH", status, owner, "{\"status\":\"answered\",\"answer\":\"" + "x".repeat(4001) + "\"}", 400);
-        var answer = tree(send("PATCH", status, owner, "{\"status\":\"answered\",\"answer\":\"  Use induction.  \"}", 200));
-        assertEquals("Use induction.", answer.get("answer").asText());
-        assertEquals(answer.get("answeredAt"), tree(send("PATCH", status, owner, "{\"status\":\"answered\"}", 200)).get("answeredAt"));
+        send("PATCH", status, other, "{\"status\":\"answered\"}", 403);
+        var answered = tree(send("PATCH", status, owner, "{\"status\":\"answered\"}", 200));
+        assertFalse(answered.has("answer"));
+        assertEquals(answered.get("answeredAt"), tree(send("PATCH", status, owner, "{\"status\":\"answered\"}", 200)).get("answeredAt"));
         var publicQuestion = tree(send("GET", "/lectures/" + lecture + "/questions/" + id, peer, null, 200));
-        assertEquals("Use induction.", publicQuestion.get("answer").asText());
+        assertFalse(publicQuestion.has("answer"));
         assertFalse(publicQuestion.has("authorId"));
         assertFalse(publicQuestion.has("reportCount"));
+        assertEquals("answered", publicQuestion.get("status").asText());
         var summary = tree(send("GET", "/professor/summary", owner, null, 200));
         assertEquals(1, summary.get("lectureCount").asInt());
         assertEquals(1, summary.get("unansweredCount").asInt());
         assertEquals(1, summary.get("answeredCount").asInt());
         assertEquals(0, tree(send("GET", "/professor/summary", other, null, 200)).get("lectureCount").asInt());
         send("GET", "/professor/summary", student, null, 403);
-        var cleared = tree(send("PATCH", status, owner, "{\"status\":\"answered\",\"answer\":\"\"}", 200));
-        assertTrue(cleared.get("answer").isNull());
-        assertEquals(answer.get("answeredAt"), cleared.get("answeredAt"));
         var reopened = tree(send("PATCH", status, owner, "{\"status\":\"open\"}", 200));
-        assertTrue(reopened.get("answer").isNull());
         assertTrue(reopened.get("answeredAt").isNull());
-        send("PATCH", status, owner, "{\"status\":\"answered\",\"answer\":\"Use induction.\"}", 200);
+        assertEquals(answered.get("createdAt"), reopened.get("createdAt"));
+        send("PATCH", status, owner, "{\"status\":\"answered\"}", 200);
         session(lecture, owner, "end", 200);
         var archive = tree(send("GET", "/professor/lectures/archive", owner, null, 200));
-        assertTrue(archive.get(0).get("questions").toString().contains("Use induction."));
-        send("DELETE", "/questions/" + id, student, null, 204);
+        assertTrue(archive.get(0).get("questions").toString().contains("Explain this step"));
+        send("DELETE", "/questions/" + id, owner, null, 204);
         assertEquals(0, tree(send("GET", "/professor/summary", owner, null, 200)).get("answeredCount").asInt());
         assertEquals(1, tree(send("GET", "/professor/lectures/archive", owner, null, 200)).get(0).get("questions").size());
     }
 
-    @Test void trashRestoreAndPermanentDeletionPreserveThenRemoveDependentData() throws Exception {
+    @Test void permanentDeletionCascadesAndCannotBeRestored() throws Exception {
         String lecture = create(owner);
         session(lecture, owner, "start", 200);
-        String id = submit(lecture, student, "Question to restore");
+        String id = submit(lecture, student, "Question to delete");
         send("POST", "/questions/" + id + "/vote", peer, "{\"voted\":true}", 200);
         send("POST", "/questions/" + id + "/report", peer, null, 204);
-        send("PATCH", "/questions/" + id + "/status", owner, "{\"status\":\"answered\",\"answer\":\"Saved answer\"}", 200);
-        send("DELETE", "/questions/" + id + "/permanent", owner, null, 409);
-        send("DELETE", "/questions/" + id, student, null, 204);
-        send("GET", "/lectures/" + lecture + "/professor/questions?includeDeleted=true", student, null, 403);
-        assertEquals(0, tree(send("GET", "/lectures/" + lecture + "/questions", student, null, 200)).size());
-        assertEquals(0, tree(send("GET", "/lectures/" + lecture + "/professor/questions", owner, null, 200)).size());
-        var trash = tree(send("GET", "/lectures/" + lecture + "/professor/questions?includeDeleted=true", owner, null, 200));
-        assertFalse(trash.get(0).get("deletedAt").isNull());
-        send("POST", "/questions/" + id + "/restore", student, null, 403);
-        send("POST", "/questions/" + id + "/restore", other, null, 403);
-        var restored = tree(send("POST", "/questions/" + id + "/restore", owner, null, 200));
-        assertTrue(restored.get("deletedAt").isNull());
-        assertEquals("Saved answer", restored.get("answer").asText());
-        assertEquals(1, restored.get("upvoteCount").asInt());
-        assertEquals(1, restored.get("reportCount").asInt());
+        send("PATCH", "/questions/" + id + "/status", owner, "{\"status\":\"answered\"}", 200);
+        send("DELETE", "/questions/" + id, other, null, 403);
+        send("DELETE", "/questions/" + id, peer, null, 403);
         send("DELETE", "/questions/" + id, owner, null, 204);
-        send("DELETE", "/questions/" + id + "/permanent", student, null, 403);
-        send("DELETE", "/questions/" + id + "/permanent", other, null, 403);
-        send("DELETE", "/questions/" + id + "/permanent", owner, null, 204);
+        assertEquals(0, tree(send("GET", "/lectures/" + lecture + "/questions", student, null, 200)).size());
+        assertEquals(0, tree(send("GET", "/lectures/" + lecture + "/professor/questions?includeDeleted=true", owner, null, 200)).size());
+        send("GET", "/lectures/" + lecture + "/questions/" + id, student, null, 404);
         send("POST", "/questions/" + id + "/restore", owner, null, 404);
         for (String table : new String[]{"questions", "question_votes", "question_reports"}) {
             String column = table.equals("questions") ? "id" : "question_id";
             assertEquals(0L, jdbc.queryForObject("SELECT count(*) FROM " + table + " WHERE " + column + " = ?", Long.class, Long.parseLong(id)));
         }
+        session(lecture, owner, "end", 200);
+        assertEquals(0, tree(send("GET", "/professor/lectures/archive", owner, null, 200)).get(0).get("questions").size());
     }
 
-    @Test void emptyTrashIsScopedToTheLectureAndKeepsLiveQuestions() throws Exception {
+    @Test void clearOpenUsesConfirmedSnapshotAndPreservesAnsweredOtherLecturesAndPoolState() throws Exception {
         String lecture = create(owner);
         String independent = create(other);
         session(lecture, owner, "start", 200);
         session(independent, other, "start", 200);
-        String live = submit(lecture, student, "Keep this live question");
-        String hidden = submit(lecture, student, "Empty this trash");
-        String otherHidden = submit(independent, student, "Keep other lecture trash");
-        send("DELETE", "/questions/" + hidden, student, null, 204);
-        send("DELETE", "/questions/" + otherHidden, student, null, 204);
-        send("DELETE", "/lectures/" + lecture + "/questions/trash", student, null, 403);
-        send("DELETE", "/lectures/" + lecture + "/questions/trash", other, null, 403);
-        send("DELETE", "/lectures/" + lecture + "/questions/trash", owner, null, 204);
-        send("POST", "/questions/" + hidden + "/restore", owner, null, 404);
-        assertEquals(live, tree(send("GET", "/lectures/" + lecture + "/questions", student, null, 200)).get(0).get("id").asText());
-        send("POST", "/questions/" + otherHidden + "/restore", other, null, 200);
+        var ids = new java.util.ArrayList<String>();
+        for (int i = 0; i < 8; i++) ids.add(submit(lecture, student, "Open question " + i));
+        for (String old : ids.subList(0, 6)) jdbc.update("UPDATE questions SET submitted_at = CURRENT_TIMESTAMP - INTERVAL '1 hour' WHERE id = ?", Long.parseLong(old));
+        send("POST", "/questions/" + ids.getFirst() + "/vote", peer, "{\"voted\":true}", 200);
+        send("POST", "/questions/" + ids.getFirst() + "/report", peer, null, 204);
+        var answered = new java.util.ArrayList<String>();
+        for (int i = 0; i < 3; i++) {
+            var id = submit(lecture, student, "Answered question " + i);
+            answered.add(id);
+            send("PATCH", "/questions/" + id + "/status", owner, "{\"status\":\"answered\"}", 200);
+        }
+        String otherQuestion = submit(independent, student, "Keep other lecture question");
+        // An overbroad/stale client snapshot cannot delete another lecture or an answered question.
+        var snapshot = new java.util.ArrayList<>(ids);
+        snapshot.addAll(answered);
+        snapshot.add(otherQuestion);
+        String later = submit(lecture, student, "Submitted after confirmation");
+        session(lecture, owner, "pause", 200);
+        var body = json.writeValueAsString(java.util.Map.of("questionIds", snapshot));
+        var path = "/lectures/" + lecture + "/questions/clear-open";
+        send("POST", path, student, body, 403);
+        send("POST", path, other, body, 403);
+        var result = tree(send("POST", path, owner, body, 200));
+        assertEquals(8, result.get("deletedIds").size());
+        assertEquals(0, tree(send("POST", path, owner, body, 200)).get("deletedIds").size());
+        assertEquals(4, tree(send("GET", "/lectures/" + lecture + "/questions", student, null, 200)).size());
+        send("GET", "/lectures/" + lecture + "/questions/" + later, student, null, 200);
+        send("GET", "/lectures/" + independent + "/questions/" + otherQuestion, student, null, 200);
+        assertEquals(0L, jdbc.queryForObject("SELECT count(*) FROM question_votes WHERE question_id = ?", Long.class, Long.parseLong(ids.getFirst())));
+        assertEquals(0L, jdbc.queryForObject("SELECT count(*) FROM question_reports WHERE question_id = ?", Long.class, Long.parseLong(ids.getFirst())));
+        var savedLecture = tree(send("GET", "/lectures/" + lecture, owner, null, 200));
+        assertTrue(savedLecture.get("questionsPaused").asBoolean());
+        assertTrue(savedLecture.get("endedAt").isNull());
+        session(lecture, owner, "resume", 200);
+        send("POST", path, owner, json.writeValueAsString(java.util.Map.of("questionIds", java.util.List.of(later))), 200);
+        assertFalse(tree(send("GET", "/lectures/" + lecture, owner, null, 200)).get("questionsPaused").asBoolean());
     }
 
     @Test void pausingAndSubmittingConcurrentlyLeavesThePoolClosed() throws Exception {

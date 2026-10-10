@@ -157,9 +157,9 @@ class PoolApiTests extends PostgresTestSupport {
         assertEquals(404, send("DELETE", "/questions/" + id, student, null).statusCode());
         assertEquals(1, tree(send("GET", path, peer, null)).size());
         assertEquals(1, tree(send("GET", "/lectures/" + lecture + "/professor/questions", professor, null)).size());
-        assertTrue(jdbc.queryForObject("SELECT deleted_at IS NOT NULL FROM questions WHERE id = ?", Boolean.class, Long.parseLong(id)));
-        assertEquals(1L, jdbc.queryForObject("SELECT count(*) FROM question_votes WHERE question_id = ?", Long.class, Long.parseLong(id)));
-        assertEquals(1L, jdbc.queryForObject("SELECT count(*) FROM question_reports WHERE question_id = ?", Long.class, Long.parseLong(id)));
+        assertEquals(0L, jdbc.queryForObject("SELECT count(*) FROM questions WHERE id = ?", Long.class, Long.parseLong(id)));
+        assertEquals(0L, jdbc.queryForObject("SELECT count(*) FROM question_votes WHERE question_id = ?", Long.class, Long.parseLong(id)));
+        assertEquals(0L, jdbc.queryForObject("SELECT count(*) FROM question_reports WHERE question_id = ?", Long.class, Long.parseLong(id)));
         assertEquals(201, send("POST", path, student, "{\"text\":\"After deletion\"}").statusCode());
     }
 

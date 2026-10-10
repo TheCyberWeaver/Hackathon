@@ -16,10 +16,15 @@ public final class ApiModels {
     public record ArchivedLecture(Lecture lecture, java.util.List<ProfessorQuestion> questions) {}
     public record NewQuestion(String text) {}
     public record Vote(Boolean voted) {}
-    public record Status(String status, String answer) {}
+    public record Status(String status) {}
+    public record ClearQuestions(java.util.List<Long> questionIds) {}
+    public record ClearedQuestions(java.util.List<String> deletedIds) {}
+    public record Course(String id, String title) {}
+    public record ProfessorProfile(boolean onboardingCompleted, long revision, java.util.List<Course> courses) {}
+    public record ProfileUpdate(Boolean onboardingCompleted, Long revision, java.util.List<Course> courses) {}
     public record Question(String id, String text, long votes, OffsetDateTime createdAt,
-                           String status, boolean mine, boolean votedByMe, String answer) {}
+                           String status, boolean mine, boolean votedByMe) {}
     public record ProfessorQuestion(String id, String text, String authorId, long upvoteCount,
                                     OffsetDateTime createdAt, boolean answered, String status,
-                                    OffsetDateTime answeredAt, long reportCount, OffsetDateTime deletedAt, String answer) {}
+                                    OffsetDateTime answeredAt, long reportCount) {}
 }

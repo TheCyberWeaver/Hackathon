@@ -331,3 +331,25 @@ button:focus-visible {
     transition: none;
   }
 }
+
+.entry-simple {
+  width: min(100%, 520px);
+  padding: clamp(24px, 5vw, 48px);
+  border: 1px solid #dfe6f0;
+  border-radius: 20px;
+  background: white;
+}
+.entry-simple h1 {
+  margin: 32px 0 16px;
+  font-size: clamp(26px, 5vw, 36px);
+  font-weight: 650;
+  letter-spacing: -0.03em;
+}
+.entry-simple .entry-role {
+  justify-content: space-between;
+  min-height: 80px;
+}
+.entry-role:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}

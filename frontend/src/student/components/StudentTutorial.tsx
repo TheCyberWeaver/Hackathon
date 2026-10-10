@@ -15,25 +15,22 @@ const steps = [
     eyebrow: '02 / ASK',
     title: 'Ask about this lecture',
     description:
-      'Type a question about this lecture and tap the arrow to send it. Your name is not shown with the question.',
+      'Send a question to see it under Your questions. Other Questions shows classmates’ questions. Your name is not shown.',
     visual: 'ask',
   },
   {
     eyebrow: '03 / UPVOTE',
     title: 'Upvote questions you want answered',
     description:
-      'Tap the thumbs-up on questions you also want the professor to answer.',
+      'Upvote other students’ questions, or tap again to remove your vote. You are not allowed to upvote your own question.',
     visual: 'vote',
   },
   {
     eyebrow: '04 / PROFESSOR POV',
     title: 'More upvotes, more visibility',
     description:
-      'By default, the professor sees questions with the most upvotes first.',
+      'The professor sees Open questions ranked by upvotes and can filter by submission time. Answers are given verbally.',
     visual: 'queue',
-    image: '/tutorial/professor-queue.jpg',
-    imageAlt:
-      'AskPool professor dashboard showing example questions ranked by upvotes',
   },
 ] as const
 
@@ -146,8 +143,8 @@ function QueuePreview() {
       aria-label="Professor question queue: a question with 24 upvotes appears above one with 18 upvotes"
     >
       <div className="student-tutorial-queue-heading">
-        <span>Question queue</span>
-        <span>Most upvotes</span>
+        <span>Open questions</span>
+        <span>All questions</span>
       </div>
       <div className="student-tutorial-queue-item student-tutorial-queue-item--top">
         <span className="student-tutorial-queue-rank">1</span>
@@ -305,11 +302,6 @@ export default function StudentTutorial({ onClose }: Props) {
               <VotePreview />
             ) : current.visual === 'queue' ? (
               <>
-                <img
-                  className="student-tutorial-image student-tutorial-image--queue"
-                  src={current.image}
-                  alt={current.imageAlt}
-                />
                 <QueuePreview />
                 <span className="student-tutorial-pov">PROFESSOR POV</span>
               </>

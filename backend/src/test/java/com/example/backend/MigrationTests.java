@@ -11,6 +11,31 @@ import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import static org.junit.jupiter.api.Assertions.*;
 
 class MigrationTests extends PostgresTestSupport {
+    @Test void removesLegacyWrittenTextAndTrashWhileKeepingQuestionStateAndVotes() {
+        String schema = "product_" + UUID.randomUUID().toString().replace("-", "");
+        String url = POSTGRES.getJdbcUrl("postgres", "postgres");
+        var admin = new JdbcTemplate(new DriverManagerDataSource(url, "postgres", ""));
+        admin.execute("CREATE SCHEMA " + schema);
+        try {
+            var source = new DriverManagerDataSource(url + (url.contains("?") ? "&" : "?") + "currentSchema=" + schema, "postgres", "");
+            var db = new JdbcTemplate(source);
+            Flyway.configure().dataSource(source).schemas(schema).target("8").load().migrate();
+            long author = db.queryForObject("INSERT INTO users (eth_identity_ref) VALUES ('author') RETURNING id", Long.class);
+            long peer = db.queryForObject("INSERT INTO users (eth_identity_ref) VALUES ('peer') RETURNING id", Long.class);
+            long lecture = db.queryForObject("INSERT INTO lectures (title, lecture_time) VALUES ('Preserved', CURRENT_TIMESTAMP) RETURNING id", Long.class);
+            long kept = db.queryForObject("INSERT INTO questions (lecture_id, author_id, text, status, answered_at, answer) VALUES (?, ?, 'Keep question', 'answered', CURRENT_TIMESTAMP, 'Erase written text') RETURNING id", Long.class, lecture, author);
+            long trash = db.queryForObject("INSERT INTO questions (lecture_id, author_id, text, deleted_at) VALUES (?, ?, 'Old trash', CURRENT_TIMESTAMP) RETURNING id", Long.class, lecture, author);
+            db.update("INSERT INTO question_votes (question_id, user_id) VALUES (?, ?), (?, ?)", kept, peer, trash, peer);
+            db.update("INSERT INTO question_reports (question_id, user_id) VALUES (?, ?)", trash, peer);
+            Flyway.configure().dataSource(source).schemas(schema).load().migrate();
+            assertEquals(1L, db.queryForObject("SELECT count(*) FROM questions", Long.class));
+            assertEquals("answered", db.queryForObject("SELECT status FROM questions WHERE id = ?", String.class, kept));
+            assertEquals(1L, db.queryForObject("SELECT count(*) FROM question_votes WHERE question_id = ?", Long.class, kept));
+            assertEquals(0L, db.queryForObject("SELECT count(*) FROM question_reports", Long.class));
+            assertEquals(0L, db.queryForObject("SELECT count(*) FROM information_schema.columns WHERE table_schema = ? AND table_name = 'questions' AND column_name IN ('answer', 'deleted_at')", Long.class, schema));
+        } finally { admin.execute("DROP SCHEMA " + schema + " CASCADE"); }
+    }
+
     @Test
     void upgradesModerationDatabaseToLectureMembershipWithoutLosingData() {
         String schema = "upgrade_" + UUID.randomUUID().toString().replace("-", "");
@@ -26,7 +51,7 @@ class MigrationTests extends PostgresTestSupport {
             db.update("INSERT INTO question_moderation_warnings (lecture_id, user_id, reason) VALUES (?, ?, 'moderation_service')", lecture, user);
 
             var flyway = Flyway.configure().dataSource(source).schemas(schema).load();
-            assertEquals(1, flyway.migrate().migrationsExecuted);
+            assertEquals(2, flyway.migrate().migrationsExecuted);
             assertEquals("moderation_service", db.queryForObject("SELECT reason FROM question_moderation_warnings", String.class));
             assertNotNull(db.queryForObject("SELECT join_code FROM lectures WHERE id = ?", String.class, lecture));
             db.update("INSERT INTO lecture_memberships (user_id, lecture_id) VALUES (?, ?)", user, lecture);
@@ -63,8 +88,7 @@ class MigrationTests extends PostgresTestSupport {
             assertTrue(db.queryForObject("SELECT started_at = lecture_time FROM lectures", Boolean.class));
             assertEquals(false, db.queryForObject("SELECT questions_paused FROM lectures", Boolean.class));
             assertEquals(0L, db.queryForObject("SELECT count(*) FROM lecture_memberships", Long.class));
-            assertThrows(org.springframework.dao.DataIntegrityViolationException.class,
-                () -> db.update("UPDATE questions SET answer = 'An unanswered question cannot have a written answer'"));
+            assertEquals(0L, db.queryForObject("SELECT count(*) FROM information_schema.columns WHERE table_schema = ? AND table_name = 'questions' AND column_name IN ('answer', 'deleted_at')", Long.class, schema));
             assertEquals(0L, db.queryForObject("SELECT count(*) FROM question_votes", Long.class));
             assertEquals(0L, db.queryForObject("SELECT count(*) FROM question_moderation_warnings", Long.class));
             assertEquals(0, Flyway.configure().dataSource(source).schemas(schema).load().migrate().migrationsExecuted);

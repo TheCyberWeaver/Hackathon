@@ -59,3 +59,76 @@
     animation: none;
   }
 }
+
+.course-manager {
+  display: grid;
+  gap: 16px;
+}
+.course-manager label {
+  display: block;
+  font-weight: 600;
+  font-size: 14px;
+  margin-bottom: 8px;
+}
+.course-manager input,
+.course-manager select {
+  min-width: 0;
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: white;
+}
+.course-manager button {
+  min-height: 44px;
+  padding: 8px 14px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+}
+.course-manager button:hover {
+  background: #f1f5f9;
+}
+.course-manager button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.course-manager .course-primary {
+  background: #059669;
+  color: white;
+}
+.course-actions,
+.course-input-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.course-input-row input {
+  flex: 1 1 200px;
+}
+.course-list {
+  display: grid;
+  gap: 12px;
+}
+.course-list li {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+.course-list form {
+  width: 100%;
+}
+.course-title {
+  overflow-wrap: anywhere;
+  flex: 1 1 180px;
+}
+.course-list form .course-actions {
+  margin-top: 12px;
+}

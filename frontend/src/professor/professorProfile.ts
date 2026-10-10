@@ -45,18 +45,8 @@ export function prepareProfessorCourses(
   }
 }
 
-export function resetProfessorProfile(professorId: string): boolean {
-  if (!professorId.trim()) return false
-  try {
-    window.localStorage.removeItem(professorProfileStorageKey(professorId))
-    return true
-  } catch {
-    return false
-  }
-}
-
 function isValidCourses(value: unknown): value is ProfessorCourse[] {
-  if (!Array.isArray(value) || value.length === 0) return false
+  if (!Array.isArray(value)) return false
   const ids = new Set<string>()
   const titles = new Set<string>()
   for (const course of value) {
@@ -64,7 +54,8 @@ function isValidCourses(value: unknown): value is ProfessorCourse[] {
       typeof course !== 'object' ||
       course === null ||
       typeof course.id !== 'string' ||
-      !course.id ||
+      !course.id.trim() ||
+      course.id.length > 200 ||
       typeof course.title !== 'string' ||
       !course.title.trim() ||
       course.title.trim().length > 120
@@ -106,33 +97,22 @@ export function readProfessorProfile(
   }
 }
 
-export function serializeProfessorProfile(
-  professorId: string,
+export function courseTitleError(
   courses: ProfessorCourse[],
-): string | null {
-  if (!professorId.trim() || !isValidCourses(courses)) return null
-  const profile: ProfessorProfile = {
-    schemaVersion: 1,
-    professorId,
-    onboardingCompleted: true,
-    courses: courses.map((course) => ({
-      id: course.id,
-      title: course.title.trim(),
-    })),
-  }
-  return JSON.stringify(profile, null, 2)
-}
-
-export function saveProfessorProfile(
-  professorId: string,
-  courses: ProfessorCourse[],
-): boolean {
-  const json = serializeProfessorProfile(professorId, courses)
-  if (!json) return false
-  try {
-    window.localStorage.setItem(professorProfileStorageKey(professorId), json)
-    return true
-  } catch {
-    return false
-  }
+  value: string,
+  exceptId?: string,
+): string {
+  const title = value.trim()
+  if (!title) return 'Enter a course title first.'
+  if (title.length > 120)
+    return 'Course titles must be 120 characters or fewer.'
+  if (
+    courses.some(
+      (c) =>
+        c.id !== exceptId &&
+        normalizedCourseTitle(c.title) === normalizedCourseTitle(title),
+    )
+  )
+    return 'This course is already on your list.'
+  return ''
 }

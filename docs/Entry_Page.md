@@ -1,8 +1,7 @@
 # AskPool entry page integration
 
 The entry page is `/`. It reads the signed-in user from `GET /api/me`, shows the
-sign-in state, and lets visitors choose Student or Professor before continuing
-to `/student` or `/professor`. Both dashboards live in the same Vite app under
+sign-in state, and enters `/student` or `/professor` directly when its role button is activated. There is no separate Continue step. Professor entry loads the database profile before deciding whether onboarding is required. Both dashboards live in the same Vite app under
 `frontend/src/student/` and `frontend/src/professor/`. A reload on either route
 checks identity again. Vite and Caddy use an SPA fallback for dashboard routes.
 

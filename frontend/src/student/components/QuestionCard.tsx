@@ -20,9 +20,11 @@ export function QuestionCard({
   deleting,
 }: Props) {
   const [menuOpen, setMenuOpen] = useState(false)
+  const [voteHelpOpen, setVoteHelpOpen] = useState(false)
 
   return (
     <article
+      data-question-id={question.id}
       className={`question-card ${question.mine ? 'question-card--mine' : ''} ${highlighted ? 'question-card--new' : ''} ${menuOpen ? 'question-card--menu-open' : ''}`}
       style={{
         viewTransitionName: `question-${question.id.replace(/[^a-zA-Z0-9]/g, '-')}`,
@@ -33,11 +35,6 @@ export function QuestionCard({
           <span className="question-card__owner">Your Question</span>
         )}
         <p>{question.text}</p>
-        {question.answer && (
-          <p className="mt-3 text-sm">
-            <strong>Answer:</strong> {question.answer}
-          </p>
-        )}
         {question.status === 'selected' && (
           <span className="status status--selected">Being answered</span>
         )}
@@ -50,11 +47,32 @@ export function QuestionCard({
       <div className="question-card__actions">
         {question.mine ? (
           <div
-            className="upvote-button upvote-button--readonly"
-            aria-label={`${question.votes} upvotes on your question`}
+            className="self-vote-help"
+            onMouseEnter={() => setVoteHelpOpen(true)}
+            onMouseLeave={() => setVoteHelpOpen(false)}
           >
-            <ThumbsUpIcon width="16" height="16" />
-            <span>{question.votes}</span>
+            <button
+              type="button"
+              className="upvote-button upvote-button--readonly"
+              aria-label={`${question.votes} upvotes on your question`}
+              aria-describedby={`self-vote-${question.id}`}
+              onFocus={() => setVoteHelpOpen(true)}
+              onBlur={() => setVoteHelpOpen(false)}
+              onClick={() => setVoteHelpOpen(true)}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') setVoteHelpOpen(false)
+              }}
+            >
+              <ThumbsUpIcon width="16" height="16" />
+              <span>{question.votes}</span>
+            </button>
+            <span
+              id={`self-vote-${question.id}`}
+              role="tooltip"
+              className={`self-vote-tooltip ${voteHelpOpen ? 'is-visible' : ''}`}
+            >
+              You are not allowed to upvote your own question
+            </span>
           </div>
         ) : (
           <button
