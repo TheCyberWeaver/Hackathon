@@ -4,7 +4,8 @@ import { QuestionCard } from './components/QuestionCard'
 import StudentJoinPage from './StudentJoinPage'
 import { SendIcon } from './components/Icons'
 import SidePanel, { type SidePanelPage } from '../components/SidePanel'
-import { ViewSwitchButton } from './components/ViewSwitchButton'
+import StudentHistory from './components/StudentHistory'
+import { useStudentHistory } from './lib/useStudentHistory'
 import StudentTutorial from './components/StudentTutorial'
 import { animateScrollTo, prefersReducedMotion } from './lib/motion'
 import {
@@ -55,15 +56,6 @@ function currentPage(): Page {
   return 'questions'
 }
 
-async function runTransition(update: () => void): Promise<void> {
-  if (!prefersReducedMotion() && document.startViewTransition) {
-    await document.startViewTransition(() => flushSync(update))
-      .updateCallbackDone
-  } else {
-    flushSync(update)
-  }
-}
-
 function sleep(ms: number) {
   return new Promise((resolve) => window.setTimeout(resolve, ms))
 }
@@ -77,6 +69,10 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
   const [joinError, setJoinError] = useState('')
   const [questions, setQuestions] = useState<Question[]>([])
   const [lectures, setLectures] = useState<Lecture[]>([])
+  const [lecturesLoading, setLecturesLoading] = useState(true)
+  const [lecturesError, setLecturesError] = useState(false)
+  const [lectureRetry, setLectureRetry] = useState(0)
+  const history = useStudentHistory(lectures, page === 'pastLectures')
   const [lectureId, setLectureId] = useState('')
   const selectedLecture = lectures.find((lecture) => lecture.id === lectureId)
   const questionsPaused =
@@ -87,7 +83,6 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
   const [draft, setDraft] = useState('')
   const [focused, setFocused] = useState(false)
   const [sending, setSending] = useState(false)
-  const [votePendingCount, setVotePendingCount] = useState(0)
   const [mobileView, setMobileView] = useState<'other' | 'mine'>('other')
   const [reportTarget, setReportTarget] = useState<Question | null>(null)
   const [toast, setToast] = useState('')
@@ -233,13 +228,19 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
     return watchLectures(
       (items) => {
         setLectures(items)
+        setLecturesLoading(false)
+        setLecturesError(false)
       },
-      (error) =>
-        showToast(
-          error instanceof Error ? error.message : 'Could not load lectures.',
-        ),
+      (error) => {
+        setLecturesLoading(false)
+        setLecturesError(true)
+        if (currentPage() !== 'pastLectures')
+          showToast(
+            error instanceof Error ? error.message : 'Could not load lectures.',
+          )
+      },
     )
-  }, [])
+  }, [lectureRetry])
 
   useEffect(() => {
     let active = true
@@ -281,7 +282,8 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
             setJoinedSession(session)
             setLectureId(session.id)
             setQuestions([])
-            window.history.replaceState(null, '', basePath)
+            if (currentPage() === 'questions')
+              window.history.replaceState(null, '', basePath)
           } else {
             setJoinedSession(null)
             setLectureId('')
@@ -289,7 +291,8 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
             setJoinError(
               'This lecture has ended or was left on another device. Enter a code to join.',
             )
-            window.history.replaceState(null, '', `${basePath}/join`)
+            if (currentPage() === 'questions')
+              window.history.replaceState(null, '', `${basePath}/join`)
           }
         })
         .catch(() => {
@@ -430,7 +433,6 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
   async function handleVote(question: Question) {
     if (question.mine || pendingVotes.current.has(question.id)) return
     pendingVotes.current.add(question.id)
-    setVotePendingCount(pendingVotes.current.size)
     mutationVersion.current++
     const voted = !question.votedByMe
     setQuestions((items) =>
@@ -452,7 +454,6 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
       showToast('Vote could not be saved. Please try again.')
     } finally {
       pendingVotes.current.delete(question.id)
-      setVotePendingCount(pendingVotes.current.size)
       mutationVersion.current++
     }
   }
@@ -484,10 +485,9 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
     }
   }
 
-  async function switchMobileView() {
-    if (switchingView.current) return
+  async function switchMobileView(next: 'mine' | 'other') {
+    if (next === mobileView || switchingView.current) return
     switchingView.current = true
-    const next = mobileView === 'other' ? 'mine' : 'other'
     const previousScroll = window.scrollY
     const section = mobileListRef.current
     const sectionTop = section
@@ -504,7 +504,7 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
       flushSync(() => setMobileView(next))
       window.scrollTo(0, previousScroll)
       if (section) {
-        const content = section.querySelector('.question-list, .empty-message')
+        const content = section.querySelector('[role=tabpanel]:not([hidden])')
         const contentBottom = content
           ? window.scrollY + content.getBoundingClientRect().bottom
           : sectionTop
@@ -538,7 +538,7 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
         pendingDeletes.current.size
       )
         return
-      await runTransition(() => setQuestions(refreshed))
+      setQuestions(refreshed)
     } catch {
       showToast(
         'Could not refresh the order. Showing the latest loaded questions.',
@@ -816,22 +816,71 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
           <section
             ref={mobileListRef}
             className="mobile-questions page-column"
-            aria-labelledby="mobile-questions-heading"
+            aria-label="Lecture questions"
           >
-            <div className="mobile-section-heading">
-              <h2 id="mobile-questions-heading" className="section-heading">
-                {mobileView === 'other' ? 'Other Questions' : 'Your questions'}
-              </h2>
-              <ViewSwitchButton
-                showingMine={mobileView === 'mine'}
-                onClick={() => void switchMobileView()}
-              />
+            <div
+              className="mobile-question-tabs"
+              role="tablist"
+              aria-label="Question lists"
+            >
+              {(['mine', 'other'] as const).map((view) => (
+                <button
+                  key={view}
+                  id={`questions-tab-${view}`}
+                  type="button"
+                  role="tab"
+                  aria-selected={mobileView === view}
+                  aria-controls={`questions-panel-${view}`}
+                  tabIndex={mobileView === view ? 0 : -1}
+                  onClick={() => void switchMobileView(view)}
+                  onKeyDown={(event) => {
+                    if (
+                      !['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(
+                        event.key,
+                      )
+                    )
+                      return
+                    event.preventDefault()
+                    const next =
+                      event.key === 'Home'
+                        ? 'mine'
+                        : event.key === 'End'
+                          ? 'other'
+                          : view === 'mine'
+                            ? 'other'
+                            : 'mine'
+                    document
+                      .getElementById(`questions-tab-${next}`)
+                      ?.focus({ preventScroll: true })
+                    void switchMobileView(next)
+                  }}
+                >
+                  {view === 'mine' ? 'Your questions' : 'Other questions'}
+                </button>
+              ))}
             </div>
-            {mobileView === 'other' ? cards(others, false) : cards(mine, true)}
+            {(['mine', 'other'] as const).map((view) => (
+              <div
+                key={view}
+                id={`questions-panel-${view}`}
+                role="tabpanel"
+                aria-labelledby={`questions-tab-${view}`}
+                tabIndex={0}
+                hidden={mobileView !== view}
+              >
+                {view === 'mine' ? cards(mine, true) : cards(others, false)}
+              </div>
+            ))}
           </section>
         </main>
       ) : (
-        <main className="placeholder-page">
+        <main
+          className={
+            page === 'pastLectures'
+              ? 'student-history-page'
+              : 'placeholder-page'
+          }
+        >
           <section className="placeholder-page__content page-column">
             <h1>
               {page === 'pastLectures'
@@ -840,7 +889,16 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
                   ? 'Profile'
                   : 'Settings'}
             </h1>
-            {page === 'settings' ? (
+            {page === 'pastLectures' ? (
+              <StudentHistory
+                lectures={lectures}
+                loading={lecturesLoading}
+                error={lecturesError}
+                entries={history.entries}
+                onRetryLectures={() => setLectureRetry((value) => value + 1)}
+                onRetryQuestions={(id) => void history.retry(id)}
+              />
+            ) : page === 'settings' ? (
               <div className="placeholder-page__card student-settings-card">
                 <div>
                   <h2>Tutorial</h2>
@@ -858,37 +916,8 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
               </div>
             ) : (
               <div className="placeholder-page__card">
-                <h2>
-                  {page === 'pastLectures' ? 'Past lectures' : 'Your profile'}
-                </h2>
-                <p>
-                  {page === 'pastLectures'
-                    ? 'Choose a saved lecture to review its question pool.'
-                    : 'Your profile will appear here.'}
-                </p>
-                {page === 'pastLectures' &&
-                  lectures.map((lecture) => (
-                    <p key={lecture.id}>
-                      <button
-                        type="button"
-                        className="text-blue-700 underline"
-                        disabled={
-                          sending ||
-                          votePendingCount > 0 ||
-                          deletingIds.size > 0
-                        }
-                        onClick={() => {
-                          setQuestions([])
-                          setLectureId(lecture.id)
-                          rememberLecture(lecture.id)
-                          navigate('questions')
-                        }}
-                      >
-                        {lecture.title} —{' '}
-                        {new Date(lecture.lectureTime).toLocaleString()}
-                      </button>
-                    </p>
-                  ))}
+                <h2>Your profile</h2>
+                <p>Your profile will appear here.</p>
               </div>
             )}
           </section>
