@@ -39,6 +39,29 @@ public class PoolService {
         var id = repository.createLecture(title, request.lectureTime(), user.id(), course);
         return lecture(user, id);
     }
+    @Transactional
+    public SharedSession join(User user, JoinRequest request) {
+        if (!testingPermissions && !user.role().equals("student"))
+            throw new ApiException(FORBIDDEN, "Only students may join lectures.");
+        var code = request == null ? null : request.code();
+        if (code == null || !code.matches("[1-9][0-9]{0,18}"))
+            throw new ApiException(BAD_REQUEST, "Enter a valid numeric lecture ID.");
+        final long id;
+        try { id = Long.parseLong(code); }
+        catch (NumberFormatException error) { throw new ApiException(BAD_REQUEST, "Enter a valid numeric lecture ID."); }
+        var access = repository.lockLecture(id);
+        if (access.session().startedAt() == null || access.session().endedAt() != null)
+            throw new ApiException(NOT_FOUND, "This lecture ID is invalid or the lecture has ended.");
+        repository.joinSession(user.id(), id);
+        return repository.joinedSession(user.id());
+    }
+    public JoinedSession joined(User user) {
+        return new JoinedSession(repository.joinedSession(user.id()));
+    }
+    @Transactional
+    public void leave(User user) {
+        repository.leaveSession(user.id());
+    }
     public List<Question> questions(User user, long lecture) {
         repository.lecture(lecture);
         return repository.questions(lecture, user.id());
@@ -101,6 +124,7 @@ public class PoolService {
         requireManage(user, id);
         var next = LectureSession.transition(access.session(), request == null ? null : request.action(), java.time.OffsetDateTime.now(java.time.ZoneOffset.UTC));
         repository.session(id, next);
+        if (next.endedAt() != null) repository.clearLectureMembers(id);
         return lecture(user, id);
     }
     public Summary summary(User user) {

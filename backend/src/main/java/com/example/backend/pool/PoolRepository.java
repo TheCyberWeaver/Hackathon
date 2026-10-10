@@ -53,6 +53,21 @@ public class PoolRepository {
         jdbc.update("UPDATE lectures SET started_at = ?, ended_at = ?, questions_paused = ? WHERE id = ?",
             state.startedAt(), state.endedAt(), state.paused(), id);
     }
+    public void joinSession(long user, long lecture) {
+        jdbc.update("INSERT INTO lecture_memberships (user_id, lecture_id) VALUES (?, ?) ON CONFLICT (user_id) DO UPDATE SET lecture_id = EXCLUDED.lecture_id, joined_at = CURRENT_TIMESTAMP", user, lecture);
+    }
+    public SharedSession joinedSession(long user) {
+        return jdbc.query("SELECT l.id, l.title, l.course, l.started_at FROM lecture_memberships m JOIN lectures l ON l.id = m.lecture_id WHERE m.user_id = ? AND l.started_at IS NOT NULL AND l.ended_at IS NULL",
+            (rs, row) -> new SharedSession(Long.toString(rs.getLong("id")), Long.toString(rs.getLong("id")),
+                rs.getString("course").isBlank() ? rs.getString("title") : rs.getString("course"), time(rs, "started_at")), user)
+            .stream().findFirst().orElse(null);
+    }
+    public void leaveSession(long user) {
+        jdbc.update("DELETE FROM lecture_memberships WHERE user_id = ?", user);
+    }
+    public void clearLectureMembers(long lecture) {
+        jdbc.update("DELETE FROM lecture_memberships WHERE lecture_id = ?", lecture);
+    }
     public long createQuestion(long lecture, long author, String text) {
         return jdbc.queryForObject("INSERT INTO questions (lecture_id, author_id, text) VALUES (?, ?, ?) RETURNING id",
             Long.class, lecture, author, text);

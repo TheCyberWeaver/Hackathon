@@ -1,12 +1,12 @@
 # Java + PostgreSQL deployment
 
-Caddy serves the frontend and proxies all `/api/*` to Java. The QR/code UI uses existing lecture IDs and stores the student's selection in the browser; Java has no join-code or membership endpoints. Java joins the external `askpool_shared` network. The managed address https://08.hackathon.ethz.ch provides TLS/login. Java and PostgreSQL must have no public ports. The Node demo API is no longer deployed; its old data volume is neither migrated nor removed.
+Caddy serves the frontend and proxies all `/api/*` to Java. The QR/code UI uses existing lecture IDs, and Java stores each student's selected lecture in PostgreSQL. Java joins the external `askpool_shared` network. The managed address https://08.hackathon.ethz.ch provides TLS/login. Java and PostgreSQL must have no public ports. The Node demo API is no longer deployed; its old data volume is neither migrated nor removed.
 
 ## Adopt the supplied VM schema
 
-Back up the database. V1 matches the supplied schema; later migrations add ownership, moderation, and lecture sessions. Do not run V1 again on the existing database.
+Back up the database. V1 matches the supplied schema; later migrations add ownership, moderation, lecture sessions, and student lecture selections. Do not run V1 again on the existing database.
 
-If the previous merge's V6 join-code migration was already applied to a database, this restored backend will not validate that migration history. Check Flyway history before deploying this branch and plan a database-specific repair; do not blindly remove applied schema changes.
+V6 is byte-for-byte identical to the earlier join-code migration so databases that already applied it retain valid Flyway history. The UI and join API use numeric lecture IDs; V6's generated `join_code` column is unused. Its `lecture_memberships` table stores the selected lecture per student.
 
 Verify the three tables match V1 and are owned by `askpool_app`. Changing the database owner does not transfer existing table ownership. If initial SQL ran as postgres, run this from the database Compose directory:
 

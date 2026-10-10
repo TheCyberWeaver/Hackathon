@@ -42,20 +42,18 @@ async function clients(baseUrl = '') {
   }
 }
 
-test('QR join uses active Java lecture IDs and remembers the selection in this browser', async (t) => {
+test('QR join uses lecture IDs and saves the selected course through Java', async (t) => {
   const api = await clients()
   const requests = []
-  const saved = new Map()
+  let savedSession = null
   const storageDescriptor = Object.getOwnPropertyDescriptor(
     globalThis,
     'localStorage',
   )
   Object.defineProperty(globalThis, 'localStorage', {
     configurable: true,
-    value: {
-      getItem: (key) => saved.get(key) ?? null,
-      setItem: (key, value) => saved.set(key, value),
-      removeItem: (key) => saved.delete(key),
+    get() {
+      assert.fail('Lecture selection must be stored by the backend')
     },
   })
   t.after(() => {
@@ -65,16 +63,31 @@ test('QR join uses active Java lecture IDs and remembers the selection in this b
   })
   t.mock.method(globalThis, 'fetch', async (url, init) => {
     requests.push([init.method ?? 'GET', url, init.body ?? null, init])
-    const lecture = {
+    const session = {
       id: '42',
-      title: 'Algorithms',
+      code: '42',
       course: 'Algorithms',
       startedAt: '2026-10-10T10:00:00Z',
-      endedAt: null,
-      canManage: true,
+    }
+    if (url === '/api/sessions/mine' && init.method === 'DELETE') {
+      savedSession = null
+      return new Response(null, { status: 204 })
+    }
+    if (url === '/api/sessions/mine')
+      return new Response(JSON.stringify({ session: savedSession }), {
+        status: 200,
+      })
+    if (url === '/api/sessions/join') {
+      savedSession = session
+      return new Response(JSON.stringify(session), { status: 200 })
     }
     return new Response(
-      JSON.stringify(url === '/api/lectures' ? [lecture] : lecture),
+      JSON.stringify({
+        ...session,
+        title: 'Algorithms',
+        endedAt: null,
+        canManage: true,
+      }),
       { status: 200 },
     )
   })
@@ -89,67 +102,45 @@ test('QR join uses active Java lecture IDs and remembers the selection in this b
   )
   assert.equal(api.sessions.parseJoinCode('ABC!-2345'), null)
   assert.equal((await api.sessions.getSessionInvite('42')).code, '42')
-  assert.equal(await api.sessions.getJoinedSession('student-1'), null)
-  assert.equal((await api.sessions.joinSession('42', 'student-1')).id, '42')
-  assert.equal((await api.sessions.getJoinedSession('student-1')).id, '42')
-  api.sessions.leaveJoinedSession('student-1')
-  assert.equal(await api.sessions.getJoinedSession('student-1'), null)
-  assert.equal(saved.size, 0)
+  assert.equal(await api.sessions.getJoinedSession(), null)
+  assert.equal((await api.sessions.joinSession('42')).id, '42')
+  assert.equal((await api.sessions.getJoinedSession()).course, 'Algorithms')
+  await api.sessions.leaveJoinedSession()
+  assert.equal(await api.sessions.getJoinedSession(), null)
   assert.deepEqual(
     requests.map(([method, url]) => [method, url]),
     [
       ['GET', '/api/lectures/42'],
-      ['GET', '/api/lectures'],
-      ['GET', '/api/lectures'],
+      ['GET', '/api/sessions/mine'],
+      ['POST', '/api/sessions/join'],
+      ['GET', '/api/sessions/mine'],
+      ['DELETE', '/api/sessions/mine'],
+      ['GET', '/api/sessions/mine'],
     ],
   )
+  assert.deepEqual(JSON.parse(requests[2][2]), { code: '42' })
   for (const [, , , init] of requests) {
     assert.equal(init.credentials, 'same-origin')
     assert.equal(new Headers(init.headers).has('X-User-Id'), false)
   }
 })
 
-test('ended lectures cannot be joined and clear a previously selected lecture', async (t) => {
+test('ended lectures are rejected by the backend without changing the selected lecture', async (t) => {
   const api = await clients()
-  const saved = new Map([['askpool:joined-lecture:student-1', '42']])
-  const storageDescriptor = Object.getOwnPropertyDescriptor(
-    globalThis,
-    'localStorage',
-  )
-  Object.defineProperty(globalThis, 'localStorage', {
-    configurable: true,
-    value: {
-      getItem: (key) => saved.get(key) ?? null,
-      setItem: (key, value) => saved.set(key, value),
-      removeItem: (key) => saved.delete(key),
-    },
-  })
-  t.after(() => {
-    if (storageDescriptor)
-      Object.defineProperty(globalThis, 'localStorage', storageDescriptor)
-    else delete globalThis.localStorage
-  })
   t.mock.method(
     globalThis,
     'fetch',
     async () =>
       new Response(
-        JSON.stringify([
-          {
-            id: '42',
-            title: 'Algorithms',
-            course: 'Algorithms',
-            startedAt: '2026-10-10T10:00:00Z',
-            endedAt: '2026-10-10T11:00:00Z',
-          },
-        ]),
-        { status: 200 },
+        JSON.stringify({
+          error: 'This lecture ID is invalid or the lecture has ended.',
+        }),
+        { status: 404 },
       ),
   )
-  assert.equal(await api.sessions.getJoinedSession('student-1'), null)
-  assert.equal(saved.size, 0)
-  await assert.rejects(api.sessions.joinSession('42', 'student-1'), /ended/)
+  await assert.rejects(api.sessions.joinSession('42'), /ended/)
   assert.equal(api.sessions.parseJoinCode('042'), null)
+  assert.equal(api.sessions.parseJoinCode('9'.repeat(20)), null)
 })
 
 test('Java API clients use lecture routes and proxy identity without browser identity', async (t) => {

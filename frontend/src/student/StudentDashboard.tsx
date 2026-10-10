@@ -140,7 +140,7 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
     setJoinBusy(true)
     setJoinError('')
     try {
-      const session = await joinSession(code, user.id)
+      const session = await joinSession(code)
       setJoinedSession(session)
       setLectureId(session.id)
       setQuestions([])
@@ -159,7 +159,7 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
     if (leaveBusy) return
     setLeaveBusy(true)
     try {
-      leaveJoinedSession(user.id)
+      await leaveJoinedSession()
       setJoinedSession(null)
       setLectureId('')
       setQuestions([])
@@ -226,9 +226,7 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
   useEffect(() => {
     let active = true
     const code = new URLSearchParams(window.location.search).get('code')
-    const sessionRequest = code
-      ? joinSession(code, user.id)
-      : getJoinedSession(user.id)
+    const sessionRequest = code ? joinSession(code) : getJoinedSession()
     sessionRequest
       .then((session) => {
         if (!active) return
@@ -256,16 +254,23 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
     if (!joinedSessionId) return
     let active = true
     const timer = window.setInterval(() => {
-      getJoinedSession(user.id)
+      getJoinedSession()
         .then((session) => {
           if (!active) return
           if (session?.id === joinedSessionId) {
             setJoinedSession(session)
+          } else if (session) {
+            setJoinedSession(session)
+            setLectureId(session.id)
+            setQuestions([])
+            window.history.replaceState(null, '', basePath)
           } else {
             setJoinedSession(null)
             setLectureId('')
             setQuestions([])
-            setJoinError('This lecture has ended. Enter another code to join.')
+            setJoinError(
+              'This lecture has ended or was left on another device. Enter a code to join.',
+            )
             window.history.replaceState(null, '', `${basePath}/join`)
           }
         })
@@ -277,7 +282,7 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
       active = false
       window.clearInterval(timer)
     }
-  }, [joinedSessionId, user.id])
+  }, [joinedSessionId])
 
   useEffect(() => {
     if (!lectureId) return
