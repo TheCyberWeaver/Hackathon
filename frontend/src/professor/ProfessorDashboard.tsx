@@ -3,16 +3,12 @@ import { mockPastLectures } from './mockPastLectures'
 import type { Question } from './mockQuestions'
 import { mockQuestions } from './mockQuestions'
 import type { CurrentUser } from '../lib/api'
-import {
-  GearIcon,
-  PanelIcon,
-  ProfileIcon,
-  ThumbsUpIcon,
-} from '../components/Icons'
+import { ThumbsUpIcon } from '../components/Icons'
+import SidePanel, { type SidePanelPage } from '../components/SidePanel'
 import './professor.css'
 
 type Tab = 'open' | 'answered'
-type ProfessorPage = 'questions' | 'pastLectures' | 'profile' | 'settings'
+type ProfessorPage = SidePanelPage
 
 const professorRoutes: Record<ProfessorPage, string> = {
   questions: '/professor',
@@ -73,13 +69,8 @@ export default function ProfessorDashboard({ user }: { user: CurrentUser }) {
     pageFromPath(window.location.pathname),
   )
   const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set())
-  const [drawerOpen, setDrawerOpen] = useState(false)
-  const [drawerClosing, setDrawerClosing] = useState(false)
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [notice, setNotice] = useState('')
-  const drawerRef = useRef<HTMLDialogElement>(null)
-  const closeTimerRef = useRef<number | null>(null)
-  const menuButtonRef = useRef<HTMLButtonElement>(null)
   const dialogRef = useRef<HTMLDialogElement>(null)
   const deleteTriggerRef = useRef<HTMLButtonElement | null>(null)
   const openTabRef = useRef<HTMLButtonElement>(null)
@@ -96,30 +87,10 @@ export default function ProfessorDashboard({ user }: { user: CurrentUser }) {
     selectedTab === 'open' ? openQuestions : answeredQuestions
 
   useEffect(() => {
-    if (!drawerOpen) return
-    const drawer = drawerRef.current
-    drawer?.showModal()
-    return () => {
-      if (drawer?.open) drawer.close()
-    }
-  }, [drawerOpen])
-
-  useEffect(() => {
-    function handleLocationChange() {
-      if (closeTimerRef.current !== null) {
-        window.clearTimeout(closeTimerRef.current)
-        closeTimerRef.current = null
-      }
+    const handleLocationChange = () =>
       setPage(pageFromPath(window.location.pathname))
-      setDrawerOpen(false)
-      setDrawerClosing(false)
-    }
     window.addEventListener('popstate', handleLocationChange)
-    return () => {
-      window.removeEventListener('popstate', handleLocationChange)
-      if (closeTimerRef.current !== null)
-        window.clearTimeout(closeTimerRef.current)
-    }
+    return () => window.removeEventListener('popstate', handleLocationChange)
   }, [])
 
   useEffect(() => {
@@ -146,29 +117,12 @@ export default function ProfessorDashboard({ user }: { user: CurrentUser }) {
     })
   }
 
-  function closeDrawer(nextPage?: ProfessorPage) {
-    if (closeTimerRef.current !== null) return
-    setDrawerClosing(true)
-    const delay = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-      ? 0
-      : 180
-    closeTimerRef.current = window.setTimeout(() => {
-      closeTimerRef.current = null
-      setDrawerOpen(false)
-      setDrawerClosing(false)
-      if (nextPage && nextPage !== page) {
-        window.history.pushState(null, '', professorRoutes[nextPage])
-        setPage(nextPage)
-        window.scrollTo(0, 0)
-        window.requestAnimationFrame(() => mainHeadingRef.current?.focus())
-      } else {
-        window.requestAnimationFrame(() => menuButtonRef.current?.focus())
-      }
-    }, delay)
-  }
-
-  function navigateTo(nextPage: ProfessorPage) {
-    closeDrawer(nextPage)
+  function navigateTo(nextPage: SidePanelPage) {
+    if (nextPage === page) return
+    window.history.pushState(null, '', professorRoutes[nextPage])
+    setPage(nextPage)
+    window.scrollTo(0, 0)
+    window.requestAnimationFrame(() => mainHeadingRef.current?.focus())
   }
 
   function changeStatus(question: Question) {
@@ -221,133 +175,15 @@ export default function ProfessorDashboard({ user }: { user: CurrentUser }) {
   return (
     <div className="min-h-screen bg-white font-sans text-slate-900">
       <header className="bg-[#f7f8fc]">
-        <div className="flex h-20 items-center gap-3 px-6">
-          <button
-            ref={menuButtonRef}
-            type="button"
-            aria-label="Open navigation"
-            aria-expanded={drawerOpen}
-            aria-controls="professor-drawer"
-            onClick={() => setDrawerOpen(true)}
-            className="flex size-10 items-center justify-center rounded-xl bg-white text-slate-500 shadow-[0_3px_12px_rgba(15,23,42,0.09)] hover:text-blue-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
-          >
-            <svg
-              aria-hidden="true"
-              className="size-5"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.8"
-            >
-              <rect x="4" y="4.5" width="16" height="15" rx="2" />
-              <path d="M10 4.5v15" />
-            </svg>
-          </button>
-          <span className="text-[10px] font-bold tracking-[0.2em] text-blue-700">
-            ASKPOOL
-          </span>
+        <div className="flex h-20 items-center px-6">
+          <SidePanel
+            user={user}
+            role="professor"
+            page={page}
+            onNavigate={navigateTo}
+          />
         </div>
       </header>
-
-      {drawerOpen && (
-        <dialog
-          ref={drawerRef}
-          id="professor-drawer"
-          aria-label="Navigation"
-          data-closing={drawerClosing}
-          onCancel={(event) => {
-            event.preventDefault()
-            closeDrawer()
-          }}
-          onClick={(event) => {
-            if (event.target !== event.currentTarget) return
-            const bounds = event.currentTarget.getBoundingClientRect()
-            if (event.clientX > bounds.right) closeDrawer()
-          }}
-          className="professor-drawer fixed inset-y-0 left-0 right-auto m-0 flex h-dvh max-h-none w-[min(20rem,calc(100vw-2rem))] max-w-none flex-col border-0 bg-[#f7f8fc] p-6 text-slate-900 shadow-[12px_0_32px_rgba(15,23,42,0.12)] backdrop:bg-slate-950/35"
-        >
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              autoFocus
-              aria-label="Close navigation"
-              onClick={() => closeDrawer()}
-              className="flex size-10 items-center justify-center rounded-xl bg-white text-slate-500 shadow-[0_3px_12px_rgba(15,23,42,0.09)] hover:text-blue-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
-            >
-              <PanelIcon className="size-5" />
-            </button>
-            <span className="text-[10px] font-bold tracking-[0.2em] text-blue-700">
-              ASKPOOL
-            </span>
-          </div>
-          <div className="mt-12 flex items-center gap-3 border-b border-slate-200 pb-6">
-            <span
-              className="flex size-10 items-center justify-center rounded-full bg-blue-100 text-blue-700"
-              aria-hidden="true"
-            >
-              <ProfileIcon className="size-5" />
-            </span>
-            <div className="min-w-0 break-words">
-              <p className="text-sm font-semibold">{user.name}</p>
-              <p className="mt-1 text-xs text-slate-500">{user.id}</p>
-            </div>
-          </div>
-          <nav
-            aria-label="Professor navigation"
-            className="mt-12 flex flex-col gap-1"
-          >
-            <button
-              type="button"
-              onClick={() => navigateTo('questions')}
-              aria-current={page === 'questions' ? 'page' : undefined}
-              className={`rounded-lg px-3 py-3 text-left text-sm font-medium hover:bg-white focus-visible:outline-2 focus-visible:outline-blue-600 ${page === 'questions' ? 'bg-white text-blue-700' : 'bg-slate-100 text-slate-700'}`}
-            >
-              Current Lecture
-            </button>
-          </nav>
-          <div className="mt-auto border-t border-slate-200 pt-5">
-            <div className="flex items-center gap-1 rounded-xl border border-slate-200 bg-white p-1.5">
-              <button
-                type="button"
-                onClick={() => navigateTo('profile')}
-                aria-current={page === 'profile' ? 'page' : undefined}
-                className={`flex min-w-0 flex-1 items-center gap-2.5 rounded-lg px-2 py-2 text-left hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-blue-600 ${page === 'profile' ? 'bg-blue-50' : ''}`}
-              >
-                <span
-                  className="flex size-9 shrink-0 items-center justify-center rounded-full bg-blue-100 text-blue-700"
-                  aria-hidden="true"
-                >
-                  <ProfileIcon className="size-5" />
-                </span>
-                <span className="min-w-0">
-                  <span className="block truncate text-sm font-semibold text-slate-900">
-                    {professorFullName}
-                  </span>
-                  <span className="block text-xs text-slate-500">
-                    Professor
-                  </span>
-                </span>
-              </button>
-              <button
-                type="button"
-                aria-label="Settings"
-                aria-current={page === 'settings' ? 'page' : undefined}
-                onClick={() => navigateTo('settings')}
-                className={`flex size-10 shrink-0 items-center justify-center rounded-lg hover:bg-slate-50 hover:text-blue-700 focus-visible:outline-2 focus-visible:outline-blue-600 ${page === 'settings' ? 'bg-blue-50 text-blue-700' : 'text-slate-500'}`}
-              >
-                <GearIcon className="size-5" />
-              </button>
-            </div>
-            <button
-              type="button"
-              onClick={() => window.location.assign('/')}
-              className="mt-3 w-full rounded-lg border border-red-200 bg-red-100 px-3 py-3 text-left text-sm font-medium text-red-800 hover:bg-red-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-600"
-            >
-              Log out
-            </button>
-          </div>
-        </dialog>
-      )}
 
       {page === 'questions' && (
         <main className="professor-page-enter mx-auto max-w-[848px] px-5 pb-20 pt-10 sm:px-6 sm:pt-14">

@@ -14,7 +14,7 @@ The component copies the mock array on first render. Status changes and deletion
 
 Open and Answered are derived from current state, then sorted by votes descending, submission time ascending, and ID ascending. The selected tab stays selected after a status change. A question can be expanded independently to show its fictional author ID and a locally formatted submission time. Vote counts are display only.
 
-Deletion uses a native modal dialog. Cancel, Escape, or backdrop click preserves the question and returns focus to its Delete button. Confirmation removes the question and focuses the selected tab. The navigation button in the header opens a left drawer with Current Lecture, a profile card, Settings, and Log out. The drawer closes with its button, Escape, or a backdrop click, then returns focus to the header button. Drawer animations live in `src/professor/professor.css`.
+Deletion uses a native modal dialog. Cancel, Escape, or backdrop click preserves the question and returns focus to its Delete button. Confirmation removes the question and focuses the selected tab. The navigation button in the header opens the shared side panel with Current Lecture, Past Lectures, a profile card with email, Settings, and Log out. The panel closes with its button, Escape, or a backdrop click, then returns focus to the header button. The same panel is used in the student dashboard; its component and styles live in `frontend/src/components/`.
 
 ## Local checks
 
