@@ -26,45 +26,25 @@ export type Question = {
   status: QuestionStatus
   answeredAt: string | null
   reportCount: number
-  deletedAt: string | null
-  answer: string | null
 }
-export function listProfessorQuestions(
-  lectureId: string,
-  includeDeleted = false,
-) {
+export function listProfessorQuestions(lectureId: string) {
   return request<Question[]>(
-    `/lectures/${encodeURIComponent(lectureId)}/professor/questions${includeDeleted ? '?includeDeleted=true' : ''}`,
+    `/lectures/${encodeURIComponent(lectureId)}/professor/questions`,
   )
 }
-export function changeQuestionStatus(
-  id: string,
-  status: QuestionStatus,
-  answer?: string,
-) {
+export function changeQuestionStatus(id: string, status: QuestionStatus) {
   return request<Question>(`/questions/${encodeURIComponent(id)}/status`, {
     method: 'PATCH',
-    body: JSON.stringify({
-      status,
-      ...(answer !== undefined ? { answer } : {}),
-    }),
+    body: JSON.stringify({ status }),
   })
 }
-
-export function restoreQuestion(id: string) {
-  return request<Question>(`/questions/${encodeURIComponent(id)}/restore`, {
-    method: 'POST',
-  })
-}
-export function permanentlyDeleteQuestion(id: string) {
-  return request<void>(`/questions/${encodeURIComponent(id)}/permanent`, {
-    method: 'DELETE',
-  })
-}
-export function emptyTrash(lectureId: string) {
-  return request<void>(
-    `/lectures/${encodeURIComponent(lectureId)}/questions/trash`,
-    { method: 'DELETE' },
+export function clearOpenQuestions(lectureId: string, questionIds: string[]) {
+  return request<{ deletedIds: string[] }>(
+    `/lectures/${encodeURIComponent(lectureId)}/questions/clear-open`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ questionIds }),
+    },
   )
 }
 export type Summary = {

@@ -2,7 +2,13 @@ import { lazy, Suspense, useEffect, useState } from 'react'
 import EntryPage from './components/EntryPage'
 import { getCurrentUser, IdentityError } from './lib/api'
 import type { CurrentUser } from './lib/api'
-import { readProfessorProfile } from './professor/professorProfile'
+import type { ProfessorCourse } from './professor/professorProfile'
+import {
+  loadProfessorProfile,
+  saveProfessorProfile,
+  type SavedProfessorProfile,
+} from './professor/profileApi'
+import { ApiRequestError } from './lib/poolApi'
 
 const StudentDashboard = lazy(() => import('./student/StudentDashboard'))
 const ProfessorDashboard = lazy(() => import('./professor/ProfessorDashboard'))
@@ -17,16 +23,78 @@ function ProfessorSpace({
   user: CurrentUser
   onContinue: () => void
 }) {
-  const [courses, setCourses] = useState(
-    () => readProfessorProfile(user.id)?.courses ?? null,
-  )
+  const [profile, setProfile] = useState<SavedProfessorProfile | null>(null)
+  const [error, setError] = useState('')
+  const [attempt, setAttempt] = useState(0)
+  useEffect(() => {
+    let active = true
+    loadProfessorProfile(user.id)
+      .then((saved) => {
+        if (active) {
+          setProfile(saved)
+          setError('')
+        }
+      })
+      .catch((cause: unknown) => {
+        if (active)
+          setError(
+            cause instanceof Error
+              ? cause.message
+              : 'Could not load your profile.',
+          )
+      })
+    return () => {
+      active = false
+    }
+  }, [user.id, attempt])
 
-  if (courses) return <ProfessorDashboard user={user} courses={courses} />
+  async function saveCourses(courses: ProfessorCourse[], completed?: boolean) {
+    if (!profile) throw new Error('Your profile is still loading.')
+    try {
+      const saved = await saveProfessorProfile(profile, courses, completed)
+      setProfile(saved)
+    } catch (cause) {
+      if (cause instanceof ApiRequestError && cause.status === 409) {
+        const latest = await loadProfessorProfile(user.id)
+        setProfile(latest)
+      }
+      throw cause
+    }
+  }
+  if (!profile)
+    return (
+      <main className="entry-page">
+        <div role={error ? 'alert' : 'status'}>
+          <p>{error || 'Loading your professor profile…'}</p>
+          {error && (
+            <button
+              type="button"
+              className="mt-4 rounded-lg border px-4 py-2"
+              onClick={() => {
+                setError('')
+                setAttempt((n) => n + 1)
+              }}
+            >
+              Retry
+            </button>
+          )}
+        </div>
+      </main>
+    )
+  if (profile.onboardingCompleted)
+    return (
+      <ProfessorDashboard
+        user={user}
+        courses={profile.courses}
+        onSaveCourses={saveCourses}
+      />
+    )
   return (
     <ProfessorOnboarding
       user={user}
-      onContinue={(savedCourses) => {
-        setCourses(savedCourses)
+      initialCourses={profile.courses}
+      onContinue={async (courses) => {
+        await saveCourses(courses, true)
         onContinue()
       }}
     />

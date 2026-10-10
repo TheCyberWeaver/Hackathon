@@ -13,19 +13,17 @@ class PoolServiceTests {
     final PoolService service = new PoolService(repository, moderation, moderator, false);
 
     @Test void authorsCanDeleteTheirOwnQuestionsWithoutProfessorRights() {
-        when(repository.lockQuestion(10)).thenReturn(new PoolRepository.QuestionAccess(10, 20, 30, null));
+        when(repository.lockQuestion(10)).thenReturn(new PoolRepository.QuestionAccess(10, 20, 30));
         service.delete(new PoolRepository.User(30, "student"), 10);
         verify(repository).delete(10);
         verify(repository, never()).lecture(anyLong());
     }
-    @Test void StudentsCannotDeleteOrPurgeAnotherPersonsQuestion() {
-        var question = new PoolRepository.QuestionAccess(10, 20, 30, null);
+    @Test void studentsCannotDeleteAnotherPersonsQuestion() {
+        var question = new PoolRepository.QuestionAccess(10, 20, 30);
         when(repository.lockQuestion(10)).thenReturn(question);
         var student = new PoolRepository.User(31, "student");
         assertEquals(FORBIDDEN, assertThrows(ApiException.class, () -> service.delete(student, 10)).status);
-        assertEquals(FORBIDDEN, assertThrows(ApiException.class, () -> service.purge(student, 10)).status);
         verify(repository, never()).delete(anyLong());
-        verify(repository, never()).purge(anyLong());
     }
     @Test void PausedSessionsRejectSubmissionsEvenWithTestingPermissions() {
         when(repository.lockLecture(20)).thenReturn(new PoolRepository.LectureAccess(20, 40L,

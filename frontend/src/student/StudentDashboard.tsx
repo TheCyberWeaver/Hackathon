@@ -389,14 +389,22 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
         setNewQuestionId(created.id)
         setDraft('')
         setModerationWarning(null)
-        setMobileView('other')
+        setMobileView('mine')
       })
       if (textareaRef.current) growTextarea(textareaRef.current)
       await sleep(prefersReducedMotion() ? 20 : 200)
-      await animateScrollTo(
-        document.documentElement.scrollHeight - window.innerHeight,
-        1000,
+      const newCard = Array.from(
+        document.querySelectorAll<HTMLElement>('[data-question-id]'),
+      ).find(
+        (card) =>
+          card.dataset.questionId === created.id &&
+          card.getClientRects().length > 0,
       )
+      if (newCard)
+        newCard.scrollIntoView({
+          behavior: prefersReducedMotion() ? 'instant' : 'smooth',
+          block: 'center',
+        })
     } catch (error) {
       if (
         error instanceof ApiRequestError &&
@@ -411,7 +419,6 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
             : 'Could not send your question.',
         )
       }
-      setDraft(text)
     } finally {
       setSending(false)
       pendingSend.current = false
@@ -421,7 +428,7 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
   }
 
   async function handleVote(question: Question) {
-    if (pendingVotes.current.has(question.id)) return
+    if (question.mine || pendingVotes.current.has(question.id)) return
     pendingVotes.current.add(question.id)
     setVotePendingCount(pendingVotes.current.size)
     mutationVersion.current++
@@ -554,12 +561,16 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
   const mine = questions
     .filter((question) => question.mine)
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-  const others = questions
+  const others = questions.filter((question) => !question.mine)
 
   function cards(items: Question[], isMine: boolean) {
-    if (isMine && items.length === 0) {
+    if (items.length === 0) {
       return (
-        <p className="empty-message">Questions you send will appear here.</p>
+        <p className="empty-message">
+          {isMine
+            ? 'Questions you send will appear here.'
+            : 'No questions from other students yet.'}
+        </p>
       )
     }
     return (

@@ -305,7 +305,7 @@ test('shared transport handles no-content responses and useful API errors', asyn
   await assert.rejects(api.pool.listLectures(), /Request failed \(502\)/)
 })
 
-test('session, archive, summary and trash clients match the Java API contract', async (t) => {
+test('session, archive, summary and permanent deletion clients match the Java API contract', async (t) => {
   const api = await clients()
   const calls = []
   t.mock.method(globalThis, 'fetch', async (url, init) => {
@@ -318,15 +318,10 @@ test('session, archive, summary and trash clients match the Java API contract', 
   })
   for (const action of ['start', 'pause', 'resume', 'end'])
     await api.pool.changeLectureSession('lecture/1', action)
-  await api.professor.listProfessorQuestions('lecture/1', true)
-  await api.professor.restoreQuestion('question/1')
-  await api.professor.permanentlyDeleteQuestion('question/1')
-  await api.professor.emptyTrash('lecture/1')
-  await api.professor.changeQuestionStatus(
-    'question/1',
-    'answered',
-    'A saved answer',
-  )
+  await api.professor.listProfessorQuestions('lecture/1')
+  await api.professor.deleteQuestion('question/1')
+  await api.professor.clearOpenQuestions('lecture/1', ['1', '2'])
+  await api.professor.changeQuestionStatus('question/1', 'answered')
   await api.professor.getSummary()
   await api.professor.listArchive()
   assert.deepEqual(calls, [
@@ -335,19 +330,14 @@ test('session, archive, summary and trash clients match the Java API contract', 
       '/api/lectures/lecture%2F1/session',
       { action },
     ]),
+    ['GET', '/api/lectures/lecture%2F1/professor/questions', null],
+    ['DELETE', '/api/questions/question%2F1', null],
     [
-      'GET',
-      '/api/lectures/lecture%2F1/professor/questions?includeDeleted=true',
-      null,
+      'POST',
+      '/api/lectures/lecture%2F1/questions/clear-open',
+      { questionIds: ['1', '2'] },
     ],
-    ['POST', '/api/questions/question%2F1/restore', null],
-    ['DELETE', '/api/questions/question%2F1/permanent', null],
-    ['DELETE', '/api/lectures/lecture%2F1/questions/trash', null],
-    [
-      'PATCH',
-      '/api/questions/question%2F1/status',
-      { status: 'answered', answer: 'A saved answer' },
-    ],
+    ['PATCH', '/api/questions/question%2F1/status', { status: 'answered' }],
     ['GET', '/api/professor/summary', null],
     ['GET', '/api/professor/lectures/archive', null],
   ])

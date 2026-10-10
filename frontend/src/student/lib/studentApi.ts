@@ -10,7 +10,6 @@ export type Question = {
   status: QuestionStatus
   mine: boolean
   votedByMe: boolean
-  answer?: string | null
 }
 
 export function listQuestions(lectureId: string): Promise<Question[]> {

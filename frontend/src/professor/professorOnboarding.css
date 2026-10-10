@@ -765,3 +765,19 @@ body:has(.professor-onboarding) {
     transform: none;
   }
 }
+
+.professor-onboarding__composer button {
+  min-width: 64px;
+  width: auto;
+  padding: 0 16px;
+  font-size: 15px;
+}
+.professor-onboarding__panel-footer {
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.professor-onboarding__panel-footer .professor-onboarding__skip {
+  background: transparent;
+  color: #475569;
+  border: 1px solid #cbd5e1;
+}

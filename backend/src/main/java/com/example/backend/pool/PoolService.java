@@ -94,7 +94,7 @@ public class PoolService {
         if (!testingPermissions && !user.role().equals("student")) throw new ApiException(FORBIDDEN, "Only students may vote.");
         if (request == null || request.voted() == null) throw new ApiException(BAD_REQUEST, "Expected a voted boolean.");
         var question = repository.lockQuestion(id);
-        if (question.authorId() == user.id()) throw new ApiException(FORBIDDEN, "You cannot vote on your own question.");
+        if (question.authorId() == user.id()) throw new ApiException(FORBIDDEN, "You are not allowed to upvote your own question");
         repository.vote(id, user.id(), request.voted());
         return repository.question(question.lectureId(), id, user.id());
     }
@@ -104,11 +104,8 @@ public class PoolService {
         repository.report(id, user.id());
     }
     public List<ProfessorQuestion> professorQuestions(User user, long lecture) {
-        return professorQuestions(user, lecture, false);
-    }
-    public List<ProfessorQuestion> professorQuestions(User user, long lecture, boolean includeDeleted) {
         requireManage(user, lecture);
-        return repository.professorQuestions(lecture, user.id(), includeDeleted);
+        return repository.professorQuestions(lecture, user.id());
     }
     @Transactional
     public ProfessorQuestion status(User user, long id, Status request) {
@@ -117,9 +114,7 @@ public class PoolService {
             throw new ApiException(BAD_REQUEST, "Status must be open, selected, or answered.");
         var question = repository.lockQuestion(id);
         requireManage(user, question.lectureId());
-        String answer = request.answer() == null || request.answer().isBlank() ? null : text(request.answer(), 4000, "Answer");
-        if (answer != null && !request.status().equals("answered")) throw new ApiException(BAD_REQUEST, "Written answers require answered status.");
-        repository.status(id, request.status(), answer, request.answer() != null);
+        repository.status(id, request.status());
         return repository.professorQuestions(question.lectureId(), user.id()).stream().filter(q -> q.id().equals(Long.toString(id))).findFirst().orElseThrow();
     }
     @Transactional
@@ -149,27 +144,13 @@ public class PoolService {
             .map(l -> new ArchivedLecture(l, repository.professorQuestions(Long.parseLong(l.id()), user.id()))).toList();
     }
     @Transactional
-    public ProfessorQuestion restore(User user, long id) {
-        requireProfessor(user);
-        var question = repository.lockQuestion(id, true);
-        requireManage(user, question.lectureId());
-        repository.restore(id);
-        return repository.professorQuestions(question.lectureId(), user.id()).stream().filter(q -> q.id().equals(Long.toString(id))).findFirst().orElseThrow();
-    }
-    @Transactional
-    public void purge(User user, long id) {
-        requireProfessor(user);
-        var question = repository.lockQuestion(id, true);
-        requireManage(user, question.lectureId());
-        if (question.deletedAt() == null) throw new ApiException(CONFLICT, "Move this question to Deleted before permanently deleting it.");
-        repository.purge(id);
-    }
-    @Transactional
-    public void emptyTrash(User user, long lecture) {
-        requireProfessor(user);
-        repository.lockLecture(lecture);
+    public ClearedQuestions clearOpen(User user, long lecture, ClearQuestions request) {
         requireManage(user, lecture);
-        repository.lockTrash(lecture).forEach(repository::purge);
+        repository.lockLecture(lecture);
+        if (request == null || request.questionIds() == null || request.questionIds().size() > 30000
+                || request.questionIds().stream().anyMatch(id -> id == null || id <= 0))
+            throw new ApiException(BAD_REQUEST, "A valid snapshot of Open questions is required.");
+        return new ClearedQuestions(repository.clearOpen(lecture, request.questionIds().stream().distinct().sorted().toList()));
     }
     private void requireManage(User user, long lecture) {
         requireProfessor(user);

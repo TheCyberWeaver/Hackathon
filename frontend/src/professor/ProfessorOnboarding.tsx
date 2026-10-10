@@ -5,7 +5,6 @@ import type { CurrentUser } from '../lib/api'
 import {
   normalizedCourseTitle,
   prepareProfessorCourses,
-  saveProfessorProfile,
   type ProfessorCourse,
 } from './professorProfile'
 import './professorOnboarding.css'
@@ -51,15 +50,19 @@ function moveCourse(
 export default function ProfessorOnboarding({
   user,
   onContinue,
+  initialCourses,
 }: {
   user: CurrentUser
-  onContinue: (courses: ProfessorCourse[]) => void
+  onContinue: (courses: ProfessorCourse[]) => Promise<void>
+  initialCourses: ProfessorCourse[]
 }) {
   const [stage, setStage] = useState<Stage>('welcome')
-  const [courses, setCourses] = useState<ProfessorCourse[]>([])
+  const [courses, setCourses] = useState<ProfessorCourse[]>(initialCourses)
   const [draft, setDraft] = useState('')
   const [addError, setAddError] = useState('')
   const [saveError, setSaveError] = useState('')
+  const [saving, setSaving] = useState(false)
+  const savingRef = useRef(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editValue, setEditValue] = useState('')
   const [editError, setEditError] = useState('')
@@ -346,27 +349,37 @@ export default function ProfessorOnboarding({
     )
   }
 
-  function finishSetup() {
-    if (stage !== 'courses' || courseDrag || editingId) return
-    const prepared = prepareProfessorCourses(courses, draft)
+  async function finishSetup(skip = false) {
+    if (
+      stage !== 'courses' ||
+      courseDrag ||
+      (!skip && editingId) ||
+      savingRef.current
+    )
+      return
+    const prepared = skip
+      ? { ok: true as const, courses }
+      : prepareProfessorCourses(courses, draft)
     if (prepared.ok === false) {
       setAddError(prepared.error)
-      addInputRef.current?.focus({ preventScroll: true })
+      addInputRef.current?.focus()
       return
     }
-    if (!saveProfessorProfile(user.id, prepared.courses)) {
-      setSaveError('We could not save your courses in this browser. Try again.')
-      return
-    }
-    setCourses(prepared.courses)
-    setDraft('')
-    setAddError('')
+    savingRef.current = true
+    setSaving(true)
     setSaveError('')
-    setStage(
-      window.matchMedia('(prefers-reduced-motion: reduce)').matches
-        ? 'success'
-        : 'finishing',
-    )
+    try {
+      await onContinue(prepared.courses)
+    } catch (error) {
+      setSaveError(
+        error instanceof Error
+          ? error.message
+          : 'Could not save your courses. Try again.',
+      )
+    } finally {
+      savingRef.current = false
+      setSaving(false)
+    }
   }
 
   const canFinish =
@@ -401,7 +414,7 @@ export default function ProfessorOnboarding({
             className="professor-onboarding__setup"
             style={{ '--course-rise': courseRise } as CSSProperties}
             aria-labelledby="course-setup-title"
-            inert={stage === 'finishing'}
+            inert={stage === 'finishing' || saving}
             onPointerMove={dragOverCourse}
             onPointerUp={endDrag}
             onPointerCancel={endDrag}
@@ -445,7 +458,7 @@ export default function ProfessorOnboarding({
                     aria-label="Add course"
                     disabled={!draft.trim()}
                   >
-                    <span aria-hidden="true">+</span>
+                    Add
                   </button>
                 </div>
                 {addError && (
@@ -564,10 +577,19 @@ export default function ProfessorOnboarding({
               <div className="professor-onboarding__panel-footer">
                 <button
                   type="button"
-                  onClick={finishSetup}
-                  disabled={!canFinish}
+                  onClick={() => void finishSetup(true)}
+                  disabled={saving || Boolean(courseDrag)}
+                  className="professor-onboarding__skip"
                 >
-                  Done <span aria-hidden="true">→</span>
+                  Skip for now
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void finishSetup()}
+                  disabled={!canFinish || saving}
+                >
+                  {saving ? 'Saving…' : 'Done'}{' '}
+                  <span aria-hidden="true">→</span>
                 </button>
               </div>
               {saveError && (
