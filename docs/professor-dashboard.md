@@ -2,7 +2,7 @@
 
 The merged dashboard uses the Java API through `frontend/src/professor/professorApi.ts` and the shared transport. Mock question/archive data and browser-local session controls have been replaced with PostgreSQL records.
 
-Create a lecture with a title and optional course, then start it. The lecture picker preserves join links and selection. Start, pause, resume, and end are shared across browsers. Pausing disables the student composer and the API rejects new submissions. Ending preserves the question pool in Past Lectures instead of resetting it.
+Choose a course on the separate start page (or enter another name); the UI creates and starts a Java lecture with that course. The invite page displays its numeric lecture ID as the join code and a QR link; Go to questions opens the live pool. The active dashboard has Show join code, not a course switcher. Start, pause, resume, and end are shared across browsers. Pausing disables the student composer and the API rejects new submissions. Ending makes the ID unjoinable, clears students' saved selections, and preserves the question pool in Past Lectures. Java persists the selected lecture per student, but question endpoints do not enforce enrollment.
 
 Open, Answered, and Deleted tabs use saved status and deletion timestamps. Sort by most votes (earlier questions first on ties) or newest first; ID resolves remaining ties. The top-three decoration continues to use vote ranking regardless of display sort. Cards display question text, votes, and submission time without student names. Expanded cards show report counts and an optional written-answer editor. Marking unanswered clears the saved answer and answer timestamp.
 

@@ -38,8 +38,174 @@ async function clients(baseUrl = '') {
       '../../lib/poolApi',
     ),
     professor: await load('../src/professor/professorApi.ts', '../lib/poolApi'),
+    sessions: await load('../src/lib/sessions.ts', './poolApi'),
   }
 }
+
+test('QR join uses lecture IDs and saves the selected course through Java', async (t) => {
+  const api = await clients()
+  const requests = []
+  let savedSession = null
+  const storageDescriptor = Object.getOwnPropertyDescriptor(
+    globalThis,
+    'localStorage',
+  )
+  Object.defineProperty(globalThis, 'localStorage', {
+    configurable: true,
+    get() {
+      assert.fail('Lecture selection must be stored by the backend')
+    },
+  })
+  t.after(() => {
+    if (storageDescriptor)
+      Object.defineProperty(globalThis, 'localStorage', storageDescriptor)
+    else delete globalThis.localStorage
+  })
+  t.mock.method(globalThis, 'fetch', async (url, init) => {
+    requests.push([init.method ?? 'GET', url, init.body ?? null, init])
+    const session = {
+      id: '42',
+      code: '42',
+      course: 'Algorithms',
+      startedAt: '2026-10-10T10:00:00Z',
+    }
+    if (url === '/api/sessions/mine' && init.method === 'DELETE') {
+      savedSession = null
+      return new Response(null, { status: 204 })
+    }
+    if (url === '/api/sessions/mine')
+      return new Response(JSON.stringify({ session: savedSession }), {
+        status: 200,
+      })
+    if (url === '/api/sessions/join') {
+      savedSession = session
+      return new Response(JSON.stringify(session), { status: 200 })
+    }
+    return new Response(
+      JSON.stringify({
+        ...session,
+        title: 'Algorithms',
+        endedAt: null,
+        canManage: true,
+      }),
+      { status: 200 },
+    )
+  })
+  assert.equal(api.sessions.parseJoinCode('42'), '42')
+  assert.equal(
+    api.sessions.parseJoinCode('https://example.org/student/join?code=42'),
+    '42',
+  )
+  assert.equal(
+    api.sessions.parseJoinCode('https://example.org/other?code=42'),
+    null,
+  )
+  assert.equal(api.sessions.parseJoinCode('ABC!-2345'), null)
+  assert.equal((await api.sessions.getSessionInvite('42')).code, '42')
+  assert.equal(await api.sessions.getJoinedSession(), null)
+  assert.equal((await api.sessions.joinSession('42')).id, '42')
+  assert.equal((await api.sessions.getJoinedSession()).course, 'Algorithms')
+  await api.sessions.leaveJoinedSession()
+  assert.equal(await api.sessions.getJoinedSession(), null)
+  assert.deepEqual(
+    requests.map(([method, url]) => [method, url]),
+    [
+      ['GET', '/api/lectures/42'],
+      ['GET', '/api/sessions/mine'],
+      ['POST', '/api/sessions/join'],
+      ['GET', '/api/sessions/mine'],
+      ['DELETE', '/api/sessions/mine'],
+      ['GET', '/api/sessions/mine'],
+    ],
+  )
+  assert.deepEqual(JSON.parse(requests[2][2]), { code: '42' })
+  for (const [, , , init] of requests) {
+    assert.equal(init.credentials, 'same-origin')
+    assert.equal(new Headers(init.headers).has('X-User-Id'), false)
+  }
+})
+
+test('onboarding course creates a backend lecture and uses its numeric ID for the QR invite', async (t) => {
+  const api = await clients()
+  const calls = []
+  let lecture
+  t.mock.method(globalThis, 'fetch', async (url, init) => {
+    calls.push([init.method ?? 'GET', url, init.body])
+    if (url === '/api/lectures') {
+      lecture = {
+        ...JSON.parse(init.body),
+        id: '51',
+        canManage: true,
+        startedAt: null,
+        endedAt: null,
+        questionsPaused: false,
+      }
+      return new Response(JSON.stringify(lecture), { status: 201 })
+    }
+    if (url === '/api/lectures/51/session')
+      lecture = { ...lecture, startedAt: '2026-10-10T10:00:00Z' }
+    return new Response(JSON.stringify(lecture), { status: 200 })
+  })
+  const selected = {
+    id: 'onboarding-course-uuid',
+    title: 'HS26 Linear Algebra',
+  }
+  const started = await api.professor.startCourseSession(selected)
+  const invite = await api.sessions.getSessionInvite(started.id)
+  assert.deepEqual(invite, {
+    id: '51',
+    code: '51',
+    course: selected.title,
+    startedAt: '2026-10-10T10:00:00Z',
+  })
+  assert.deepEqual(
+    calls.map(([method, url]) => [method, url]),
+    [
+      ['POST', '/api/lectures'],
+      ['PATCH', '/api/lectures/51/session'],
+      ['GET', '/api/lectures/51'],
+    ],
+  )
+  const created = JSON.parse(calls[0][2])
+  assert.equal(created.title, selected.title)
+  assert.equal(created.course, selected.title)
+  assert.ok(Number.isFinite(Date.parse(created.lectureTime)))
+  assert.deepEqual(JSON.parse(calls[1][2]), { action: 'start' })
+})
+
+test('failed course creation does not attempt to start a session', async (t) => {
+  const api = await clients()
+  const calls = []
+  t.mock.method(globalThis, 'fetch', async (url) => {
+    calls.push(url)
+    return new Response(JSON.stringify({ error: 'Could not save lecture.' }), {
+      status: 503,
+    })
+  })
+  await assert.rejects(
+    api.professor.startCourseSession({ id: 'course-id', title: 'Algorithms' }),
+    /Could not save lecture/,
+  )
+  assert.deepEqual(calls, ['/api/lectures'])
+})
+
+test('ended lectures are rejected by the backend without changing the selected lecture', async (t) => {
+  const api = await clients()
+  t.mock.method(
+    globalThis,
+    'fetch',
+    async () =>
+      new Response(
+        JSON.stringify({
+          error: 'This lecture ID is invalid or the lecture has ended.',
+        }),
+        { status: 404 },
+      ),
+  )
+  await assert.rejects(api.sessions.joinSession('42'), /ended/)
+  assert.equal(api.sessions.parseJoinCode('042'), null)
+  assert.equal(api.sessions.parseJoinCode('9'.repeat(20)), null)
+})
 
 test('Java API clients use lecture routes and proxy identity without browser identity', async (t) => {
   const api = await clients()

@@ -2,7 +2,7 @@
 [CmdletBinding()]
 param(
     [string]$SshHost = 'viscon-2026',
-    [string]$VmPassword = 'X9xfZcQGTeTnxguX5eTs',
+    [string]$VmPassword = $env:ASKPOOL_VM_PASSWORD,
     [string]$JdkPath,
     [string]$DatabaseUrl = 'jdbc:postgresql://postgres:5432/askpool',
     [string]$AppPasswordFile = '',
@@ -87,6 +87,7 @@ try {
     Invoke-Checked 'npm.cmd' @('--prefix', 'frontend', 'run', 'build')
     Invoke-Checked 'npm.cmd' @('--prefix', 'frontend', 'run', 'lint')
     Invoke-Checked 'npm.cmd' @('--prefix', 'frontend', 'run', 'test:api')
+    Invoke-Checked 'npm.cmd' @('--prefix', 'frontend', 'run', 'test:professor-profile')
 
     Write-Host 'Building and testing backend with Java 21...'
     Push-Location (Join-Path $repoRoot 'backend')

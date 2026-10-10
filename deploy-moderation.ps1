@@ -2,7 +2,7 @@
 [CmdletBinding()]
 param(
     [string]$SshHost = 'viscon-2026',
-    [string]$VmPassword = 'X9xfZcQGTeTnxguX5eTs',
+    [string]$VmPassword = $env:ASKPOOL_VM_PASSWORD,
     [switch]$BuildOnly,
     [switch]$CheckConnection,
     [switch]$ValidateOnly,

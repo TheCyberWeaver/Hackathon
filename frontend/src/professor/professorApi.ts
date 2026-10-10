@@ -1,5 +1,20 @@
-import { request, type Lecture } from '../lib/poolApi'
+import {
+  changeLectureSession,
+  createLecture,
+  request,
+  type Lecture,
+} from '../lib/poolApi'
 import type { QuestionStatus } from '../student/lib/studentApi'
+import type { ProfessorCourse } from './professorProfile'
+
+export async function startCourseSession(course: ProfessorCourse) {
+  const created = await createLecture(
+    course.title,
+    new Date().toISOString(),
+    course.title,
+  )
+  return changeLectureSession(created.id, 'start')
+}
 
 export type Question = {
   id: string

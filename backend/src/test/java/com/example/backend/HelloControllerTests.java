@@ -34,9 +34,11 @@ class HelloControllerTests extends PostgresTestSupport {
 
     @Test
     void unlistedOriginIsRejected() throws Exception {
-        var response = send(preflight("https://unlisted.example.com"));
-        assertEquals(403, response.statusCode());
-        assertTrue(response.headers().firstValue("access-control-allow-origin").isEmpty());
+        for (String origin : new String[]{"https://unlisted.example.com", "http://127.0.0.1:5173"}) {
+            var response = send(preflight(origin));
+            assertEquals(403, response.statusCode());
+            assertTrue(response.headers().firstValue("access-control-allow-origin").isEmpty());
+        }
     }
 
     private URI endpoint() { return URI.create("http://localhost:" + port + "/api/hello"); }

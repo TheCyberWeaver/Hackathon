@@ -12,6 +12,30 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class MigrationTests extends PostgresTestSupport {
     @Test
+    void upgradesModerationDatabaseToLectureMembershipWithoutLosingData() {
+        String schema = "upgrade_" + UUID.randomUUID().toString().replace("-", "");
+        String url = POSTGRES.getJdbcUrl("postgres", "postgres");
+        var admin = new JdbcTemplate(new DriverManagerDataSource(url, "postgres", ""));
+        admin.execute("CREATE SCHEMA " + schema);
+        try {
+            var source = new DriverManagerDataSource(url + (url.contains("?") ? "&" : "?") + "currentSchema=" + schema, "postgres", "");
+            var db = new JdbcTemplate(source);
+            Flyway.configure().dataSource(source).schemas(schema).target("7").load().migrate();
+            long user = db.queryForObject("INSERT INTO users (eth_identity_ref) VALUES ('upgrade-student') RETURNING id", Long.class);
+            long lecture = db.queryForObject("INSERT INTO lectures (title, lecture_time, owner_id) VALUES ('Upgrade lecture', CURRENT_TIMESTAMP, ?) RETURNING id", Long.class, user);
+            db.update("INSERT INTO question_moderation_warnings (lecture_id, user_id, reason) VALUES (?, ?, 'moderation_service')", lecture, user);
+
+            var flyway = Flyway.configure().dataSource(source).schemas(schema).load();
+            assertEquals(1, flyway.migrate().migrationsExecuted);
+            assertEquals("moderation_service", db.queryForObject("SELECT reason FROM question_moderation_warnings", String.class));
+            assertNotNull(db.queryForObject("SELECT join_code FROM lectures WHERE id = ?", String.class, lecture));
+            db.update("INSERT INTO lecture_memberships (user_id, lecture_id) VALUES (?, ?)", user, lecture);
+            assertEquals(lecture, db.queryForObject("SELECT lecture_id FROM lecture_memberships WHERE user_id = ?", Long.class, user));
+            assertEquals(0, flyway.migrate().migrationsExecuted);
+        } finally { admin.execute("DROP SCHEMA " + schema + " CASCADE"); }
+    }
+
+    @Test
     void adoptsTheExistingSchemaOnlyWhenExplicitlyEnabledAndKeepsItsData() throws Exception {
         String schema = "adoption_" + UUID.randomUUID().toString().replace("-", "");
         String url = POSTGRES.getJdbcUrl("postgres", "postgres");
@@ -38,6 +62,7 @@ class MigrationTests extends PostgresTestSupport {
             assertEquals(false, db.queryForObject("SELECT selected FROM questions", Boolean.class));
             assertTrue(db.queryForObject("SELECT started_at = lecture_time FROM lectures", Boolean.class));
             assertEquals(false, db.queryForObject("SELECT questions_paused FROM lectures", Boolean.class));
+            assertEquals(0L, db.queryForObject("SELECT count(*) FROM lecture_memberships", Long.class));
             assertThrows(org.springframework.dao.DataIntegrityViolationException.class,
                 () -> db.update("UPDATE questions SET answer = 'An unanswered question cannot have a written answer'"));
             assertEquals(0L, db.queryForObject("SELECT count(*) FROM question_votes", Long.class));

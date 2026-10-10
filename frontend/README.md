@@ -7,7 +7,7 @@ from the repository root. See [local setup](../docs/Local_Development.md).
 
 Run `npm ci`, then `npm run dev`. Start Java on port 8080 with PostgreSQL configured. Vite proxies all API routes to Java and injects a fictional student identity in development. Disable with `ASKPOOL_DEMO_AUTH=false` in `.env.local` when using managed login. Set `APP_TESTING_PERMISSIONS=true` in the Java terminal to let the same identity use every role; the VM deployment enables this testing mode by default. When disabled, professor rights must be assigned in the database.
 
-Professors create lectures and share `/student?lecture=<id>` links. Students select lectures, submit one question per lecture, vote, and report. Professors see authors/reports, select, answer, reopen, and hide questions. Both dashboards refresh every five seconds. The professor archive opens persisted pools; written answers and QR images are not implemented. Both lecture archives open saved question pools.
+Professors choose a course (or enter another) to create and start a lecture, then share its numeric lecture ID or QR link. Students enter the ID or scan the QR to select an active lecture; Leave lecture returns them to the code-entry page. Java/PostgreSQL stores one selected lecture per signed-in student, so it reappears on another device. Question endpoints do not enforce enrollment. Students can submit multiple questions, vote, and report. Professors see authors/reports, select, answer, reopen, and hide questions. Both dashboards refresh lecture and question data. The professor archive opens persisted pools with written answers.
 
 Run `npm run build`, `npm run lint`, and `npm run test:api`. The client tests
 cover lecture routes, proxy identity, shared transport, errors, and no-content

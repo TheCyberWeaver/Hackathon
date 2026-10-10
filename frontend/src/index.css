@@ -46,83 +46,288 @@ button:focus-visible {
   min-height: 100svh;
   display: grid;
   place-items: center;
-  padding: 32px;
+  padding: clamp(16px, 4vw, 48px);
   color: #0f172a;
   background: #f7f8fc;
 }
 
-.entry-content {
-  margin-top: -40px;
-  text-align: center;
+.entry-shell {
+  width: min(100%, 920px);
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  overflow: hidden;
+  border: 1px solid #dfe6f0;
+  border-radius: 20px;
+  background: #fff;
+  box-shadow: 0 24px 60px rgb(15 23 42 / 7%);
 }
 
-.entry-content h1 {
-  margin: 0 0 36px;
-  font-size: clamp(56px, 8vw, 80px);
-  font-weight: 650;
-  letter-spacing: -0.04em;
-  line-height: 1.1;
-}
-
-.entry-actions {
+.entry-intro {
   display: flex;
-  gap: 14px;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 48px;
+  padding: clamp(32px, 5vw, 56px);
+  background: #edf3ff;
 }
 
-.entry-button {
-  min-width: 160px;
-  min-height: 48px;
-  padding: 15px 28px;
-  border: 1px solid transparent;
-  border-radius: 12px;
+.entry-brand {
+  color: #1d4ed8;
+  font-size: 20px;
+  font-weight: 750;
+  letter-spacing: 0.12em;
+}
+
+.entry-eyebrow,
+.entry-step {
+  margin: 0;
+  color: #1d4ed8;
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: 0.16em;
+}
+
+.entry-intro h1 {
+  max-width: 11ch;
+  margin: 14px 0 18px;
+  font-size: clamp(36px, 4vw, 52px);
+  font-weight: 700;
+  letter-spacing: -0.045em;
+  line-height: 1.08;
+}
+
+.entry-intro-copy {
+  max-width: 32ch;
+  margin: 0;
+  color: #475569;
   font-size: 15px;
-  font-weight: 600;
+  line-height: 1.7;
+}
+
+.entry-footnote {
+  margin: 0;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.entry-content {
+  padding: clamp(32px, 5vw, 56px);
+}
+
+.entry-content h2 {
+  margin: 10px 0 8px;
+  font-size: clamp(26px, 3vw, 32px);
+  font-weight: 700;
+  letter-spacing: -0.035em;
+}
+
+.entry-guidance {
+  margin: 0;
+  color: #64748b;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.entry-identity {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 42px;
+  margin: 24px 0;
+  padding: 9px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #f8fafc;
+  color: #475569;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.entry-identity-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #94a3b8;
+}
+
+.entry-identity-ready {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+  color: #166534;
+}
+
+.entry-identity-ready .entry-identity-dot {
+  background: #16a34a;
+}
+
+.entry-identity-error {
+  border-color: #fecaca;
+  background: #fef2f2;
+  color: #991b1b;
+}
+
+.entry-identity-error .entry-identity-dot {
+  background: #dc2626;
+}
+
+.entry-roles {
+  display: grid;
+  gap: 12px;
+}
+
+.entry-role {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  min-height: 88px;
+  padding: 15px;
+  border: 1px solid #dce4ee;
+  border-radius: 12px;
+  background: #fff;
+  text-align: left;
   transition:
-    background 180ms ease-out,
-    transform 180ms ease-out;
+    border-color 150ms ease-out,
+    background 150ms ease-out,
+    box-shadow 150ms ease-out;
 }
 
-.entry-button:hover:not(:disabled) {
-  transform: translateY(-2px);
+.entry-role:hover {
+  border-color: #93b4ef;
+  background: #f8fbff;
 }
 
-.entry-button:disabled {
-  opacity: 0.5;
-  cursor: wait;
+.entry-role-selected,
+.entry-role-selected:hover {
+  border-color: #2563eb;
+  background: #eff6ff;
+  box-shadow: 0 0 0 1px #2563eb;
 }
 
-.student-button {
+.entry-role-icon {
+  display: grid;
+  flex: none;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border-radius: 10px;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.entry-role-icon-professor {
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.entry-role-icon svg {
+  width: 22px;
+  height: 22px;
+}
+
+.entry-role-copy {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.entry-role-copy strong {
+  font-size: 15px;
+}
+
+.entry-role-copy > span {
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.entry-role-check {
+  display: grid;
+  flex: none;
+  width: 22px;
+  height: 22px;
+  margin-left: auto;
+  place-items: center;
+  border: 1px solid #cbd5e1;
+  border-radius: 50%;
   color: #fff;
-  background: #1d4ed8;
+  font-size: 13px;
+  font-weight: 700;
 }
 
-.student-button:hover:not(:disabled) {
+.entry-role-selected .entry-role-check {
+  border-color: #2563eb;
+  background: #2563eb;
+}
+
+.entry-continue {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  min-height: 50px;
+  margin-top: 24px;
+  padding: 12px 18px;
+  border: 0;
+  border-radius: 10px;
+  background: #1d4ed8;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 650;
+  transition: background 150ms ease-out;
+}
+
+.entry-continue:hover:not(:disabled) {
   background: #1e40af;
 }
 
-.professor-button {
-  color: #1d4ed8;
-  background: #fff;
-  border-color: #e2e8f0;
+.entry-continue:disabled {
+  background: #cbd5e1;
+  color: #475569;
+  cursor: not-allowed;
 }
 
-.professor-button:hover:not(:disabled) {
-  background: #eff6ff;
+.entry-disclaimer {
+  margin: 14px 0 0;
+  color: #64748b;
+  font-size: 11px;
+  line-height: 1.5;
 }
 
-@media (max-width: 480px) {
-  .entry-actions {
-    flex-direction: column;
-    gap: 12px;
+@media (max-width: 760px) {
+  .entry-shell {
+    grid-template-columns: 1fr;
   }
 
-  .entry-button {
-    min-width: 220px;
+  .entry-intro {
+    gap: 26px;
+    padding: 28px;
+  }
+
+  .entry-intro h1 {
+    max-width: none;
+    margin-bottom: 10px;
+    font-size: clamp(32px, 8vw, 42px);
+  }
+
+  .entry-intro-copy {
+    max-width: 55ch;
+  }
+
+  .entry-footnote {
+    display: none;
+  }
+
+  .entry-content {
+    padding: 32px 28px;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .entry-button {
+  .entry-role,
+  .entry-continue {
     transition: none;
   }
 }
