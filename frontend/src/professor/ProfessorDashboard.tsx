@@ -698,15 +698,27 @@ export default function ProfessorDashboard({ user }: { user: CurrentUser }) {
               aria-label="Session controls"
               className="mt-5 flex flex-wrap gap-2 min-[720px]:mt-0 min-[720px]:shrink-0"
             >
-              <button
-                type="button"
-                aria-pressed={questionsPaused}
-                onClick={toggleQuestionIntake}
-                disabled={busyId !== null}
-                className="min-h-11 rounded-lg border border-blue-200 bg-blue-50 px-3.5 py-2 text-sm font-semibold text-blue-700 transition-colors hover:border-blue-300 hover:bg-blue-100 hover:text-blue-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
-              >
-                {questionsPaused ? 'Resume questions' : 'Pause questions'}
-              </button>
+              <span className="group relative inline-flex">
+                <button
+                  type="button"
+                  aria-pressed={questionsPaused}
+                  aria-describedby="question-intake-action-description"
+                  onClick={toggleQuestionIntake}
+                  disabled={busyId !== null}
+                  className="min-h-11 rounded-lg border border-blue-200 bg-blue-50 px-3.5 py-2 text-sm font-semibold text-blue-700 transition-colors hover:border-blue-300 hover:bg-blue-100 hover:text-blue-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+                >
+                  {questionsPaused ? 'Resume questions' : 'Pause questions'}
+                </button>
+                <span
+                  id="question-intake-action-description"
+                  role="tooltip"
+                  className="pointer-events-none invisible absolute left-0 top-full z-30 mt-2 w-60 max-w-[calc(100vw-2rem)] rounded-lg bg-slate-900 px-3 py-2 text-xs leading-5 font-medium text-white opacity-0 shadow-lg transition-opacity group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100 min-[720px]:left-auto min-[720px]:right-0"
+                >
+                  {questionsPaused
+                    ? 'Allow students to submit new questions again.'
+                    : 'Pause new question submissions. Existing questions stay visible.'}
+                </span>
+              </span>
               <button
                 ref={endTriggerRef}
                 type="button"
