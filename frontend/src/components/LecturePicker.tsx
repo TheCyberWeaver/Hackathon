@@ -20,9 +20,6 @@ export default function LecturePicker({
   const [course, setCourse] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  const joinLink = lectureId
-    ? `${window.location.origin}/student?lecture=${encodeURIComponent(lectureId)}`
-    : ''
   return (
     <div className="my-4 space-y-3 text-sm">
       <label className="flex flex-wrap items-center gap-2">
@@ -96,14 +93,6 @@ export default function LecturePicker({
             onChange={(event) => setCourse(event.target.value)}
           />
         </form>
-      )}
-      {onCreated && joinLink && (
-        <p>
-          Student join link:{' '}
-          <a className="break-all text-blue-700 underline" href={joinLink}>
-            {joinLink}
-          </a>
-        </p>
       )}
       {error && <p role="alert">{error}</p>}
     </div>

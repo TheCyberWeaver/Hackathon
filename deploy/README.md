@@ -1,60 +1,12 @@
 # Java + PostgreSQL deployment
 
-## Moderation service
-
-The release now includes a private CPU moderation container. Java checks a
-question for abusive language before saving it; general and off-topic questions
-are accepted. Service failures
-allow submissions. See [the moderation API and policy](../moderation/README.md).
-
-The tracked [deploy-moderation.ps1](../deploy-moderation.ps1) follows the existing
-local deployment workflow and deploys frontend, Java, and moderation together:
-
-```powershell
-# Build, test and package locally, without connecting to the VM.
-.\deploy-moderation.ps1 -BuildOnly -SkipInstall
-# Check VM prerequisites, without deploying.
-.\deploy-moderation.ps1 -CheckConnection
-# Validate a candidate with its own disposable database.
-.\deploy-moderation.ps1 -ValidateOnly -SkipInstall
-# Deploy the integrated release.
-.\deploy-moderation.ps1 -SkipInstall
-```
-
-Authentication defaults to your OpenSSH keys/agent and the `viscon-2026` alias.
-If this VM uses password authentication, set `ASKPOOL_VM_PASSWORD` in your local
-terminal or supply `-VmPassword`; it uses the same Paramiko transport as the
-ignored local helper. Host keys must already be verified in `known_hosts`.
-The tracked script contains no credentials and does not package credentials.
-`-SshHost`, `-JdkPath`, `-DatabaseUrl`, `-AppPasswordFile`, and
-`-BaselineDatabase` work like the existing helper. `-SkipInstall` reuses existing
-frontend and moderation dependencies; a missing Python environment is created.
-Python 3.12+ is needed locally for moderation tests, alongside JDK 21, Node,
-OpenSSH, and tar. The server needs Docker Compose with image build support.
-
-The bundle contains moderation source and its Dockerfile. On the server the
-script builds a release-tagged image, baking in the quantized model from Hugging
-Face. The image explicitly grants its app user read access to source and model
-files, then checks API import and model inference as that user during the build.
-The running service uses only cached model files. A healthy candidate must
-pass real-model HTTP smoke checks and a Java submission check (accepted saved,
-rejected not saved) before production is changed. Production is
-checked again after switching; failure restores the previous application release
-and its moderation image tag. Database backup/adoption behavior is retained.
-
-Use `-ModerationThreshold 0.98` to make the filter more permissive, or adjust
-`MODERATION_THRESHOLD` in a release's `.env` and recreate its moderation service.
-The default `0.95` rejects only high-confidence toxicity predictions. Tune it
-with real questions. The smoke check must still pass at the chosen setting. The model image
-build requires package/model download access. No public moderation port is added.
-
-## Application deployment
-
-Caddy serves the frontend and proxies all `/api/*` to Java. Java joins the external `askpool_shared` network. The managed address https://08.hackathon.ethz.ch provides TLS/login. Java and PostgreSQL must have no public ports. The Node demo API is no longer deployed; its old data volume is neither migrated nor removed.
+Caddy serves the frontend and proxies all `/api/*` to Java. The QR/code UI uses existing lecture IDs, and Java stores each student's selected lecture in PostgreSQL. Java joins the external `askpool_shared` network. The managed address https://08.hackathon.ethz.ch provides TLS/login. Java and PostgreSQL must have no public ports. The Node demo API is no longer deployed; its old data volume is neither migrated nor removed.
 
 ## Adopt the supplied VM schema
 
-Back up the database. V1 matches the supplied schema; V2 adds lecture ownership, selection, soft deletion, votes, and reports. Do not run V1 again on the existing database.
+Back up the database. V1 matches the supplied schema; later migrations add ownership, moderation, lecture sessions, and student lecture selections. Do not run V1 again on the existing database.
+
+V6 is byte-for-byte identical to the earlier join-code migration so databases that already applied it retain valid Flyway history. The UI and join API use numeric lecture IDs; V6's generated `join_code` column is unused. Its `lecture_memberships` table stores the selected lecture per student.
 
 Verify the three tables match V1 and are owned by `askpool_app`. Changing the database owner does not transfer existing table ownership. If initial SQL ran as postgres, run this from the database Compose directory:
 
@@ -79,15 +31,15 @@ docker compose up -d
 docker compose logs --tail 100 backend
 ```
 
-Flyway baselines at V1 and applies V2 transactionally. Remove DATABASE_BASELINE after successful startup; the default is false. On an empty database leave it false, and both migrations run. Baseline does not validate that an untracked schema matches V1; verify first. See the [official Flyway baseline reference](https://documentation.red-gate.com/flyway/reference/commands/baseline).
+Flyway baselines at V1 and applies pending migrations transactionally. Remove DATABASE_BASELINE after successful startup; the default is false. On an empty database leave it false so all migrations run. Baseline does not validate that an untracked schema matches V1; verify first. See the [official Flyway baseline reference](https://documentation.red-gate.com/flyway/reference/commands/baseline).
 
 ## Professor permissions
 
 The hackathon deployment currently defaults to `APP_TESTING_PERMISSIONS=true`:
 all signed-in users can submit, vote, create lectures, view authors/reports in
 the professor dashboard, and manage every lecture. This allows the same account
-to test both dashboards without changing database roles. The one-question quota
-and self-vote restriction still apply.
+to test both dashboards without changing database roles. The self-vote
+restriction still applies.
 
 To restore role/owner checks on the VM, set `APP_TESTING_PERMISSIONS=false` in
 the release `.env`, then run `docker compose -p hackathon up -d backend`.
@@ -111,7 +63,7 @@ WHERE id = 123;
 
 ## Verification and rollout
 
-Java tests start an isolated PostgreSQL instance and test empty databases, V1 adoption, permissions, privacy, voting, quota races, and moderation without contacting the VM. Verify `/api/hello`, unauthenticated 401 for `/api/lectures`, managed login, professor creation, student joining/submission, voting/reports, and answer synchronization.
+Java tests start an isolated PostgreSQL instance and test empty databases, V1 adoption, permissions, privacy, voting, lecture lifecycle, submission races, and moderation without contacting the VM. Verify `/api/hello`, unauthenticated 401 for `/api/lectures`, managed login, professor creation, student lecture selection/submission, voting/reports, and answer synchronization.
 
 The ignored local `deploy-local.ps1` builds/lints the frontend, runs `test:api`,
 tests/builds Java, and packages only Java and frontend assets. It prepares the
@@ -150,7 +102,7 @@ PostgreSQL client matching the server's major version, then switches and checks
 production. Baseline is disabled again after successful startup. Runtime
 configuration is saved in the release `.env` for later Compose commands.
 
-Retain PostgreSQL backups/volumes. V2 is additive and keeps the original answer constraint. A rollback to the former Node deployment shows its separate demo store while PostgreSQL data remains intact. Do not remove either data volume during rollout or rollback.
+Retain PostgreSQL backups/volumes. The migrations are additive and keep the original answer constraint. A rollback to the former Node deployment shows its separate demo store while PostgreSQL data remains intact. Do not remove either data volume during rollout or rollback.
 
 V3 handles the older VM schema where `lectures.professor_id` is required.
 It backfills missing `owner_id` values and installs an insert trigger to populate

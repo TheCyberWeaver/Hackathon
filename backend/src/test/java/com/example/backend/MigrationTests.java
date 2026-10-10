@@ -38,6 +38,7 @@ class MigrationTests extends PostgresTestSupport {
             assertEquals(false, db.queryForObject("SELECT selected FROM questions", Boolean.class));
             assertTrue(db.queryForObject("SELECT started_at = lecture_time FROM lectures", Boolean.class));
             assertEquals(false, db.queryForObject("SELECT questions_paused FROM lectures", Boolean.class));
+            assertEquals(0L, db.queryForObject("SELECT count(*) FROM lecture_memberships", Long.class));
             assertThrows(org.springframework.dao.DataIntegrityViolationException.class,
                 () -> db.update("UPDATE questions SET answer = 'An unanswered question cannot have a written answer'"));
             assertEquals(0L, db.queryForObject("SELECT count(*) FROM question_votes", Long.class));

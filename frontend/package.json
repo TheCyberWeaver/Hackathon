@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "eslint . --max-warnings 0",
     "test:api": "node --test scripts/api-client.test.mjs",
+    "test:professor-profile": "node --test scripts/professor-profile.test.mjs scripts/course-chooser.test.mjs",
     "test:student-api": "node --test scripts/student-api.test.mjs",
     "reset-data": "node server/student-api/reset.mjs",
     "preview": "node scripts/dev.mjs --preview",
@@ -15,6 +16,8 @@
     "format:check": "prettier --check ."
   },
   "dependencies": {
+    "@zxing/browser": "^0.2.1",
+    "@zxing/library": "^0.23.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"
   },
