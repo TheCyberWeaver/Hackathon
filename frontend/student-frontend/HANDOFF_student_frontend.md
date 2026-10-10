@@ -1,6 +1,6 @@
 # Handoff to Codex: AskPool student frontend (clickable demo)
 
-Status: v2, owner decisions folded in (ktr0a, 2026-10-10). Where this file marks something as "default", the owner has not objected, so treat it as the instruction.
+Status: v3, owner decisions folded in (2026-10-10). Where this file marks something as "default", the owner has not objected, so treat it as the instruction.
 
 **Goal of this task in one sentence:** a polished, clickable student-side demo that the rest of the team can open to see how AskPool would look and feel on mobile and desktop. Visual and interaction fidelity matters far more than completeness or architecture.
 
@@ -10,7 +10,7 @@ Status: v2, owner decisions folded in (ktr0a, 2026-10-10). Where this file marks
 
 **AskPool** is a live classroom Q&A platform. Students join a lecture session by QR code or link, ask questions **anonymously** into a shared pool, and **upvote** questions they also want answered. Questions are ranked by votes and submission time. A professor works through the pool on a separate dashboard and marks questions selected or answered.
 
-Pitch: *An anonymous classroom question pool where students ask, classmates vote, and professors respond to what matters most.*
+Pitch: _An anonymous classroom question pool where students ask, classmates vote, and professors respond to what matters most._
 
 Product rules (from `Project_Guideline.md`) that matter for the student UI:
 
@@ -77,7 +77,7 @@ Design mobile first at **390x844**, then desktop at **1920x1080**. One scrollabl
 
 Triggered when the input gets focus (on mobile, the keyboard opens).
 
-- The textbox **moves up** so its top sits between **1/5 and 1/3 of the visible viewport height** (visible = above the keyboard; use `visualViewport`), then **expands downward with the length of the text** (auto-growing textarea).
+- The textbox **moves up** so its top sits between **1/5 and 1/3 of the visible viewport height** (visible = above the keyboard; use `visualViewport`), then **expands downward with the length of the text** (auto-growing textarea). It also shrinks when lines are deleted and returns to its resting height as soon as a question is sent.
 - Both movement and growth use **out-quadratic easing**.
 - **Send button**: a circle with an arrow inside the textbox at the bottom right. Grey and disabled while empty; **lights up in the accent color once there is at least 1 character**.
 - **Character counter** `n/200` under the send button. It **fades in linearly** as the user approaches the limit (not shown at the start; starts fading in at 80% of max). Hard stop at **200 characters**.
@@ -85,16 +85,16 @@ Triggered when the input gets focus (on mobile, the keyboard opens).
 
 ### 5.4 After sending
 
-Trigger: tap Send, then a **200 ms delay**.
+Trigger: tap Send, then a **200 ms delay** before scrolling.
 
-1. The question is posted to the server and added to "Your questions"; the input clears and collapses.
-2. After the delay, **the entire page section scrolls up**, so the question box moves out of view and the **Other Questions** list fills the screen.
+1. Immediately clear and collapse the input, and optimistically add the question to the **bottom of Other Questions** and to **Your questions**. Assume it got through for the UI reveal.
+2. After the delay, scroll the page **all the way to the bottom** so the new question is visible there.
 3. Scroll animation: **in-out quadratic, 1000 ms, slow and NOT interruptible** (ignore wheel, touch and keys for the full duration, then restore).
-4. The user can **always scroll back up** to ask more questions. Nothing stays locked afterwards.
+4. Check the server response after the animation. On failure, remove the temporary question and show a non-blocking error toast. The user can **always scroll back up** to ask more questions. Nothing stays locked afterwards.
 
 ### 5.5 Question lists
 
-**Other Questions** (preset questions from the server, plus nothing the student sent):
+**Other Questions** (the shared pool, including the student's own questions):
 
 - Header "Other Questions" with underline. On mobile a circular **switch button (left-right arrows)** at the right end of the header toggles the section to **"Your questions"** and back.
 - Each **question card**: text on the left, **upvote arrow with count** on the right (count below the arrow).
@@ -124,7 +124,7 @@ Trigger: tap Send, then a **200 ms delay**.
 
 ## 6. Feel (what matters most, ranked)
 
-1. **Motion is the product.** Timings and easings in the sketch are deliberate. Implement exactly: sidebar 250 ms out-quad; textbox move and grow out-quad; counter fade linear; send, 200 ms delay, then 1000 ms in-out-quad non-interruptible scroll. Reference curves: `out-quad = cubic-bezier(0.5, 1, 0.89, 1)`, `in-out-quad = cubic-bezier(0.45, 0, 0.55, 1)`. Respect `prefers-reduced-motion` by shortening to near-instant.
+1. **Motion is the product.** Timings and easings in the sketch are deliberate. Implement exactly: sidebar 250 ms out-quad; textbox move and grow out-quad, with shrinking when content is removed; counter fade linear; send, 200 ms delay, then 1000 ms in-out-quad non-interruptible scroll to the page bottom. Reference curves: `out-quad = cubic-bezier(0.5, 1, 0.89, 1)`, `in-out-quad = cubic-bezier(0.45, 0, 0.55, 1)`. Respect `prefers-reduced-motion` by shortening to near-instant.
 2. **Instant feedback on votes.** No spinners; arrow and count change on tap.
 3. **Calm and safe to ask.** Minimal chrome, one clear action, friendly copy, visible "fully anonymous" reassurance.
 4. **Mobile keyboard behavior is flawless.** No jump, no covered input, no iOS zoom on focus (input font-size at least 16px). Use `100dvh` and `visualViewport`.
@@ -141,12 +141,12 @@ Purpose: let the team click through a believable demo with preset content, and m
 
 **Demo API contract** (a throwaway contract for this demo only; the real one will be agreed with the backend teammate later and recorded in `docs/API.md`):
 
-| Method and path | Body | Response |
-| --- | --- | --- |
-| `GET /api/questions` | none | `200` array of all questions, ranked, each with `mine` and `votedByMe` for the calling student |
-| `POST /api/questions` | `{ "text": string }` (1 to 200 chars after trim) | `201` the created question; `400` if invalid |
-| `POST /api/questions/:id/vote` | `{ "voted": boolean }` | `200` the updated question; one vote per student per question enforced server side |
-| `POST /api/questions/:id/report` | none | `204` |
+| Method and path                  | Body                                             | Response                                                                                       |
+| -------------------------------- | ------------------------------------------------ | ---------------------------------------------------------------------------------------------- |
+| `GET /api/questions`             | none                                             | `200` array of all questions, ranked, each with `mine` and `votedByMe` for the calling student |
+| `POST /api/questions`            | `{ "text": string }` (1 to 200 chars after trim) | `201` the created question; `400` if invalid                                                   |
+| `POST /api/questions/:id/vote`   | `{ "voted": boolean }`                           | `200` the updated question; one vote per student per question enforced server side             |
+| `POST /api/questions/:id/report` | none                                             | `204`                                                                                          |
 
 Question shape: `{ id, text, votes, createdAt, status: "open" | "selected" | "answered", mine: boolean, votedByMe: boolean }`.
 Ranking: `score = votes + min(ageMinutes, 60) / 10`, descending; `answered` sorts last. Return the list already ranked.
@@ -155,20 +155,20 @@ Ranking: `score = votes + min(ageMinutes, 60) / 10`, descending; `answered` sort
 
 **Seed data** (put in `server/seed.json`; createdAt spread over the last 5 to 40 minutes; votes as shown):
 
-| Text | Votes | Status |
-| --- | --- | --- |
-| Could you go through the base case of the induction proof again? | 42 | open |
-| Is this going to be on the exam, or just the idea behind it? | 37 | selected |
-| What is the difference between a relation and a function here? | 29 | open |
-| Why does the pumping lemma not apply to this language? | 24 | open |
-| Can we see one more worked example of the greedy argument? | 19 | open |
-| How do I choose the invariant for the loop? | 15 | open |
-| Does the order of the quantifiers really change the meaning? | 12 | answered |
-| Could the slides be uploaded before the lecture? | 9 | open |
-| What is the intuition behind the master theorem cases? | 7 | open |
-| Is the recursion tree method rigorous enough for the exercises? | 4 | open |
-| Sorry if this is basic, but what does "amortized" mean again? | 3 | open |
-| Will the recording be available after the session? | 2 | answered |
+| Text                                                             | Votes | Status   |
+| ---------------------------------------------------------------- | ----- | -------- |
+| Could you go through the base case of the induction proof again? | 42    | open     |
+| Is this going to be on the exam, or just the idea behind it?     | 37    | selected |
+| What is the difference between a relation and a function here?   | 29    | open     |
+| Why does the pumping lemma not apply to this language?           | 24    | open     |
+| Can we see one more worked example of the greedy argument?       | 19    | open     |
+| How do I choose the invariant for the loop?                      | 15    | open     |
+| Does the order of the quantifiers really change the meaning?     | 12    | answered |
+| Could the slides be uploaded before the lecture?                 | 9     | open     |
+| What is the intuition behind the master theorem cases?           | 7     | open     |
+| Is the recursion tree method rigorous enough for the exercises?  | 4     | open     |
+| Sorry if this is basic, but what does "amortized" mean again?    | 3     | open     |
+| Will the recording be available after the session?               | 2     | answered |
 
 (Seeded questions are never `mine`. Seed does not use real people's names.)
 
@@ -180,8 +180,8 @@ A running app in `frontend/student-frontend/` with a short `README.md` (install,
 - [ ] Light theme, blue accent tokens in one place, no indigo
 - [ ] Mobile (390x844) and desktop (1920x1080) match section 5
 - [ ] Sidebar: left overlay, dimmed rest, content "placeholder", 250 ms out-quad
-- [ ] Textbox moves up and auto-grows (out-quad), send lights up after 1 character, `n/200` counter fades in linearly, hard stop at 200
-- [ ] Send, 200 ms delay, 1000 ms non-interruptible in-out-quad scroll to Other Questions; scrolling back up works
+- [ ] Textbox moves up, grows and shrinks with content, collapses on send, send lights up after 1 character, `n/200` counter fades in linearly, hard stop at 200
+- [ ] Optimistic send places the question at the bottom of Other Questions and under Your questions; after 200 ms, the page scrolls to the bottom over 1000 ms without interruption; server result is checked after the reveal; scrolling back up works
 - [ ] Mobile switch button toggles Other and Your questions; desktop shows both with a peek at 1080p
 - [ ] Optimistic one-vote upvotes with rollback; vote state survives reload
 - [ ] Sent questions survive reload and show under "Your questions"; preset questions and votes from the seed

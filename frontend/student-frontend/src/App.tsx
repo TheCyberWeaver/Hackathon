@@ -3,11 +3,7 @@ import { flushSync } from 'react-dom'
 import { QuestionCard } from './components/QuestionCard'
 import { PanelIcon, SendIcon } from './components/Icons'
 import { ViewSwitchButton } from './components/ViewSwitchButton'
-import {
-  animateScrollTo,
-  prefersReducedMotion,
-  scrollToSection,
-} from './lib/motion'
+import { animateScrollTo, prefersReducedMotion } from './lib/motion'
 import {
   listQuestions,
   reportQuestion,
@@ -17,7 +13,6 @@ import {
 } from './lib/studentApi'
 
 const examples = [
-  'Why does the pumping lemma not apply here?',
   'Could you explain the base case once more?',
   'How did we choose this invariant?',
   'What changes if we reverse the quantifiers?',
@@ -53,7 +48,6 @@ export default function App() {
   )
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const mobileListRef = useRef<HTMLElement>(null)
-  const desktopOtherRef = useRef<HTMLElement>(null)
   const pendingVotes = useRef(new Set<string>())
   const switchingView = useRef(false)
   const toastTimer = useRef<number | undefined>(undefined)
@@ -98,8 +92,17 @@ export default function App() {
   }, [])
 
   function growTextarea(element: HTMLTextAreaElement) {
+    const currentHeight = element.getBoundingClientRect().height
+    element.style.transition = 'none'
     element.style.height = '36px'
-    element.style.height = `${Math.max(36, element.scrollHeight)}px`
+    // Measure at the minimum height; an in-flight height transition otherwise
+    // leaves scrollHeight at the previous, taller size after deleting lines.
+    void element.offsetHeight
+    const nextHeight = Math.max(36, element.scrollHeight)
+    element.style.height = `${currentHeight}px`
+    void element.offsetHeight
+    element.style.transition = ''
+    element.style.height = `${nextHeight}px`
   }
 
   async function handleSend() {
@@ -108,32 +111,53 @@ export default function App() {
     setSending(true)
     textareaRef.current?.blur()
     setFocused(false)
-    try {
-      const [created] = await Promise.all([
-        submitQuestion(text),
-        sleep(prefersReducedMotion() ? 20 : 200),
-      ])
-      flushSync(() => {
-        setQuestions((items) => [created, ...items])
-        setNewQuestionId(created.id)
-        setDraft('')
-        setMobileView('other')
-      })
-      if (textareaRef.current) growTextarea(textareaRef.current)
-      const target = window.matchMedia('(min-width: 900px)').matches
-        ? desktopOtherRef.current
-        : mobileListRef.current
-      if (target) await scrollToSection(target)
-      window.setTimeout(() => setNewQuestionId(null), 2200)
-    } catch (error) {
+    const optimisticId = `pending-${Date.now()}-${Math.random().toString(36).slice(2)}`
+    const optimisticQuestion: Question = {
+      id: optimisticId,
+      text,
+      votes: 0,
+      createdAt: new Date().toISOString(),
+      status: 'open',
+      mine: true,
+      votedByMe: false,
+    }
+
+    // Show the expected result immediately. The server response is checked
+    // after the send animation so network timing cannot delay the reveal.
+    flushSync(() => {
+      setQuestions((items) => [...items, optimisticQuestion])
+      setNewQuestionId(optimisticId)
+      setDraft('')
+      setMobileView('other')
+    })
+    if (textareaRef.current) growTextarea(textareaRef.current)
+
+    const result = submitQuestion(text).then(
+      (created) => ({ created, error: null }),
+      (error: unknown) => ({ created: null, error }),
+    )
+    await sleep(prefersReducedMotion() ? 20 : 200)
+    await animateScrollTo(
+      document.documentElement.scrollHeight - window.innerHeight,
+      1000,
+    )
+    setSending(false)
+
+    const { created, error } = await result
+    if (created) {
+      setQuestions((items) =>
+        items.map((item) => (item.id === optimisticId ? created : item)),
+      )
+      setNewQuestionId(created.id)
+    } else {
+      setQuestions((items) => items.filter((item) => item.id !== optimisticId))
       showToast(
         error instanceof Error
           ? error.message
           : 'Could not send your question.',
       )
-    } finally {
-      setSending(false)
     }
+    window.setTimeout(() => setNewQuestionId(null), 2200)
   }
 
   async function handleVote(question: Question) {
@@ -224,7 +248,7 @@ export default function App() {
   const mine = questions
     .filter((question) => question.mine)
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-  const others = questions.filter((question) => !question.mine)
+  const others = questions
   const counterOpacity = Math.max(0, Math.min(1, (draft.length - 160) / 40))
 
   function cards(items: Question[], isMine: boolean) {
@@ -344,7 +368,6 @@ export default function App() {
         </section>
 
         <section
-          ref={desktopOtherRef}
           className="desktop-other page-column"
           aria-labelledby="other-heading-desktop"
         >

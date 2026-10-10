@@ -22,6 +22,10 @@ npm run lint
 
 The API is isolated in `src/lib/studentApi.ts` for later replacement. This demo does not use the Java backend.
 
+## Send interaction
+
+The question box grows as lines are added and shrinks as lines are deleted or after sending. Sending immediately clears the box and places the new question at the bottom of **Other Questions** (also under **Your questions**). After 200 ms, the page scrolls all the way to the bottom with a 1000 ms in-out quadratic animation. The UI assumes the question was accepted; it checks the server response after the animation and only then shows an error and removes the temporary question if saving failed.
+
 ## Edit demo content
 
 - **Preset questions:** Edit, add, or remove entries in `server/seed.json`. Then run `npm run reset-data` and refresh the page. Resetting also clears submitted questions, votes, and reports.
