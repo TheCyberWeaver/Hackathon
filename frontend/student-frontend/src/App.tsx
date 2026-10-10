@@ -22,11 +22,9 @@ const examples = [
 
 type Page = 'questions' | 'settings'
 
-function currentPage(): Page {
-  if (window.location.pathname === '/settings') return 'settings'
-  if (window.location.pathname === '/profile') {
-    window.history.replaceState(null, '', '/')
-  }
+function currentPage(basePath: string): Page {
+  if (window.location.pathname === `${basePath}/profile`) return 'profile'
+  if (window.location.pathname === `${basePath}/settings`) return 'settings'
   return 'questions'
 }
 
@@ -43,8 +41,17 @@ function sleep(ms: number) {
   return new Promise((resolve) => window.setTimeout(resolve, ms))
 }
 
-export default function App() {
-  const [page, setPage] = useState<Page>(currentPage)
+export default function App({
+  basePath = '',
+  user,
+  onSwitchSpace,
+}: {
+  basePath?: string
+  user?: { id: string; name: string }
+  onSwitchSpace?: () => void
+} = {}) {
+  const proxyIdentity = user !== undefined
+  const [page, setPage] = useState<Page>(() => currentPage(basePath))
   const [questions, setQuestions] = useState<Question[]>([])
   const [draft, setDraft] = useState('')
   const [focused, setFocused] = useState(false)
@@ -74,7 +81,8 @@ export default function App() {
   }
 
   function navigate(nextPage: Page) {
-    const path = nextPage === 'questions' ? '/' : `/${nextPage}`
+    const path =
+      nextPage === 'questions' ? basePath || '/' : `${basePath}/${nextPage}`
     if (window.location.pathname !== path) {
       window.history.pushState(null, '', path)
     }
@@ -102,14 +110,14 @@ export default function App() {
 
   useEffect(() => {
     function syncPage() {
-      setPage(currentPage())
+      setPage(currentPage(basePath))
       setSidebarOpen(false)
       setFocused(false)
       window.scrollTo(0, 0)
     }
     window.addEventListener('popstate', syncPage)
     return () => window.removeEventListener('popstate', syncPage)
-  }, [])
+  }, [basePath])
 
   useEffect(() => {
     if (!sidebarOpen) return
@@ -126,7 +134,7 @@ export default function App() {
 
   useEffect(() => {
     let active = true
-    listQuestions()
+    listQuestions(proxyIdentity)
       .then((items) => {
         if (active) setQuestions(items)
       })
@@ -138,7 +146,7 @@ export default function App() {
       active = false
       window.clearTimeout(toastTimer.current)
     }
-  }, [])
+  }, [proxyIdentity])
 
   useEffect(() => {
     const viewport = window.visualViewport
@@ -198,7 +206,7 @@ export default function App() {
     })
     if (textareaRef.current) growTextarea(textareaRef.current)
 
-    const result = submitQuestion(text).then(
+    const result = submitQuestion(text, proxyIdentity).then(
       (created) => ({ created, error: null }),
       (error: unknown) => ({ created: null, error }),
     )
@@ -238,7 +246,7 @@ export default function App() {
       ),
     )
     try {
-      const updated = await setVote(question.id, voted)
+      const updated = await setVote(question.id, voted, proxyIdentity)
       setQuestions((items) =>
         items.map((item) => (item.id === updated.id ? updated : item)),
       )
@@ -290,7 +298,7 @@ export default function App() {
     }
 
     try {
-      const refreshed = await listQuestions()
+      const refreshed = await listQuestions(proxyIdentity)
       await runTransition(() => setQuestions(refreshed))
     } catch {
       showToast(
@@ -304,7 +312,7 @@ export default function App() {
     const target = reportTarget
     setReportTarget(null)
     try {
-      await reportQuestion(target.id)
+      await reportQuestion(target.id, proxyIdentity)
       showToast("Thanks, we'll take a look.")
     } catch {
       showToast('Could not send the report. Please try again.')
@@ -352,10 +360,8 @@ export default function App() {
         <PanelIcon width="22" height="22" />
       </button>
       <a
-        className="brand-mark brand-mark--site"
-        href="/"
-        aria-hidden={sidebarOpen}
-        tabIndex={sidebarOpen ? -1 : 0}
+        className="brand-mark"
+        href={basePath || '/'}
         onClick={(event) => handleNavigation(event, 'questions')}
       >
         ASKPOOL
@@ -369,23 +375,14 @@ export default function App() {
         className={`sidebar ${sidebarOpen ? 'sidebar--open' : ''}`}
         aria-hidden={!sidebarOpen}
       >
-        <div className="sidebar__header">
-          <button
-            type="button"
-            className="sidebar-trigger sidebar-trigger--inside"
-            aria-label="Close sidebar"
-            aria-expanded={sidebarOpen}
-            onClick={() => setSidebarOpen(false)}
-          >
-            <PanelIcon width="22" height="22" />
-          </button>
-          <a
-            className="brand-mark brand-mark--inside"
-            href="/"
-            onClick={(event) => handleNavigation(event, 'questions')}
-          >
-            ASKPOOL
-          </a>
+        <div className="sidebar__identity">
+          <span className="sidebar__avatar">
+            <ProfileIcon width="25" height="25" />
+          </span>
+          <div className="sidebar__account">
+            <span className="sidebar__name">{user?.name || 'Student'}</span>
+            {user && <span className="sidebar__email">{user.id}</span>}
+          </div>
         </div>
         <nav className="sidebar__nav" aria-label="Main navigation">
           <a
@@ -405,23 +402,41 @@ export default function App() {
             </span>
             <span className="sidebar__name">Student</span>
             <a
-              className={`sidebar__settings ${page === 'settings' ? 'sidebar__settings--active' : ''}`}
-              href="/settings"
-              aria-label="Settings"
-              aria-current={page === 'settings' ? 'page' : undefined}
-              onClick={(event) => handleNavigation(event, 'settings')}
+              key={item.page}
+              href={
+                item.page === 'questions'
+                  ? basePath || '/'
+                  : `${basePath}${item.href}`
+              }
+              className={`sidebar__link ${page === item.page ? 'sidebar__link--active' : ''}`}
+              aria-current={page === item.page ? 'page' : undefined}
+              onClick={(event) => handleNavigation(event, item.page)}
             >
               <GearIcon width="23" height="23" />
             </a>
-          </div>
-          <button
-            type="button"
-            className="sidebar__logout"
-            onClick={handleLogout}
-          >
-            Log out
-          </button>
-        </div>
+          ))}
+          {user && (
+            <a
+              className="sidebar__link"
+              href="/"
+              onClick={(event) => {
+                if (
+                  !onSwitchSpace ||
+                  event.button !== 0 ||
+                  event.metaKey ||
+                  event.ctrlKey ||
+                  event.shiftKey ||
+                  event.altKey
+                )
+                  return
+                event.preventDefault()
+                onSwitchSpace()
+              }}
+            >
+              Switch space
+            </a>
+          )}
+        </nav>
       </aside>
 
       {page === 'questions' ? (

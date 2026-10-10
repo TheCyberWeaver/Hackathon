@@ -1,6 +1,6 @@
 # Hackathon
 
-A working full stack starter: Vite React TypeScript and Tailwind CSS v4 in the browser, with a Java 21 Spring Boot Gradle REST API.
+AskPool is a classroom Q&A app built with Vite React TypeScript and Tailwind CSS v4, with a Java 21 Spring Boot Gradle REST API. The entry page identifies the signed-in user and provides student and professor entry points.
 
 ## Prerequisites
 
@@ -64,11 +64,9 @@ Dev: start both
 
 This starts the frontend and backend in separate terminals. Wait for Java to finish starting; the first run downloads Gradle and dependencies.
 
-Open **http://localhost:5173**, then click **Call Java API**. You should see:
+Open **http://localhost:5173** to see the AskPool name and **Student** / **Professor** entry buttons. Local development uses a sample identity (Alex Morgan) through the Vite proxy. Choose either button to open its dashboard. The frontend task also starts the student demo API on port 3001; the backend task serves identity on port 8080.
 
-```json
-{ "message": "Hello from Java 21" }
-```
+Production uses the managed proxy's `X-User-Id` and `X-User-Name` headers via `GET /api/me`. Dashboard integration and local identity settings are documented in [docs/Entry_Page.md](docs/Entry_Page.md).
 
 ### 5. Make changes
 

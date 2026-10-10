@@ -6,9 +6,13 @@ import {
   existsSync,
 } from 'node:fs'
 import { fileURLToPath } from 'node:url'
+import { join } from 'node:path'
 
 const seedPath = fileURLToPath(new URL('./seed.json', import.meta.url))
-const statePath = fileURLToPath(new URL('./data/state.json', import.meta.url))
+const dataDirectory =
+  process.env.ASKPOOL_DATA_DIR ||
+  fileURLToPath(new URL('./data/', import.meta.url))
+const statePath = join(dataDirectory, 'state.json')
 
 export function resetState() {
   const seed = JSON.parse(readFileSync(seedPath, 'utf8'))
@@ -33,7 +37,7 @@ export function readState() {
 }
 
 export function saveState(state) {
-  mkdirSync(fileURLToPath(new URL('./data/', import.meta.url)), {
+  mkdirSync(dataDirectory, {
     recursive: true,
   })
   writeFileSync(`${statePath}.tmp`, JSON.stringify(state, null, 2))
