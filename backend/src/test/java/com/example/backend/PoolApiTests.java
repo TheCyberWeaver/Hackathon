@@ -13,7 +13,7 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 import static org.junit.jupiter.api.Assertions.*;
 
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = "app.testing-permissions=false")
 class PoolApiTests extends PostgresTestSupport {
     @Value("${local.server.port}") int port;
     @Autowired JdbcTemplate jdbc;
@@ -24,7 +24,7 @@ class PoolApiTests extends PostgresTestSupport {
     final String peer = "peer-" + UUID.randomUUID();
 
     @Test
-    void completeLectureFlowEnforcesIdentityPrivacyQuotaAndModeration() throws Exception {
+    void completeLectureFlowEnforcesIdentityPrivacyAndModeration() throws Exception {
         assertEquals(401, send("GET", "/lectures", null, null).statusCode());
         assertEquals(403, send("POST", "/lectures", student, "{\"title\":\"Lecture\",\"lectureTime\":\"2026-10-10T10:00:00Z\"}").statusCode());
         promote(professor);
@@ -41,7 +41,7 @@ class PoolApiTests extends PostgresTestSupport {
         assertEquals("Why?", question.get("text").asText());
         assertTrue(question.get("mine").asBoolean());
         assertFalse(question.has("authorId"));
-        assertEquals(409, send("POST", path, student, "{\"text\":\"Another?\"}").statusCode());
+        assertEquals(201, send("POST", path, student, "{\"text\":\"Another?\"}").statusCode());
         assertEquals(403, send("POST", "/questions/" + id + "/vote", student, "{\"voted\":true}").statusCode());
         assertEquals(400, send("POST", "/questions/" + id + "/vote", peer, "{}").statusCode());
         for (int i = 0; i < 2; i++) {
@@ -65,11 +65,11 @@ class PoolApiTests extends PostgresTestSupport {
             assertEquals(status.equals("answered"), !tree(updated).get("answeredAt").isNull());
         }
         assertEquals(0, tree(send("POST", "/questions/" + id + "/vote", peer, "{\"voted\":false}")).get("votes").asLong());
-        assertEquals(403, send("DELETE", "/questions/" + id, student, null).statusCode());
+        assertEquals(403, send("DELETE", "/questions/" + id, peer, null).statusCode());
         assertEquals(204, send("DELETE", "/questions/" + id, professor, null).statusCode());
-        assertEquals(0, tree(send("GET", path, student, null)).size());
+        assertEquals(1, tree(send("GET", path, student, null)).size());
         assertEquals(404, send("POST", "/questions/" + id + "/report", peer, null).statusCode());
-        assertEquals(409, send("POST", path, student, "{\"text\":\"Quota bypass?\"}").statusCode());
+        assertEquals(201, send("POST", path, student, "{\"text\":\"Another after deletion?\"}").statusCode());
         assertEquals(404, send("GET", "/lectures/9223372036854775807/questions", student, null).statusCode());
         assertEquals(400, send("GET", "/lectures/invalid/questions", student, null).statusCode());
     }
@@ -89,14 +89,17 @@ class PoolApiTests extends PostgresTestSupport {
     }
 
     @Test
-    void concurrentSubmissionsAndVotesRemainUniqueAndLecturesStaySeparate() throws Exception {
+    void concurrentSubmissionsBothSucceedAndVotesRemainUnique() throws Exception {
         promote(professor);
         String lecture = tree(send("POST", "/lectures", professor, "{\"title\":\"Concurrency\",\"lectureTime\":\"2026-10-10T11:00:00Z\"}")).get("id").asText();
         String path = "/lectures/" + lecture + "/questions";
         var a = CompletableFuture.supplyAsync(() -> uncheckedSend("POST", path, student, "{\"text\":\"First?\"}"));
         var b = CompletableFuture.supplyAsync(() -> uncheckedSend("POST", path, student, "{\"text\":\"Second?\"}"));
-        assertEquals(java.util.Set.of(201, 409), java.util.Set.of(a.get().statusCode(), b.get().statusCode()));
-        var created = a.get().statusCode() == 201 ? a.get() : b.get();
+        assertEquals(201, a.get().statusCode());
+        assertEquals(201, b.get().statusCode());
+        assertNotEquals(tree(a.get()).get("id").asText(), tree(b.get()).get("id").asText());
+        assertEquals(2, tree(send("GET", path, student, null)).size());
+        var created = a.get();
         String votePath = "/questions/" + tree(created).get("id").asText() + "/vote";
         var v1 = CompletableFuture.supplyAsync(() -> uncheckedSend("POST", votePath, peer, "{\"voted\":true}"));
         var v2 = CompletableFuture.supplyAsync(() -> uncheckedSend("POST", votePath, peer, "{\"voted\":true}"));
@@ -107,6 +110,30 @@ class PoolApiTests extends PostgresTestSupport {
         assertEquals(0, tree(send("GET", "/lectures/" + other + "/questions", peer, null)).size());
         assertEquals(201, send("POST", "/lectures/" + other + "/questions", student, "{\"text\":\"Allowed here?\"}").statusCode());
     }
+    @Test
+    void studentsDeleteOnlyTheirOwnQuestionsAndCanKeepSubmitting() throws Exception {
+        promote(professor);
+        String lecture = tree(send("POST", "/lectures", professor, "{\"title\":\"Student deletion\",\"lectureTime\":\"2026-10-10T11:00:00Z\"}")).get("id").asText();
+        String path = "/lectures/" + lecture + "/questions";
+        String id = tree(send("POST", path, student, "{\"text\":\"My first question\"}")).get("id").asText();
+        assertEquals(201, send("POST", path, student, "{\"text\":\"My second question\"}").statusCode());
+        assertEquals(2, tree(send("GET", path, student, null)).size());
+        assertEquals(401, send("DELETE", "/questions/" + id, null, null).statusCode());
+        assertEquals(403, send("DELETE", "/questions/" + id, peer, null).statusCode());
+        assertEquals(200, send("POST", "/questions/" + id + "/vote", peer, "{\"voted\":true}").statusCode());
+        assertEquals(204, send("POST", "/questions/" + id + "/report", peer, null).statusCode());
+        assertEquals(200, send("PATCH", "/questions/" + id + "/status", professor, "{\"status\":\"answered\"}").statusCode());
+        assertEquals(204, send("DELETE", "/questions/" + id, student, null).statusCode());
+        assertEquals(404, send("GET", path + "/" + id, student, null).statusCode());
+        assertEquals(404, send("DELETE", "/questions/" + id, student, null).statusCode());
+        assertEquals(1, tree(send("GET", path, peer, null)).size());
+        assertEquals(1, tree(send("GET", "/lectures/" + lecture + "/professor/questions", professor, null)).size());
+        assertTrue(jdbc.queryForObject("SELECT deleted_at IS NOT NULL FROM questions WHERE id = ?", Boolean.class, Long.parseLong(id)));
+        assertEquals(1L, jdbc.queryForObject("SELECT count(*) FROM question_votes WHERE question_id = ?", Long.class, Long.parseLong(id)));
+        assertEquals(1L, jdbc.queryForObject("SELECT count(*) FROM question_reports WHERE question_id = ?", Long.class, Long.parseLong(id)));
+        assertEquals(201, send("POST", path, student, "{\"text\":\"After deletion\"}").statusCode());
+    }
+
     void promote(String identity) {
         jdbc.update("INSERT INTO users (eth_identity_ref, role) VALUES (?, 'professor')", identity);
     }

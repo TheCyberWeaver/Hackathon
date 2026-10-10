@@ -8,7 +8,7 @@ import {
 import type { QuestionStatus } from '../student/lib/studentApi'
 import {
   initialLectureId,
-  listLectures,
+  watchLectures,
   rememberLecture,
   type Lecture,
 } from '../lib/poolApi'
@@ -100,23 +100,17 @@ export default function ProfessorDashboard({ user }: { user: CurrentUser }) {
     selectedTab === 'open' ? openQuestions : answeredQuestions
 
   useEffect(() => {
-    let active = true
-    listLectures()
-      .then((items) => {
-        if (!active) return
+    return watchLectures(
+      (items) => {
         const managed = items.filter((lecture) => lecture.canManage)
         setLectures(managed)
         setLectureId((id) => id || managed[0]?.id || '')
-      })
-      .catch((error: unknown) => {
-        if (active)
-          setApiError(
-            error instanceof Error ? error.message : 'Could not load lectures.',
-          )
-      })
-    return () => {
-      active = false
-    }
+      },
+      (error) =>
+        setApiError(
+          error instanceof Error ? error.message : 'Could not load lectures.',
+        ),
+    )
   }, [])
 
   useEffect(() => {

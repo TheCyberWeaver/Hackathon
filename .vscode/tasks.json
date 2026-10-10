@@ -15,6 +15,22 @@
     {
       "label": "Backend: dev",
       "type": "shell",
+      "command": "./gradlew localRun",
+      "windows": {
+        "command": "$env:JAVA_HOME = Split-Path (Split-Path (Get-Command javac).Source); .\\gradlew.bat localRun"
+      },
+      "options": {
+        "cwd": "${workspaceFolder}/backend"
+      },
+      "isBackground": true,
+      "problemMatcher": [],
+      "presentation": {
+        "panel": "dedicated"
+      }
+    },
+    {
+      "label": "Backend: external database",
+      "type": "shell",
       "command": "./gradlew bootRun",
       "windows": {
         "command": "$env:JAVA_HOME = Split-Path (Split-Path (Get-Command javac).Source); .\\gradlew.bat bootRun"

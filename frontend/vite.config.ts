@@ -2,12 +2,14 @@ import { defineConfig, loadEnv, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 
-const proxy = {
-  '/api': { target: 'http://localhost:8080', changeOrigin: true },
-}
-
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
+  const proxy = {
+    '/api': {
+      target: env.ASKPOOL_BACKEND_URL || 'http://localhost:8080',
+      changeOrigin: true,
+    },
+  }
   const demoAuth = mode === 'development' && env.ASKPOOL_DEMO_AUTH !== 'false'
   const demoIdentityPlugin: Plugin = {
     name: 'askpool-demo-identity',

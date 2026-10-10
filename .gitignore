@@ -19,3 +19,4 @@ Thumbs.db
 deploy/artifacts/
 /deploy-local.ps1
 frontend/server/student-api/data/
+backend/.local-postgres/

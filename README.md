@@ -13,6 +13,13 @@ Verify with `node --version`, `npm --version`, `java --version` and `javac --ver
 
 ## Run locally
 
+For the complete local app **without Docker or VM deployment**, run
+`./dev-local.ps1` from the repository root on Windows. It starts persistent
+PostgreSQL, Java, and Vite with testing permissions. Open
+http://localhost:5173 once Java reports `Started LocalApplication`.
+See [local development and database connection settings](docs/Local_Development.md).
+The steps below also describe the optional Docker/manual setup.
+
 After cloning, each teammate follows these steps in VS Code.
 
 ### 1. Install prerequisites
@@ -54,10 +61,16 @@ chmod +x backend/gradlew
 
 No `.env` file is required for the default local setup.
 
-### 4. Configure PostgreSQL
+### 4. Local PostgreSQL
 
-Java now requires PostgreSQL. For a new local database, set a local password
-and start the optional Docker service from the repository root:
+The default **Backend: dev** task starts a persistent PostgreSQL database on
+`127.0.0.1:55432` automatically. It enables testing permissions so the same
+account can use both dashboards. No Docker, database password, or VM is required.
+Database files are retained in `backend/.local-postgres/` between runs.
+
+For an external database instead, use **Backend: external database**. This
+optional Docker setup uses port 5432:
+
 
 ```powershell
 $env:DATABASE_PASSWORD = 'choose-a-local-development-password'
@@ -84,7 +97,7 @@ Press **Ctrl+Shift+P**, select **Tasks: Run Task**, then choose:
 Dev: start both
 ```
 
-This starts the frontend and backend in separate terminals. Wait for Java to finish starting; the first run downloads Gradle and dependencies.
+This starts the frontend, backend, and local database in separate terminals. Wait for `Started LocalApplication`; the first run downloads Gradle, dependencies, and PostgreSQL binaries.
 
 Open **http://localhost:5173** to see the AskPool entry buttons. Vite supplies a sample identity (Alex Morgan) locally. Dashboard data requires Java on port 8080 and PostgreSQL. Professors create lectures and share student join links; both dashboards use the same persisted questions.
 
@@ -95,7 +108,7 @@ Production uses the managed proxy's `X-User-Id` and `X-User-Name` headers via `G
 - Frontend: edit `frontend/src/` — browser updates automatically.
 - Backend: edit `backend/src/main/java/` — restart **Backend: dev** after changes.
 - Stop services: **Tasks: Terminate Task**.
-- Debug Java: stop the backend task, then select **Debug backend** in Run and Debug and press **F5**.
+- Debug Java with an external database: stop the backend task, start your configured PostgreSQL database, then select **Debug backend (external database)** in Run and Debug and press **F5**.
 
 Full commands and troubleshooting are in the repository’s **README.md**.
 

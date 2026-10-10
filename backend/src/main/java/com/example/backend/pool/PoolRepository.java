@@ -41,11 +41,8 @@ public class PoolRepository {
         return jdbc.queryForObject("INSERT INTO lectures (title, lecture_time, owner_id) VALUES (?, ?, ?) RETURNING id", Long.class, title, time, owner);
     }
     public long createQuestion(long lecture, long author, String text) {
-        // Retains the quota even when a moderator hides an earlier submission.
-        Long id = jdbc.query("INSERT INTO questions (lecture_id, author_id, text) VALUES (?, ?, ?) ON CONFLICT (lecture_id, author_id) DO NOTHING RETURNING id",
-            (rs, row) -> rs.getLong(1), lecture, author, text).stream().findFirst().orElse(null);
-        if (id == null) throw new ApiException(CONFLICT, "You may submit one question per lecture.");
-        return id;
+        return jdbc.queryForObject("INSERT INTO questions (lecture_id, author_id, text) VALUES (?, ?, ?) RETURNING id",
+            Long.class, lecture, author, text);
     }
     private static final String QUESTION_QUERY = """
         SELECT q.*, u.eth_identity_ref,

@@ -17,6 +17,17 @@ repositories {
 	mavenCentral()
 }
 
+sourceSets {
+	local {
+		compileClasspath += sourceSets.main.output
+		runtimeClasspath += sourceSets.main.output
+	}
+}
+configurations {
+	localImplementation.extendsFrom implementation
+	localRuntimeOnly.extendsFrom runtimeOnly
+}
+
 dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-webmvc'
 	implementation 'org.springframework.boot:spring-boot-starter-jdbc'
@@ -24,10 +35,32 @@ dependencies {
 	runtimeOnly 'org.postgresql:postgresql'
 	runtimeOnly 'org.flywaydb:flyway-database-postgresql'
 	testImplementation 'io.zonky.test:embedded-postgres:2.1.0'
+	localImplementation 'io.zonky.test:embedded-postgres:2.1.0'
 	testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
 tasks.named('test') {
 	useJUnitPlatform()
+}
+
+tasks.register('localRun', JavaExec) {
+	group = 'application'
+	description = 'Run Java with persistent local PostgreSQL and testing permissions; no Docker or VM.'
+	dependsOn classes, localClasses
+	classpath = sourceSets.local.runtimeClasspath
+	mainClass = 'com.example.backend.dev.LocalApplication'
+	args file('.local-postgres').absolutePath, '55432', '8080'
+}
+
+tasks.register('writeLocalClasspath') {
+	dependsOn classes, localClasses
+	def destination = layout.buildDirectory.file('local/classpath.txt')
+	inputs.files(sourceSets.local.runtimeClasspath)
+	outputs.file(destination)
+	doLast {
+		def output = destination.get().asFile
+		output.parentFile.mkdirs()
+		output.text = sourceSets.local.runtimeClasspath.asPath
+	}
 }

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { test } from 'node:test'
 import ts from 'typescript'
+import { setImmediate } from 'node:timers/promises'
 
 function moduleUrl(source) {
   const { outputText } = ts.transpileModule(source, {
@@ -71,6 +72,7 @@ test('Java API clients use lecture routes and proxy identity without browser ide
   await api.professor.listProfessorQuestions('123')
   await api.professor.changeQuestionStatus('42', 'answered')
   await api.professor.deleteQuestion('42')
+  await api.student.deleteQuestion('42')
   assert.deepEqual(
     requests.map(({ url, init }) => [init.method ?? 'GET', url]),
     [
@@ -82,6 +84,7 @@ test('Java API clients use lecture routes and proxy identity without browser ide
       ['POST', '/api/questions/42/report'],
       ['GET', '/api/lectures/123/professor/questions'],
       ['PATCH', '/api/questions/42/status'],
+      ['DELETE', '/api/questions/42'],
       ['DELETE', '/api/questions/42'],
     ],
   )
@@ -112,18 +115,19 @@ test('shared transport handles no-content responses and useful API errors', asyn
   )
   assert.equal(await api.student.reportQuestion('42'), undefined)
   assert.equal(await api.professor.deleteQuestion('42'), undefined)
+  assert.equal(await api.student.deleteQuestion('42'), undefined)
   t.mock.method(
     globalThis,
     'fetch',
     async () =>
       new Response(
-        JSON.stringify({ error: 'You may submit one question per lecture.' }),
+        JSON.stringify({ error: 'This operation conflicts with existing data.' }),
         { status: 409 },
       ),
   )
   await assert.rejects(
     api.student.submitQuestion('123', 'Another question'),
-    /one question per lecture/,
+    /conflicts with existing data/,
   )
   t.mock.method(
     globalThis,
@@ -143,4 +147,107 @@ test('shared transport honors base URL and encodes route identifiers', async (t)
     return new Response('[]', { status: 200 })
   })
   assert.deepEqual(await api.student.listQuestions('lecture/id'), [])
+})
+
+test('lecture watcher discovers newly created lectures without reloading the portal', async (t) => {
+  t.mock.timers.enable({ apis: ['setInterval'] })
+  const { pool } = await clients()
+  let lectures = []
+  const snapshots = []
+  t.mock.method(
+    globalThis,
+    'fetch',
+    async () => new Response(JSON.stringify(lectures)),
+  )
+  const stop = pool.watchLectures((items) => snapshots.push(items), assert.fail)
+  t.after(stop)
+  await setImmediate()
+  assert.deepEqual(snapshots, [[]])
+  lectures = [
+    {
+      id: '123',
+      title: 'New lecture',
+      lectureTime: '2026-10-10T10:00:00Z',
+      canManage: false,
+    },
+  ]
+  t.mock.timers.tick(5000)
+  await setImmediate()
+  assert.deepEqual(snapshots[1], lectures)
+  stop()
+  t.mock.timers.tick(5000)
+  await setImmediate()
+  assert.equal(snapshots.length, 2)
+})
+
+test('lecture watcher refreshes on browser focus and removes its listener on cleanup', async (t) => {
+  const previousWindow = Object.getOwnPropertyDescriptor(globalThis, 'window')
+  const localWindow = new EventTarget()
+  Object.defineProperty(globalThis, 'window', {
+    configurable: true,
+    value: localWindow,
+  })
+  t.after(() => {
+    if (previousWindow)
+      Object.defineProperty(globalThis, 'window', previousWindow)
+    else delete globalThis.window
+  })
+  const { pool } = await clients()
+  const fetchMock = t.mock.method(
+    globalThis,
+    'fetch',
+    async () => new Response('[]'),
+  )
+  const stop = pool.watchLectures(() => {}, assert.fail)
+  t.after(stop)
+  await setImmediate()
+  localWindow.dispatchEvent(new Event('focus'))
+  await setImmediate()
+  assert.equal(fetchMock.mock.callCount(), 2)
+  stop()
+  localWindow.dispatchEvent(new Event('focus'))
+  await setImmediate()
+  assert.equal(fetchMock.mock.callCount(), 2)
+})
+
+test('lecture watcher recovers after initial request failure and discards late responses after cleanup', async (t) => {
+  t.mock.timers.enable({ apis: ['setInterval'] })
+  const { pool } = await clients()
+  const snapshots = []
+  const errors = []
+  const fetchMock = t.mock.method(
+    globalThis,
+    'fetch',
+    async () => new Response('Unavailable', { status: 503 }),
+  )
+  const stop = pool.watchLectures(
+    (items) => snapshots.push(items),
+    (error) => errors.push(error),
+  )
+  t.after(stop)
+  await setImmediate()
+  assert.equal(errors.length, 1)
+  let resolveFetch
+  fetchMock.mock.mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        resolveFetch = resolve
+      }),
+  )
+  t.mock.timers.tick(5000)
+  assert.equal(fetchMock.mock.callCount(), 2)
+  t.mock.timers.tick(10000)
+  assert.equal(
+    fetchMock.mock.callCount(),
+    2,
+    'overlapping refreshes must not race',
+  )
+  resolveFetch(new Response('[{"id":"123"}]'))
+  await setImmediate()
+  assert.deepEqual(snapshots, [[{ id: '123' }]])
+  t.mock.timers.tick(5000)
+  stop()
+  resolveFetch(new Response('[{"id":"456"}]'))
+  await setImmediate()
+  assert.equal(snapshots.length, 1)
 })

@@ -43,3 +43,9 @@ export function reportQuestion(id: string): Promise<void> {
     method: 'POST',
   })
 }
+
+export function deleteQuestion(id: string): Promise<void> {
+  return request<void>(`/questions/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  })
+}

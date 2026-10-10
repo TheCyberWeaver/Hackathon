@@ -33,6 +33,16 @@ Flyway baselines at V1 and applies V2 transactionally. Remove DATABASE_BASELINE 
 
 ## Professor permissions
 
+The hackathon deployment currently defaults to `APP_TESTING_PERMISSIONS=true`:
+all signed-in users can submit, vote, create lectures, view authors/reports in
+the professor dashboard, and manage every lecture. This allows the same account
+to test both dashboards without changing database roles. The one-question quota
+and self-vote restriction still apply.
+
+To restore role/owner checks on the VM, set `APP_TESTING_PERMISSIONS=false` in
+the release `.env`, then run `docker compose -p hackathon up -d backend`.
+The instructions below apply when testing permissions are disabled.
+
 New identities default to students. Through an administrator database session, assign the exact identity supplied by the login proxy:
 
 ```sql
@@ -91,3 +101,16 @@ production. Baseline is disabled again after successful startup. Runtime
 configuration is saved in the release `.env` for later Compose commands.
 
 Retain PostgreSQL backups/volumes. V2 is additive and keeps the original answer constraint. A rollback to the former Node deployment shows its separate demo store while PostgreSQL data remains intact. Do not remove either data volume during rollout or rollback.
+
+V3 handles the older VM schema where `lectures.professor_id` is required.
+It backfills missing `owner_id` values and installs an insert trigger to populate
+both ownership columns. Existing columns, constraints, lectures, and questions
+are preserved. Fresh databases without `professor_id` need no compatibility
+trigger. A DBA can apply the V3 SQL in a transaction to repair a running instance
+before releasing Java; run it with `SET LOCAL ROLE askpool_app` so the
+compatibility function belongs to the migration role. The subsequent Flyway
+migration safely repeats it. V4 removes the one-question-per-student constraint
+without deleting existing questions.
+
+The ignored `deploy-local.ps1` contains the VM SSH configuration;
+`dev-local.ps1` runs locally and does not connect to the VM.

@@ -9,13 +9,14 @@ import type { CurrentUser } from '../lib/api'
 import LecturePicker from '../components/LecturePicker'
 import {
   initialLectureId,
-  listLectures,
+  watchLectures,
   rememberLecture,
   type Lecture,
 } from '../lib/poolApi'
 import './student.css'
 import {
   listQuestions,
+  deleteQuestion,
   reportQuestion,
   setVote,
   submitQuestion,
@@ -73,6 +74,8 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const mobileListRef = useRef<HTMLElement>(null)
   const pendingVotes = useRef(new Set<string>())
+  const pendingDeletes = useRef(new Set<string>())
+  const [deletingIds, setDeletingIds] = useState(new Set<string>())
   const mutationVersion = useRef(0)
   const pendingSend = useRef(false)
   const switchingView = useRef(false)
@@ -117,22 +120,16 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
   }, [page])
 
   useEffect(() => {
-    let active = true
-    listLectures()
-      .then((items) => {
-        if (!active) return
+    return watchLectures(
+      (items) => {
         setLectures(items)
         setLectureId((id) => id || items[0]?.id || '')
-      })
-      .catch((error: unknown) => {
-        if (active)
-          showToast(
-            error instanceof Error ? error.message : 'Could not load lectures.',
-          )
-      })
-    return () => {
-      active = false
-    }
+      },
+      (error) =>
+        showToast(
+          error instanceof Error ? error.message : 'Could not load lectures.',
+        ),
+    )
   }, [])
 
   useEffect(() => {
@@ -147,7 +144,8 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
             active &&
             version === mutationVersion.current &&
             !pendingSend.current &&
-            !pendingVotes.current.size
+            !pendingVotes.current.size &&
+            !pendingDeletes.current.size
           )
             setQuestions(items)
         })
@@ -202,13 +200,7 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
 
   async function handleSend() {
     const text = draft.trim()
-    if (
-      !text ||
-      sending ||
-      !lectureId ||
-      questions.some((question) => question.mine)
-    )
-      return
+    if (!text || pendingSend.current || !lectureId) return
     setSending(true)
     pendingSend.current = true
     mutationVersion.current++
@@ -295,6 +287,32 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
     }
   }
 
+  async function handleDelete(question: Question) {
+    if (
+      !question.mine ||
+      question.id.startsWith('pending-') ||
+      pendingDeletes.current.has(question.id)
+    ) return
+    pendingDeletes.current.add(question.id)
+    setDeletingIds(new Set(pendingDeletes.current))
+    mutationVersion.current++
+    try {
+      await deleteQuestion(question.id)
+      setQuestions((items) => items.filter((item) => item.id !== question.id))
+      showToast('Your question was deleted.')
+    } catch (error) {
+      showToast(
+        error instanceof Error
+          ? error.message
+          : 'Could not delete your question. Please try again.',
+      )
+    } finally {
+      pendingDeletes.current.delete(question.id)
+      setDeletingIds(new Set(pendingDeletes.current))
+      mutationVersion.current++
+    }
+  }
+
   async function switchMobileView() {
     if (switchingView.current) return
     switchingView.current = true
@@ -333,8 +351,16 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
     }
 
     try {
-      if (!lectureId || pendingSend.current || pendingVotes.current.size) return
+      if (
+        !lectureId || pendingSend.current ||
+        pendingVotes.current.size || pendingDeletes.current.size
+      ) return
+      const version = mutationVersion.current
       const refreshed = await listQuestions(lectureId)
+      if (
+        version !== mutationVersion.current || pendingSend.current ||
+        pendingVotes.current.size || pendingDeletes.current.size
+      ) return
       await runTransition(() => setQuestions(refreshed))
     } catch {
       showToast(
@@ -376,6 +402,8 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
             highlighted={question.id === newQuestionId}
             onVote={handleVote}
             onReport={setReportTarget}
+            onDelete={(question) => void handleDelete(question)}
+            deleting={deletingIds.has(question.id)}
           />
         ))}
       </div>
@@ -403,7 +431,7 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
               <LecturePicker
                 lectures={lectures}
                 lectureId={lectureId}
-                disabled={sending || votePendingCount > 0}
+                disabled={sending || votePendingCount > 0 || deletingIds.size > 0}
                 onSelect={(id) => {
                   setQuestions([])
                   setLectureId(id)
@@ -441,8 +469,7 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
                 />
                 <div className="composer__bottom">
                   <span className="anonymous-note">
-                    Anonymous to classmates. Professors can view authors. One
-                    question per student per lecture.
+                    Anonymous to classmates. Professors can view authors.
                   </span>
                   <div className="composer__send">
                     <button
@@ -452,8 +479,7 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
                       disabled={
                         !draft.trim() ||
                         sending ||
-                        !lectureId ||
-                        questions.some((question) => question.mine)
+                        !lectureId
                       }
                       onClick={() => void handleSend()}
                     >
@@ -540,7 +566,7 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
                     <button
                       type="button"
                       className="text-blue-700 underline"
-                      disabled={sending || votePendingCount > 0}
+                      disabled={sending || votePendingCount > 0 || deletingIds.size > 0}
                       onClick={() => {
                         setQuestions([])
                         setLectureId(lecture.id)

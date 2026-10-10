@@ -1,6 +1,7 @@
 package com.example.backend.pool;
 
 import java.util.List;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import static com.example.backend.pool.ApiModels.*;
@@ -10,15 +11,23 @@ import static org.springframework.http.HttpStatus.*;
 @Service
 public class PoolService {
     private final PoolRepository repository;
-    public PoolService(PoolRepository repository) { this.repository = repository; }
+    private final boolean testingPermissions;
+    public PoolService(PoolRepository repository,
+                       @Value("${app.testing-permissions:false}") boolean testingPermissions) {
+        this.repository = repository;
+        this.testingPermissions = testingPermissions;
+    }
     public User identify(String identity) {
         if (identity == null || identity.isBlank()) throw new ApiException(UNAUTHORIZED, "Missing signed-in identity.");
         if (identity.length() > 512) throw new ApiException(BAD_REQUEST, "Invalid identity.");
         return repository.user(identity.trim());
     }
-    public List<Lecture> lectures(User user) { return repository.lectures(user); }
+    public List<Lecture> lectures(User user) {
+        return repository.lectures(user).stream().map(lecture -> testingPermissions
+            ? new Lecture(lecture.id(), lecture.title(), lecture.lectureTime(), true) : lecture).toList();
+    }
     public Lecture lecture(User user, long id) {
-        return repository.lectures(user).stream().filter(lecture -> lecture.id().equals(Long.toString(id)))
+        return lectures(user).stream().filter(lecture -> lecture.id().equals(Long.toString(id)))
             .findFirst().orElseThrow(() -> new ApiException(NOT_FOUND, "Lecture not found."));
     }
     @Transactional
@@ -39,7 +48,7 @@ public class PoolService {
     }
     @Transactional
     public Question submit(User user, long lecture, NewQuestion request) {
-        if (!user.role().equals("student")) throw new ApiException(FORBIDDEN, "Only students may submit questions.");
+        if (!testingPermissions && !user.role().equals("student")) throw new ApiException(FORBIDDEN, "Only students may submit questions.");
         repository.lecture(lecture);
         var text = text(request == null ? null : request.text(), 200, "Question");
         var id = repository.createQuestion(lecture, user.id(), text);
@@ -47,7 +56,7 @@ public class PoolService {
     }
     @Transactional
     public Question vote(User user, long id, Vote request) {
-        if (!user.role().equals("student")) throw new ApiException(FORBIDDEN, "Only students may vote.");
+        if (!testingPermissions && !user.role().equals("student")) throw new ApiException(FORBIDDEN, "Only students may vote.");
         if (request == null || request.voted() == null) throw new ApiException(BAD_REQUEST, "Expected a voted boolean.");
         var question = repository.lockQuestion(id);
         if (question.authorId() == user.id()) throw new ApiException(FORBIDDEN, "You cannot vote on your own question.");
@@ -75,19 +84,18 @@ public class PoolService {
     }
     @Transactional
     public void delete(User user, long id) {
-        requireProfessor(user);
         var question = repository.lockQuestion(id);
-        requireManage(user, question.lectureId());
+        if (question.authorId() != user.id()) requireManage(user, question.lectureId());
         repository.delete(id);
     }
     private void requireManage(User user, long lecture) {
         requireProfessor(user);
         var access = repository.lecture(lecture);
-        if (!user.role().equals("admin") && !Long.valueOf(user.id()).equals(access.ownerId()))
+        if (!testingPermissions && !user.role().equals("admin") && !Long.valueOf(user.id()).equals(access.ownerId()))
             throw new ApiException(FORBIDDEN, "You do not manage this lecture.");
     }
-    private static void requireProfessor(User user) {
-        if (!List.of("professor", "admin").contains(user.role())) throw new ApiException(FORBIDDEN, "Professor permission is required.");
+    private void requireProfessor(User user) {
+        if (!testingPermissions && !List.of("professor", "admin").contains(user.role())) throw new ApiException(FORBIDDEN, "Professor permission is required.");
     }
     private static String text(String value, int max, String label) {
         if (value == null || value.isBlank() || value.trim().length() > max)
