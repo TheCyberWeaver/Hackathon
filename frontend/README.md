@@ -6,4 +6,8 @@ Run `npm ci`, then `npm run dev`. Start Java on port 8080 with PostgreSQL config
 
 Professors create lectures and share `/student?lecture=<id>` links. Students select lectures, submit one question per lecture, vote, and report. Professors see authors/reports, select, answer, reopen, and hide questions. Both dashboards refresh every five seconds. The professor archive opens persisted pools; written answers and QR images are not implemented. Both lecture archives open saved question pools.
 
-Run `npm run build` and `npm run lint`. `server/student-api/` and the `test:student-api`/`reset-data` scripts remain legacy fixtures; neither dashboard uses them, and development no longer starts Node API.
+Run `npm run build`, `npm run lint`, and `npm run test:api`. The client tests
+cover lecture routes, proxy identity, shared transport, errors, and no-content
+responses. `server/student-api/` and the `test:student-api`/`reset-data` scripts
+remain legacy fixtures; neither dashboard uses them, and development no longer
+starts Node API.

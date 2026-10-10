@@ -53,6 +53,41 @@ WHERE id = 123;
 
 Java tests start an isolated PostgreSQL instance and test empty databases, V1 adoption, permissions, privacy, voting, quota races, and moderation without contacting the VM. Verify `/api/hello`, unauthenticated 401 for `/api/lectures`, managed login, professor creation, student joining/submission, voting/reports, and answer synchronization.
 
-The ignored legacy `deploy-local.ps1` is incompatible with this contract: its Node packaging, `/api/questions` smoke checks, candidate database assumptions, and secret configuration need updating before reuse. This change does not deploy or alter that credential-bearing script.
+The ignored local `deploy-local.ps1` builds/lints the frontend, runs `test:api`,
+tests/builds Java, and packages only Java and frontend assets. It prepares the
+tracked `deploy/deploy-vm.sh` template, uploads with the existing SSH helper, and
+checks `/api/me`, `/api/lectures`, and frontend assets. Credentials remain in the
+ignored local helper and the existing VM secret; they are excluded from bundles.
+
+```powershell
+# Local checks and packaging only; no VM connection.
+.\deploy-local.ps1 -BuildOnly
+
+# Candidate validation only, using a disposable PostgreSQL database.
+.\deploy-local.ps1 -ValidateOnly
+
+# First adoption, AFTER verifying the supplied V1 schema and table ownership.
+.\deploy-local.ps1 -ValidateOnly -BaselineDatabase
+.\deploy-local.ps1 -BaselineDatabase
+
+# Subsequent deployments after Flyway tracks the database.
+.\deploy-local.ps1
+```
+
+The helper discovers `secrets/app_password` beneath the VM user's home only
+when exactly one file matches. Otherwise provide
+`-AppPasswordFile '/absolute/vm/path/secrets/app_password'`. Override the Docker
+network address with `-DatabaseUrl 'jdbc:postgresql://actual-alias:5432/askpool'`.
+These arguments refer to the VM, not Windows. `-SkipInstall` reuses frontend
+dependencies; `-JdkPath` selects a Java 21 installation.
+
+Before switching, read-only preflight checks verify connectivity, the three
+initial tables' ownership, and whether explicit baseline adoption is needed.
+Candidate validation applies migrations to its own empty PostgreSQL database;
+it does not apply migrations to the existing VM database. A real deployment
+creates a private `database-before.sql` backup in the release directory with a
+PostgreSQL client matching the server's major version, then switches and checks
+production. Baseline is disabled again after successful startup. Runtime
+configuration is saved in the release `.env` for later Compose commands.
 
 Retain PostgreSQL backups/volumes. V2 is additive and keeps the original answer constraint. A rollback to the former Node deployment shows its separate demo store while PostgreSQL data remains intact. Do not remove either data volume during rollout or rollback.

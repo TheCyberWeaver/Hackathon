@@ -101,6 +101,6 @@ Full commands and troubleshooting are in the repository’s **README.md**.
 
 Verify with backend `./gradlew.bat test bootJar` (Windows) or
 `./gradlew test bootJar` (macOS/Linux), and frontend `npm run build` plus
-`npm run lint`. Java tests start an isolated PostgreSQL process automatically,
+`npm run lint` and `npm run test:api`. Java tests start an isolated PostgreSQL process automatically,
 without Docker or VM credentials. The first run downloads platform binaries.
 See the [API contract](docs/API.md) for routes, errors, and permissions.
