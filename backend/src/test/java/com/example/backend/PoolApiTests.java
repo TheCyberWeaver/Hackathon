@@ -26,7 +26,7 @@ class PoolApiTests extends PostgresTestSupport {
     @Test
     void completeLectureFlowEnforcesIdentityPrivacyAndModeration() throws Exception {
         assertEquals(401, send("GET", "/lectures", null, null).statusCode());
-        assertEquals(403, send("POST", "/lectures", student, "{\"title\":\"Lecture\",\"lectureTime\":\"2026-10-10T10:00:00Z\"}").statusCode());
+        assertEquals(201, send("POST", "/lectures", student, "{\"title\":\"Student-owned lecture\",\"lectureTime\":\"2026-10-10T10:00:00Z\"}").statusCode());
         promote(professor);
         var lecture = send("POST", "/lectures", professor, "{\"title\":\"Lecture\",\"lectureTime\":\"2026-10-10T10:00:00Z\"}");
         assertEquals(201, lecture.statusCode());

@@ -1,4 +1,28 @@
-import { request } from '../../lib/poolApi'
+import { request, watchLectures, type Lecture } from '../../lib/poolApi'
+
+export function listLectureHistory(): Promise<Lecture[]> {
+  return request<Lecture[]>('/student/lectures/history')
+}
+
+export function watchLectureHistory(
+  onLectures: (lectures: Lecture[]) => void,
+  onError: (error: unknown) => void,
+  currentVersion: () => number = () => 0,
+) {
+  return watchLectures(onLectures, onError, currentVersion, listLectureHistory)
+}
+
+export function visitLecture(id: string): Promise<Lecture> {
+  return request<Lecture>(`/lectures/${encodeURIComponent(id)}/visits`, {
+    method: 'POST',
+  })
+}
+
+export function removeLectureFromHistory(id: string): Promise<void> {
+  return request<void>(`/student/lectures/history/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  })
+}
 
 export type QuestionStatus = 'open' | 'selected' | 'answered'
 

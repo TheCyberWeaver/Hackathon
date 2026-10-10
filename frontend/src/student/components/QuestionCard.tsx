@@ -9,6 +9,7 @@ type Props = {
   onReport: (question: Question) => void
   onDelete: (question: Question) => void
   deleting: boolean
+  readOnly?: boolean
 }
 
 export function QuestionCard({
@@ -18,6 +19,7 @@ export function QuestionCard({
   onReport,
   onDelete,
   deleting,
+  readOnly = false,
 }: Props) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [voteHelpOpen, setVoteHelpOpen] = useState(false)
@@ -45,7 +47,15 @@ export function QuestionCard({
         )}
       </div>
       <div className="question-card__actions">
-        {question.mine ? (
+        {readOnly ? (
+          <span
+            className="upvote-button upvote-button--readonly"
+            aria-label={`${question.votes} upvotes`}
+          >
+            <ThumbsUpIcon width="16" height="16" />
+            <span>{question.votes}</span>
+          </span>
+        ) : question.mine ? (
           <div
             className="self-vote-help"
             onMouseEnter={() => setVoteHelpOpen(true)}
@@ -86,32 +96,34 @@ export function QuestionCard({
             <span>{question.votes}</span>
           </button>
         )}
-        <div className="menu-wrap">
-          <button
-            type="button"
-            className="more-button"
-            aria-label={`More options for: ${question.text}`}
-            aria-expanded={menuOpen}
-            disabled={deleting || question.id.startsWith('pending-')}
-            onClick={() => setMenuOpen((open) => !open)}
-          >
-            <MoreIcon width="18" height="18" />
-          </button>
-          {menuOpen && (
-            <div className="card-menu">
-              <button
-                type="button"
-                onClick={() => {
-                  setMenuOpen(false)
-                  if (question.mine) onDelete(question)
-                  else onReport(question)
-                }}
-              >
-                {question.mine ? 'Delete question' : 'Report question'}
-              </button>
-            </div>
-          )}
-        </div>
+        {!readOnly && (
+          <div className="menu-wrap">
+            <button
+              type="button"
+              className="more-button"
+              aria-label={`More options for: ${question.text}`}
+              aria-expanded={menuOpen}
+              disabled={deleting || question.id.startsWith('pending-')}
+              onClick={() => setMenuOpen((open) => !open)}
+            >
+              <MoreIcon width="18" height="18" />
+            </button>
+            {menuOpen && (
+              <div className="card-menu">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMenuOpen(false)
+                    if (question.mine) onDelete(question)
+                    else onReport(question)
+                  }}
+                >
+                  {question.mine ? 'Delete question' : 'Report question'}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </article>
   )

@@ -63,7 +63,7 @@ export default function SidePanel({
       closeTimerRef.current = null
       setOpen(false)
       setClosing(false)
-      if (nextPage && nextPage !== page) onNavigate(nextPage)
+      if (nextPage) onNavigate(nextPage)
       else window.requestAnimationFrame(() => triggerRef.current?.focus())
     }, delay)
   }

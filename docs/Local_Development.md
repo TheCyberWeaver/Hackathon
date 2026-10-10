@@ -21,22 +21,11 @@ a real PostgreSQL server, with the same Flyway schema migrations as the VM.
 It binds to loopback, uses a separate database, and never connects to the VM.
 The local Java runtime is excluded from the production JAR.
 
-Vite supplies the demo identity and all signed-in users have testing permissions,
-so you can create and start a lecture in the professor dashboard and submit a question in
-the student dashboard using the same account. Students can submit multiple
-questions per lecture and delete their own questions. Self-voting is still disabled.
-To test another identity, change
-`ASKPOOL_DEMO_USER_ID` in `frontend/.env.local` and restart the local app.
+Vite supplies a demo identity. Every signed-in user can create lectures in Professor and join lectures in Student using the same account. Only a lecture's creator can manage it or see its professor archive. Student history is stored per identity and survives leaving or ending a session; removing an entry changes only that user's list. Students can submit multiple questions and delete their own questions. Self-voting is disabled.
 
-New lectures appear in both dashboards' selectors within five seconds, and the
-list refreshes when the browser regains focus. A chosen lecture stays selected.
-The first lecture is automatically selected when an initially empty list fills.
+To test a second account, change `ASKPOOL_DEMO_USER_ID` in `frontend/.env.local` and restart the local app. Each account has its own professor courses, created lectures, summary and student history. Existing `APP_TESTING_PERMISSIONS` settings no longer bypass ownership.
 
-New lectures need **Start lecture** before they accept questions. **Pause
-questions** closes intake for that lecture across browsers; **Resume questions**
-opens it again. **End lecture** preserves the pool in Past Lectures. The professor
-Deleted tab supports restore and permanent deletion. Expanded questions allow
-an optional written answer, which students can read without author identities.
+Start a lecture before students join using its numeric code or room link. Pause and resume control submissions; ending preserves the question pool for history review. Question deletion is permanent. Professor histories show created lectures, while student histories show visited lectures.
 
 ## Connect a SQL client
 
@@ -113,4 +102,4 @@ If you prefer Docker, `backend/compose.local.yaml` is still available. Set
 `DATABASE_PASSWORD`, start it with `docker compose -f backend/compose.local.yaml up -d`,
 and run the ordinary backend `bootRun` with that password and local port 5432.
 This is a separate database from the embedded runner; use one backend setup at a
-time. Set `APP_TESTING_PERMISSIONS=true` in that Java terminal for both dashboards.
+time. Both dashboards are available to every signed-in account.

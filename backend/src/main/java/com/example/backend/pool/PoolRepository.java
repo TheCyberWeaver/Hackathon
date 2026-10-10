@@ -38,10 +38,38 @@ public class PoolRepository {
             .stream().findFirst().orElseThrow(() -> new ApiException(NOT_FOUND, "Question not found."));
     }
     public List<Lecture> lectures(User user) {
-        return jdbc.query("SELECT * FROM lectures ORDER BY lecture_time DESC, id DESC",
-            (rs, row) -> new Lecture(Long.toString(rs.getLong("id")), rs.getString("title"), time(rs, "lecture_time"),
-                user.role().equals("admin") || (user.role().equals("professor") && Long.valueOf(user.id()).equals(rs.getObject("owner_id", Long.class))),
-                rs.getString("course"), time(rs, "started_at"), time(rs, "ended_at"), rs.getBoolean("questions_paused")));
+        return jdbc.query("""
+            SELECT l.* FROM lectures l
+            WHERE l.owner_id = ?
+               OR EXISTS (SELECT 1 FROM lecture_history h WHERE h.user_id = ? AND h.lecture_id = l.id)
+               OR EXISTS (SELECT 1 FROM lecture_memberships m WHERE m.user_id = ? AND m.lecture_id = l.id)
+            ORDER BY l.lecture_time DESC, l.id DESC
+            """, (rs, row) -> lecture(rs, user.id()), user.id(), user.id(), user.id());
+    }
+    public Lecture lecture(User user, long id) {
+        return jdbc.query("SELECT * FROM lectures WHERE id = ?", (rs, row) -> lecture(rs, user.id()), id)
+            .stream().findFirst().orElseThrow(() -> new ApiException(NOT_FOUND, "Lecture not found."));
+    }
+    private static Lecture lecture(ResultSet rs, long user) throws SQLException {
+        return new Lecture(Long.toString(rs.getLong("id")), rs.getString("title"), time(rs, "lecture_time"),
+            Long.valueOf(user).equals(rs.getObject("owner_id", Long.class)),
+            rs.getString("course"), time(rs, "started_at"), time(rs, "ended_at"), rs.getBoolean("questions_paused"));
+    }
+    public List<Lecture> history(User user) {
+        return jdbc.query("""
+            SELECT l.* FROM lecture_history h JOIN lectures l ON l.id = h.lecture_id
+            WHERE h.user_id = ? ORDER BY h.last_visited_at DESC, l.id DESC
+            """, (rs, row) -> lecture(rs, user.id()), user.id());
+    }
+    public void recordVisit(long user, long lecture) {
+        jdbc.update("""
+            INSERT INTO lecture_history (user_id, lecture_id) VALUES (?, ?)
+            ON CONFLICT (user_id, lecture_id) DO UPDATE
+                SET last_visited_at = GREATEST(lecture_history.last_visited_at, CURRENT_TIMESTAMP)
+            """, user, lecture);
+    }
+    public void forgetVisit(long user, long lecture) {
+        jdbc.update("DELETE FROM lecture_history WHERE user_id = ? AND lecture_id = ?", user, lecture);
     }
     public long createLecture(String title, OffsetDateTime time, long owner, String course) {
         return jdbc.queryForObject("INSERT INTO lectures (title, lecture_time, owner_id, course) VALUES (?, ?, ?, ?) RETURNING id", Long.class, title, time, owner, course);
@@ -116,14 +144,14 @@ public class PoolRepository {
         args.addAll(ids);
         return jdbc.queryForList("DELETE FROM questions WHERE id IN (SELECT id FROM questions WHERE lecture_id = ? AND status = 'unanswered' AND id IN (" + placeholders + ") ORDER BY id FOR UPDATE) RETURNING id::text", String.class, args.toArray());
     }
-    public Summary summary(User user, boolean all) {
+    public Summary summary(User user) {
         return jdbc.queryForObject("""
             SELECT count(DISTINCT l.id) AS lectures,
                    count(q.id) FILTER (WHERE q.status = 'unanswered') AS unanswered,
                    count(q.id) FILTER (WHERE q.status = 'answered') AS answered
             FROM lectures l LEFT JOIN questions q ON q.lecture_id = l.id
-            WHERE ? OR l.owner_id = ?
-            """, (rs, row) -> new Summary(rs.getLong("lectures"), rs.getLong("unanswered"), rs.getLong("answered")), all, user.id());
+            WHERE l.owner_id = ?
+            """, (rs, row) -> new Summary(rs.getLong("lectures"), rs.getLong("unanswered"), rs.getLong("answered")), user.id());
     }
     private static Question publicQuestion(ResultSet rs, long user) throws SQLException {
         return new Question(Long.toString(rs.getLong("id")), rs.getString("text"), rs.getLong("votes"),

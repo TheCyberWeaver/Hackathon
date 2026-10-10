@@ -54,8 +54,10 @@ class ProfessorProfileTests extends PostgresTestSupport {
         assertEquals(skipped, tree(response));
         var separate = tree(send("POST", "/professor/profile/initialize", other, profile(false, 0, "[]"), 200));
         assertFalse(separate.get("onboardingCompleted").asBoolean());
-        send("GET", "/professor/profile", student, null, 403);
-        send("POST", "/professor/profile/initialize", student, profile(false, 0, "[]"), 403);
+        var studentProfile = tree(send("POST", "/professor/profile/initialize", student, profile(false, 0, "[]"), 200));
+        assertEquals(0, studentProfile.get("courses").size());
+        assertFalse(studentProfile.get("onboardingCompleted").asBoolean());
+        assertEquals(studentProfile, tree(send("GET", "/professor/profile", student, null, 200)));
         send("PUT", "/professor/profile", null, profile(true, 0, "[]"), 401);
     }
 

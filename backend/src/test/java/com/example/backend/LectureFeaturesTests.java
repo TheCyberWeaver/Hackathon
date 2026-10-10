@@ -61,7 +61,7 @@ class LectureFeaturesTests extends PostgresTestSupport {
         assertEquals(lecture, archive.get(0).get("lecture").get("id").asText());
         assertEquals(2, archive.get(0).get("questions").size());
         assertEquals(0, tree(send("GET", "/professor/lectures/archive", other, null, 200)).size());
-        send("GET", "/professor/lectures/archive", student, null, 403);
+        assertEquals(0, tree(send("GET", "/professor/lectures/archive", student, null, 200)).size());
     }
 
     @Test void selectedLecturePersistsPerStudentAndIsClearedOnLeaveOrEnd() throws Exception {
@@ -69,7 +69,7 @@ class LectureFeaturesTests extends PostgresTestSupport {
         String second = create(other);
         String mine = "/sessions/mine";
         send("POST", "/sessions/join", null, "{\"code\":\"" + first + "\"}", 401);
-        send("POST", "/sessions/join", owner, "{\"code\":\"" + first + "\"}", 403);
+        send("POST", "/sessions/join", owner, "{\"code\":\"" + first + "\"}", 404);
         send("POST", "/sessions/join", student, "{\"code\":\"invalid\"}", 400);
         send("POST", "/sessions/join", student, "{\"code\":\"" + first + "\"}", 404);
         assertTrue(tree(send("GET", mine, student, null, 200)).get("session").isNull());
@@ -117,7 +117,7 @@ class LectureFeaturesTests extends PostgresTestSupport {
         assertEquals(1, summary.get("unansweredCount").asInt());
         assertEquals(1, summary.get("answeredCount").asInt());
         assertEquals(0, tree(send("GET", "/professor/summary", other, null, 200)).get("lectureCount").asInt());
-        send("GET", "/professor/summary", student, null, 403);
+        assertEquals(0, tree(send("GET", "/professor/summary", student, null, 200)).get("lectureCount").asInt());
         var reopened = tree(send("PATCH", status, owner, "{\"status\":\"open\"}", 200));
         assertTrue(reopened.get("answeredAt").isNull());
         assertEquals(answered.get("createdAt"), reopened.get("createdAt"));

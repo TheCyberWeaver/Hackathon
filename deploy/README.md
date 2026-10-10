@@ -81,32 +81,18 @@ docker compose logs --tail 100 backend
 
 Flyway baselines at V1 and applies pending migrations transactionally. Remove DATABASE_BASELINE after successful startup; the default is false. On an empty database leave it false so all migrations run. Baseline does not validate that an untracked schema matches V1; verify first. See the [official Flyway baseline reference](https://documentation.red-gate.com/flyway/reference/commands/baseline).
 
-## Professor permissions
+## User accounts and ownership
 
-The hackathon deployment currently defaults to `APP_TESTING_PERMISSIONS=true`:
-all signed-in users can submit, vote, create lectures, view authors/reports in
-the professor dashboard, and manage every lecture. This allows the same account
-to test both dashboards without changing database roles. The self-vote
-restriction still applies.
+Every authenticated user can use both Student and Professor. Switching dashboards does not change identity or expose another user's data. Professor profiles, courses, lecture archives and summary counts are scoped to the signed-in account. Only a lecture's owner can manage it; students retain control of their own questions. The old `APP_TESTING_PERMISSIONS` setting is no longer used, including when present in an existing release environment.
 
-To restore role/owner checks on the VM, set `APP_TESTING_PERMISSIONS=false` in
-the release `.env`, then run `docker compose -p hackathon up -d backend`.
-The instructions below apply when testing permissions are disabled.
+V10 adds permanent per-user student lecture history, separately from the current session membership. It preserves all existing lectures, questions, courses and ownership, and recovers attendance from surviving memberships and participation records. Unsaved historical visits cannot be recovered. See [database state](../docs/Database_State.md) for the schema and upgrade details.
 
-New identities default to students. Through an administrator database session, assign the exact identity supplied by the login proxy:
-
-```sql
-INSERT INTO users (eth_identity_ref, role)
-VALUES ('actual-professor@ethz.ch', 'professor')
-ON CONFLICT (eth_identity_ref) DO UPDATE SET role = EXCLUDED.role;
-```
-
-Professors create and own lectures. Legacy lectures have no owner; an admin can manage them, or assign their owner:
+Legacy lectures without an owner are not assigned to every user. An administrator who knows the correct owner may assign that exact account through SQL:
 
 ```sql
 UPDATE lectures
-SET owner_id = (SELECT id FROM users WHERE eth_identity_ref = 'actual-professor@ethz.ch')
-WHERE id = 123;
+SET owner_id = (SELECT id FROM users WHERE eth_identity_ref = 'actual-owner@ethz.ch')
+WHERE id = 123 AND owner_id IS NULL;
 ```
 
 ## Verification and rollout
@@ -150,7 +136,7 @@ PostgreSQL client matching the server's major version, then switches and checks
 production. Baseline is disabled again after successful startup. Runtime
 configuration is saved in the release `.env` for later Compose commands.
 
-Retain PostgreSQL backups/volumes. The migrations are additive and keep the original answer constraint. A rollback to the former Node deployment shows its separate demo store while PostgreSQL data remains intact. Do not remove either data volume during rollout or rollback.
+Retain PostgreSQL backups/volumes. V10 is additive; V9 removed written answers and old trash. The original status/time constraint remains. A rollback to the former Node deployment shows its separate demo store while PostgreSQL data remains intact. Do not remove either data volume during rollout or rollback.
 
 V3 handles the older VM schema where `lectures.professor_id` is required.
 It backfills missing `owner_id` values and installs an insert trigger to populate

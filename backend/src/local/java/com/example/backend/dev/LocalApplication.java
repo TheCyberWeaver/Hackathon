@@ -42,7 +42,6 @@ public final class LocalApplication {
             System.setProperty("spring.datasource.username", "askpool_app");
             System.setProperty("spring.datasource.password", "");
             System.setProperty("spring.flyway.baseline-on-migrate", "false");
-            System.setProperty("app.testing-permissions", "true");
             System.setProperty("server.port", Integer.toString(backendPort));
             System.setProperty("app.frontend-origin", args.length > 3 ? args[3] : "http://localhost:5173,http://127.0.0.1:5173");
             System.out.println("Local PostgreSQL: 127.0.0.1:" + databasePort + "/askpool (askpool_app, empty password)");
