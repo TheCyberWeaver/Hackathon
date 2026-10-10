@@ -1,6 +1,14 @@
 # Handoff to Codex: AskPool student frontend (clickable demo)
 
-Status: v3, owner decisions folded in (2026-10-10). Where this file marks something as "default", the owner has not objected, so treat it as the instruction.
+> Historical design brief. The implemented student dashboard now lives in
+> `frontend/src/student/`, and its demo API lives in `frontend/server/student-api/`.
+> The paths and setup commands below describe the original standalone prototype.
+> For the current setup and behavior, use `frontend/README.md` and
+> `docs/Entry_Page.md`. In the current app, votes always outrank submission time,
+> and professors may see question authors.
+
+Archived status: v3 design brief (2026-10-10). It is retained for background and
+does not override the current implementation or documentation.
 
 **Goal of this task in one sentence:** a polished, clickable student-side demo that the rest of the team can open to see how AskPool would look and feel on mobile and desktop. Visual and interaction fidelity matters far more than completeness or architecture.
 

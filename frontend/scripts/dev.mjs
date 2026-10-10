@@ -6,14 +6,14 @@ const vite = fileURLToPath(
   new URL('../node_modules/vite/bin/vite.js', import.meta.url),
 )
 const api = fileURLToPath(
-  new URL('../student-frontend/server/index.mjs', import.meta.url),
+  new URL('../server/student-api/index.mjs', import.meta.url),
 )
 const preview = process.argv.includes('--preview')
 const children = [
   spawn(process.execPath, [api], {
     cwd: root,
     stdio: 'inherit',
-    env: { ...process.env, PORT: '3001', ASKPOOL_REQUIRE_USER_ID: 'true' },
+    env: { ...process.env, PORT: '3001' },
   }),
   spawn(
     process.execPath,

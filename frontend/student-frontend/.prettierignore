@@ -1,6 +1,0 @@
-node_modules
-.npm-cache
-dist
-package-lock.json
-server/data/state.json
-demo_sketch.pdf

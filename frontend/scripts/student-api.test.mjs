@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { once } from 'node:events'
-import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -9,9 +9,9 @@ import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 import ts from 'typescript'
 
-test('integrated student client relies on proxy identity for every request', async (t) => {
+test('student client relies on proxy identity for every request', async (t) => {
   const source = await readFile(
-    new URL('../student-frontend/src/lib/studentApi.ts', import.meta.url),
+    new URL('../src/student/lib/studentApi.ts', import.meta.url),
     'utf8',
   )
   const { outputText } = ts.transpileModule(source, {
@@ -49,10 +49,10 @@ test('integrated student client relies on proxy identity for every request', asy
     return new Response(JSON.stringify({}), { status: 200 })
   })
 
-  await api.listQuestions(true)
-  await api.submitQuestion('A question', true)
-  await api.setVote('question-1', true, true)
-  await api.reportQuestion('question-1', true)
+  await api.listQuestions()
+  await api.submitQuestion('A question')
+  await api.setVote('question-1', true)
+  await api.reportQuestion('question-1')
   assert.equal(storageReads, 0)
   assert.equal(requests.length, 4)
   for (const { init } of requests) {
@@ -62,13 +62,6 @@ test('integrated student client relies on proxy identity for every request', asy
     assert.equal(headers.has('X-User-Name'), false)
     assert.equal(init.credentials, 'same-origin')
   }
-  // Teammates can still run the student dashboard independently.
-  await api.listQuestions()
-  assert.equal(
-    new Headers(requests[4].init.headers).get('X-Student-Id'),
-    'standalone-browser-id',
-  )
-  assert.equal(storageReads, 1)
 })
 
 test('integrated student API uses proxy identity for ownership and votes', async () => {
@@ -82,14 +75,13 @@ test('integrated student API uses proxy identity for ownership and votes', async
     process.execPath,
     [
       fileURLToPath(
-        new URL('../student-frontend/server/index.mjs', import.meta.url),
+        new URL('../server/student-api/index.mjs', import.meta.url),
       ),
     ],
     {
       env: {
         ...process.env,
         PORT: String(port),
-        ASKPOOL_REQUIRE_USER_ID: 'true',
         ASKPOOL_DATA_DIR: dataDirectory,
       },
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -146,6 +138,19 @@ test('integrated student API uses proxy identity for ownership and votes', async
       assert.equal(voted.status, 200)
       assert.equal((await voted.json()).votes, 1)
     }
+    const statePath = join(dataDirectory, 'state.json')
+    const state = JSON.parse(await readFile(statePath, 'utf8'))
+    const older = state.questions.find((item) => item.id === 'q-recording')
+    older.status = 'open'
+    older.votes = 0
+    older.createdAt = new Date(Date.now() - 60 * 60_000).toISOString()
+    await writeFile(statePath, JSON.stringify(state))
+    const ranked = await (await fetch(url, { headers })).json()
+    assert.ok(
+      ranked.findIndex((item) => item.id === question.id) <
+        ranked.findIndex((item) => item.id === older.id),
+      'one upvote must outrank an older question with no upvotes',
+    )
   } finally {
     server.kill()
     await exited

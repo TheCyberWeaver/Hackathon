@@ -1,4 +1,4 @@
-import { defineConfig, loadEnv } from 'vite'
+import { defineConfig, loadEnv, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 
@@ -9,8 +9,28 @@ const proxy = {
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
+  const demoAuth = mode === 'development' && env.ASKPOOL_DEMO_AUTH !== 'false'
+  const demoIdentityPlugin: Plugin = {
+    name: 'askpool-demo-identity',
+    configureServer(server) {
+      server.middlewares.use('/api/me', (_request, response) => {
+        response.setHeader('Content-Type', 'application/json; charset=utf-8')
+        response.setHeader('Cache-Control', 'no-store')
+        response.end(
+          JSON.stringify({
+            id: env.ASKPOOL_DEMO_USER_ID || 'alex@ethz.ch',
+            name: env.ASKPOOL_DEMO_USER_NAME || 'Alex Morgan',
+          }),
+        )
+      })
+    },
+  }
   return {
-    plugins: [react(), tailwindcss()],
+    plugins: [
+      react(),
+      tailwindcss(),
+      ...(demoAuth ? [demoIdentityPlugin] : []),
+    ],
     resolve: { dedupe: ['react', 'react-dom'] },
     server: {
       port: 5173,
@@ -22,7 +42,7 @@ export default defineConfig(({ mode }) => {
             {
               ...config,
               // Local preview only. Production and `vite preview` require real proxy headers.
-              ...(mode === 'development' && env.ASKPOOL_DEMO_AUTH !== 'false'
+              ...(demoAuth
                 ? {
                     headers: {
                       'X-User-Id': env.ASKPOOL_DEMO_USER_ID || 'alex@ethz.ch',
