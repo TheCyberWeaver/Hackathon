@@ -314,6 +314,23 @@ html:has(.student-settings-card) {
   line-height: 14px;
   transition: opacity 170ms linear;
 }
+.question-moderation-warning {
+  display: grid;
+  gap: 4px;
+  margin-top: 12px;
+  padding: 12px 16px;
+  border: 1px solid #f1c8ac;
+  border-radius: 14px;
+  background: #fff7ed;
+  color: #7c2d12;
+  font-size: 13px;
+  line-height: 1.45;
+  box-shadow: 0 6px 18px rgb(124 45 18 / 7%);
+}
+.question-moderation-warning strong {
+  font-size: 13px;
+  font-weight: 700;
+}
 
 .section-heading {
   display: inline-block;

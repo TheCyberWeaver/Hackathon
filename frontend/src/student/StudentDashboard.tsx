@@ -13,6 +13,7 @@ import {
 import type { CurrentUser } from '../lib/api'
 import LecturePicker from '../components/LecturePicker'
 import {
+  ApiRequestError,
   initialLectureId,
   watchLectures,
   rememberLecture,
@@ -78,6 +79,9 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
   const [mobileView, setMobileView] = useState<'other' | 'mine'>('other')
   const [reportTarget, setReportTarget] = useState<Question | null>(null)
   const [toast, setToast] = useState('')
+  const [moderationWarning, setModerationWarning] = useState<number | null>(
+    null,
+  )
   const [newQuestionId, setNewQuestionId] = useState<string | null>(null)
   const [tutorialOpen, setTutorialOpen] = useState(false)
   const [tutorialCompleted, setTutorialCompleted] = useState(() =>
@@ -260,55 +264,48 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
     mutationVersion.current++
     textareaRef.current?.blur()
     setFocused(false)
-    const optimisticId = `pending-${Date.now()}-${Math.random().toString(36).slice(2)}`
-    const optimisticQuestion: Question = {
-      id: optimisticId,
-      text,
-      votes: 0,
-      createdAt: new Date().toISOString(),
-      status: 'open',
-      mine: true,
-      votedByMe: false,
-    }
-
-    // Show the expected result immediately. The server response is checked
-    // after the send animation so network timing cannot delay the reveal.
-    flushSync(() => {
-      setQuestions((items) => [...items, optimisticQuestion])
-      setNewQuestionId(optimisticId)
-      setDraft('')
-      setMobileView('other')
-    })
-    if (textareaRef.current) growTextarea(textareaRef.current)
-
-    const result = submitQuestion(lectureId, text).then(
-      (created) => ({ created, error: null }),
-      (error: unknown) => ({ created: null, error }),
-    )
-    await sleep(prefersReducedMotion() ? 20 : 200)
-    await animateScrollTo(
-      document.documentElement.scrollHeight - window.innerHeight,
-      1000,
-    )
-    const { created, error } = await result
-    if (created) {
-      setQuestions((items) =>
-        items.map((item) => (item.id === optimisticId ? created : item)),
+    try {
+      // Only render questions after the server accepts them. Rejected text
+      // must never briefly appear in the pool as an optimistic card.
+      const created = await submitQuestion(lectureId, text)
+      flushSync(() => {
+        setQuestions((items) =>
+          items.some((item) => item.id === created.id)
+            ? items
+            : [...items, created],
+        )
+        setNewQuestionId(created.id)
+        setDraft('')
+        setModerationWarning(null)
+        setMobileView('other')
+      })
+      if (textareaRef.current) growTextarea(textareaRef.current)
+      await sleep(prefersReducedMotion() ? 20 : 200)
+      await animateScrollTo(
+        document.documentElement.scrollHeight - window.innerHeight,
+        1000,
       )
-      setNewQuestionId(created.id)
-    } else {
-      setQuestions((items) => items.filter((item) => item.id !== optimisticId))
-      showToast(
-        error instanceof Error
-          ? error.message
-          : 'Could not send your question.',
-      )
+    } catch (error) {
+      if (
+        error instanceof ApiRequestError &&
+        error.code === 'QUESTION_BLOCKED'
+      ) {
+        setModerationWarning(error.warningCount ?? 1)
+        window.requestAnimationFrame(() => textareaRef.current?.focus())
+      } else {
+        showToast(
+          error instanceof Error
+            ? error.message
+            : 'Could not send your question.',
+        )
+      }
       setDraft(text)
+    } finally {
+      setSending(false)
+      pendingSend.current = false
+      mutationVersion.current++
+      window.setTimeout(() => setNewQuestionId(null), 2200)
     }
-    setSending(false)
-    pendingSend.current = false
-    mutationVersion.current++
-    window.setTimeout(() => setNewQuestionId(null), 2200)
   }
 
   async function handleVote(question: Question) {
@@ -504,6 +501,7 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
                   setQuestions([])
                   setLectureId(id)
                   setReportTarget(null)
+                  setModerationWarning(null)
                 }}
               />
               <div
@@ -524,13 +522,14 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
                       : placeholder
                   }
                   disabled={questionsPaused}
-                  aria-describedby="question-input-status"
+                  aria-describedby={`question-input-status${moderationWarning === null ? '' : ' question-moderation-warning'}`}
                   onFocus={() => setFocused(true)}
                   onBlur={() => setFocused(false)}
                   onChange={(event) => {
                     const next = event.target.value.slice(0, 200)
                     event.target.value = next
                     setDraft(next)
+                    setModerationWarning(null)
                     growTextarea(event.target)
                   }}
                   onKeyDown={(event) => {
@@ -578,6 +577,21 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
                   </div>
                 </div>
               </div>
+              {moderationWarning !== null && (
+                <div
+                  id="question-moderation-warning"
+                  className="question-moderation-warning"
+                  role="alert"
+                >
+                  <strong>
+                    Question not sent · Warning {moderationWarning}
+                  </strong>
+                  <span>
+                    This wording isn’t allowed. Edit your question and try
+                    again.
+                  </span>
+                </div>
+              )}
               {!tutorialCompleted && (
                 <div className="student-tutorial-invite">
                   <svg aria-hidden="true" viewBox="0 0 72 38" fill="none">

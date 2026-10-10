@@ -14,6 +14,11 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
 @RestControllerAdvice
 public class ApiErrors {
     private static final Logger log = LoggerFactory.getLogger(ApiErrors.class);
+    @ExceptionHandler(ModerationRejectedException.class)
+    ResponseEntity<?> moderatedQuestion(ModerationRejectedException error) {
+        return ResponseEntity.status(error.status).body(Map.of(
+            "error", error.getMessage(), "code", "QUESTION_BLOCKED", "warningCount", error.warningCount()));
+    }
     @ExceptionHandler(ApiException.class)
     ResponseEntity<?> apiError(ApiException error) {
         return ResponseEntity.status(error.status).body(Map.of("error", error.getMessage()));

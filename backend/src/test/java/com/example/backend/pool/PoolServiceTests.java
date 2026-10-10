@@ -8,7 +8,7 @@ import static org.springframework.http.HttpStatus.*;
 
 class PoolServiceTests {
     final PoolRepository repository = mock(PoolRepository.class);
-    final PoolService service = new PoolService(repository, false);
+    final PoolService service = new PoolService(repository, new QuestionModeration(), false);
 
     @Test void authorsCanDeleteTheirOwnQuestionsWithoutProfessorRights() {
         when(repository.lockQuestion(10)).thenReturn(new PoolRepository.QuestionAccess(10, 20, 30, null));
@@ -28,7 +28,7 @@ class PoolServiceTests {
     @Test void PausedSessionsRejectSubmissionsEvenWithTestingPermissions() {
         when(repository.lockLecture(20)).thenReturn(new PoolRepository.LectureAccess(20, 40L,
             new LectureSession.State(OffsetDateTime.now(), null, true)));
-        var testingService = new PoolService(repository, true);
+        var testingService = new PoolService(repository, new QuestionModeration(), true);
         assertEquals(CONFLICT, assertThrows(ApiException.class,
             () -> testingService.submit(new PoolRepository.User(30, "professor"), 20, new ApiModels.NewQuestion("Question"))).status);
         verify(repository, never()).createQuestion(anyLong(), anyLong(), anyString());

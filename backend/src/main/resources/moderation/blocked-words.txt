@@ -1,0 +1,17 @@
+# One complete word per line. Keep this list narrow to avoid blocking lecture terminology.
+# The matching rule is case-insensitive and catches simple punctuation/character substitutions.
+fuck
+fucked
+fucking
+fucker
+motherfucker
+shit
+shitty
+bitch
+cunt
+asshole
+dickhead
+arschloch
+scheisse
+scheiße
+hurensohn
