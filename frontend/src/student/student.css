@@ -1075,9 +1075,6 @@ html:has(.student-settings-card) {
   border-radius: 10px;
   background: var(--color-surface);
 }
-.student-history-entry.is-expanded {
-  border-color: #cbd5e1;
-}
 .student-history-entry h2 {
   margin: 0;
   font-size: inherit;
@@ -1098,8 +1095,7 @@ html:has(.student-settings-card) {
   text-align: left;
   transition: background 160ms;
 }
-.student-history-summary:hover,
-.student-history-summary[aria-expanded='true'] {
+.student-history-summary:hover {
   background: #f8fafc;
 }
 .student-history-title {
@@ -1128,10 +1124,6 @@ html:has(.student-settings-card) {
 .student-history-meta time span,
 .student-history-count {
   white-space: nowrap;
-}
-.student-history-questions {
-  padding: 12px;
-  border-top: 1px solid var(--color-border);
 }
 .student-history-question {
   padding: 10px 12px;
@@ -1205,4 +1197,39 @@ html:has(.student-settings-card) {
   .student-history-page {
     animation: none;
   }
+}
+
+/* Retain scrolling room when a shorter mobile list is selected. */
+.mobile-questions #questions-panel-other {
+  padding-bottom: 100svh;
+}
+.student-history-summary {
+  text-decoration: none;
+}
+.student-history-summary:focus-visible,
+.student-lecture-back:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 3px;
+}
+.student-lecture-back {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  margin-bottom: 16px;
+  color: var(--color-accent);
+  font-size: 14px;
+  text-decoration: none;
+}
+.student-lecture-back:hover {
+  text-decoration: underline;
+}
+.student-lecture-meta {
+  margin: -8px 0 24px;
+  color: var(--color-secondary);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.student-lecture-page h1 {
+  overflow-wrap: anywhere;
 }

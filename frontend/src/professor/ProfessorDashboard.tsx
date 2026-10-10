@@ -929,7 +929,7 @@ export default function ProfessorDashboard({
                   ))}
                 </div>
                 {selectedTab === 'open' && (
-                  <label className="professor-question-sort mb-2 text-xs font-medium text-slate-600">
+                  <label className="professor-question-sort text-xs font-medium text-slate-600">
                     Time filter
                     <select
                       aria-label="Time filter"
@@ -953,21 +953,20 @@ export default function ProfessorDashboard({
                     </select>
                   </label>
                 )}
+                {selectedTab === 'open' && (
+                  <div className="professor-question-clear">
+                    <button
+                      type="button"
+                      disabled={!openQuestionPool.length || busyId !== null}
+                      onClick={(e) => void prepareClear(e.currentTarget)}
+                      className="min-h-11 rounded-lg border border-red-200 px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {busyId === 'clear' ? 'Clearing…' : 'Clear all questions'}
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
-
-            {selectedTab === 'open' && (
-              <div className="mt-4">
-                <button
-                  type="button"
-                  disabled={!openQuestionPool.length || busyId !== null}
-                  onClick={(e) => void prepareClear(e.currentTarget)}
-                  className="min-h-11 rounded-lg border border-red-200 px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {busyId === 'clear' ? 'Clearing…' : 'Clear all questions'}
-                </button>
-              </div>
-            )}
 
             <section
               id="questions-panel"
@@ -1005,21 +1004,14 @@ export default function ProfessorDashboard({
                     const topQuestion = topRank !== undefined
                     return (
                       <article
+                        data-top-ranked={topQuestion || undefined}
+                        data-expanded={expanded || undefined}
                         key={question.id}
-                        className={`rounded-xl border ${topQuestion ? 'border-orange-200 border-l-[3px] border-l-orange-500 bg-orange-50/70' : `bg-slate-50 ${expanded ? 'border-blue-300' : 'border-slate-200'}`}`}
+                        className={`professor-question-card rounded-xl border ${topQuestion ? 'border-l-[3px]' : ''}`}
                       >
                         {topQuestion && (
-                          <div className="flex items-center gap-1.5 px-4 pt-4 text-[11px] font-bold uppercase tracking-[0.1em] text-orange-700 sm:px-5 sm:pt-5">
-                            <svg
-                              aria-hidden="true"
-                              className="size-4 shrink-0"
-                              viewBox="0 0 24 24"
-                              fill="currentColor"
-                            >
-                              <path d="M12 22c4.4 0 7-3.1 7-7.1 0-3.3-1.8-5.6-3.5-7.2.1 2.1-1.1 3.1-2.2 3.5C13.8 7.7 11.8 4.5 8.9 2c.2 3.3-1.1 5.1-2.5 7C5.5 10.3 5 12 5 14.9 5 19 7.6 22 12 22Z" />
-                            </svg>
-                            Top voted <span aria-hidden="true">·</span> #
-                            {topRank}
+                          <div className="professor-question-rank flex items-center gap-1.5 px-4 pt-4 text-[11px] font-bold tracking-[0.1em] sm:px-5 sm:pt-5">
+                            #{topRank}
                           </div>
                         )}
                         <div
@@ -1040,7 +1032,7 @@ export default function ProfessorDashboard({
                             </span>
                           </button>
                           <div
-                            className={`flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1 text-sm font-semibold tabular-nums ${topQuestion ? 'bg-orange-100 text-orange-800' : 'bg-white text-slate-700'}`}
+                            className="professor-question-votes flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1 text-sm font-semibold tabular-nums"
                             aria-label={`${question.upvoteCount} votes`}
                           >
                             <ThumbsUpIcon className="size-4" />
@@ -1068,7 +1060,8 @@ export default function ProfessorDashboard({
                             type="button"
                             onClick={() => changeStatus(question)}
                             disabled={busyId !== null}
-                            className={`inline-flex min-h-9 items-center gap-2 rounded-md border px-3 py-2 text-sm font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#70476a] ${question.answered ? 'border-[#bd9db6] bg-[#f5edf3]/80 text-[#61395c] hover:border-[#a6809f] hover:bg-[#eadce7]' : 'border-[#70476a] bg-[#70476a] text-white hover:border-[#583651] hover:bg-[#583651]'}`}
+                            data-answered={question.answered}
+                            className="professor-answer-button inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2"
                           >
                             <svg
                               aria-hidden="true"
@@ -1105,7 +1098,7 @@ export default function ProfessorDashboard({
                             disabled={busyId !== null}
                             aria-label="Delete question"
                             title="Delete question"
-                            className="ml-auto inline-flex min-h-11 items-center justify-center rounded-md border border-slate-300 px-3 text-sm text-slate-600 hover:border-red-200 hover:bg-red-50 hover:text-red-700"
+                            className="professor-delete-button ml-auto inline-flex min-h-11 items-center justify-center rounded-md border px-3 text-sm"
                           >
                             Delete
                           </button>

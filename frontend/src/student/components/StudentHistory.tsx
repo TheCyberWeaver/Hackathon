@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { flushSync } from 'react-dom'
 import type { Lecture } from '../../lib/poolApi'
 import type { HistoryQuestions } from '../lib/useStudentHistory'
 
@@ -10,6 +9,7 @@ type Props = {
   entries: Record<string, HistoryQuestions>
   onRetryLectures: () => void
   onRetryQuestions: (id: string) => void
+  onOpenLecture: (id: string) => void
 }
 
 const dateFormat = new Intl.DateTimeFormat('en-GB', {
@@ -33,9 +33,9 @@ export default function StudentHistory({
   entries,
   onRetryLectures,
   onRetryQuestions,
+  onOpenLecture,
 }: Props) {
   const [order, setOrder] = useState<'newest' | 'oldest'>('newest')
-  const [expanded, setExpanded] = useState(new Set<string>())
   const archive = lectures
     .filter((lecture) => lecture.endedAt)
     .sort((a, b) => {
@@ -46,19 +46,6 @@ export default function StudentHistory({
         a.id.localeCompare(b.id)
       )
     })
-
-  function toggle(id: string, button: HTMLButtonElement) {
-    const top = button.getBoundingClientRect().top
-    flushSync(() =>
-      setExpanded((current) => {
-        const next = new Set(current)
-        if (next.has(id)) next.delete(id)
-        else next.add(id)
-        return next
-      }),
-    )
-    window.scrollBy(0, button.getBoundingClientRect().top - top)
-  }
 
   return (
     <>
@@ -109,23 +96,26 @@ export default function StudentHistory({
         {archive.map((lecture) => {
           const entry = entries[lecture.id]
           const questions = entry?.questions
-          const open = expanded.has(lecture.id)
           const start = sessionTime(lecture)
           const validDate = Number.isFinite(start.getTime())
-          const panelId = `history-questions-${lecture.id}`
           return (
-            <article
-              key={lecture.id}
-              className={`student-history-entry${open ? ' is-expanded' : ''}`}
-            >
+            <article key={lecture.id} className="student-history-entry">
               <h2>
-                <button
-                  type="button"
+                <a
                   className="student-history-summary"
-                  aria-expanded={open}
-                  aria-controls={panelId}
-                  id={`history-title-${lecture.id}`}
-                  onClick={(event) => toggle(lecture.id, event.currentTarget)}
+                  href={`/student?lecture=${encodeURIComponent(lecture.id)}`}
+                  onClick={(event) => {
+                    if (
+                      event.button !== 0 ||
+                      event.metaKey ||
+                      event.ctrlKey ||
+                      event.shiftKey ||
+                      event.altKey
+                    )
+                      return
+                    event.preventDefault()
+                    onOpenLecture(lecture.id)
+                  }}
                 >
                   <span className="student-history-title">{lecture.title}</span>
                   <span className="student-history-meta">
@@ -147,7 +137,7 @@ export default function StudentHistory({
                           : 'Loading count…'}
                     </span>
                   </span>
-                </button>
+                </a>
               </h2>
               {entry?.error && (
                 <div className="student-history-feedback" role="alert">
@@ -165,39 +155,6 @@ export default function StudentHistory({
                   </button>
                 </div>
               )}
-              <div
-                id={panelId}
-                className="student-history-questions"
-                role="region"
-                aria-labelledby={`history-title-${lecture.id}`}
-                hidden={!open}
-              >
-                {!questions && !entry?.error && (
-                  <p className="student-history-message" role="status">
-                    Loading questions…
-                  </p>
-                )}
-                {questions?.length === 0 && (
-                  <p className="student-history-message">
-                    No questions in this lecture.
-                  </p>
-                )}
-                {questions?.map((question) => (
-                  <article
-                    key={question.id}
-                    className="student-history-question"
-                  >
-                    <p>{question.text}</p>
-                    <span
-                      className={`student-history-status${question.status === 'answered' ? ' is-answered' : ''}`}
-                    >
-                      {question.status === 'answered'
-                        ? 'Answered'
-                        : 'Unanswered'}
-                    </span>
-                  </article>
-                ))}
-              </div>
             </article>
           )
         })}

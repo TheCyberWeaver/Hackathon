@@ -375,9 +375,11 @@ for (const mobile of [false, true]) {
       await expect(studentHistory).toContainText('3 questions')
       await studentHistory.locator('.student-history-summary').click()
       await expect(
-        studentHistory.locator('.student-history-question'),
+        student.page.locator('.student-history-question'),
       ).toHaveCount(3)
-      await expect(studentHistory.locator('.is-answered')).toHaveCount(3)
+      await expect(
+        student.page.locator('.student-history-status.is-answered'),
+      ).toHaveCount(3)
       await device.page.reload()
       await expect(
         device.page.getByText('No courses yet. Add your first course above.'),

@@ -5,9 +5,10 @@ import StudentJoinPage from './StudentJoinPage'
 import { SendIcon } from './components/Icons'
 import SidePanel, { type SidePanelPage } from '../components/SidePanel'
 import StudentHistory from './components/StudentHistory'
+import StudentLecturePage from './components/StudentLecturePage'
 import { useStudentHistory } from './lib/useStudentHistory'
 import StudentTutorial from './components/StudentTutorial'
-import { animateScrollTo, prefersReducedMotion } from './lib/motion'
+import { prefersReducedMotion } from './lib/motion'
 import {
   readTutorialCompleted,
   readTutorialDismissed,
@@ -19,6 +20,7 @@ import {
   ApiRequestError,
   watchLectures,
   rememberLecture,
+  initialLectureId,
   type Lecture,
 } from '../lib/poolApi'
 import {
@@ -72,8 +74,21 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
   const [lecturesLoading, setLecturesLoading] = useState(true)
   const [lecturesError, setLecturesError] = useState(false)
   const [lectureRetry, setLectureRetry] = useState(0)
-  const history = useStudentHistory(lectures, page === 'pastLectures')
   const [lectureId, setLectureId] = useState('')
+  const [requestedLectureId, setRequestedLectureId] = useState(initialLectureId)
+  const requestedLecture = lectures.find(
+    (lecture) => lecture.id === requestedLectureId,
+  )
+  const readingLecture =
+    page === 'questions' &&
+    !!requestedLectureId &&
+    (requestedLectureId !== lectureId || !!requestedLecture?.endedAt)
+  const history = useStudentHistory(
+    page === 'pastLectures'
+      ? lectures
+      : lectures.filter((lecture) => lecture.id === requestedLectureId),
+    page === 'pastLectures' || readingLecture,
+  )
   const selectedLecture = lectures.find((lecture) => lecture.id === lectureId)
   const questionsPaused =
     !selectedLecture ||
@@ -108,7 +123,6 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
   const [deletingIds, setDeletingIds] = useState(new Set<string>())
   const mutationVersion = useRef(0)
   const pendingSend = useRef(false)
-  const switchingView = useRef(false)
   const toastTimer = useRef<number | undefined>(undefined)
   const tutorialReturnFocus = useRef<HTMLElement | null>(null)
   const joinedSessionId = joinedSession?.id
@@ -156,6 +170,7 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
       const session = await joinSession(code)
       setJoinedSession(session)
       setLectureId(session.id)
+      setRequestedLectureId(session.id)
       setQuestions([])
       window.history.replaceState(null, '', basePath)
       showToast(`Joined ${session.course || 'lecture'}.`)
@@ -175,6 +190,7 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
       await leaveJoinedSession()
       setJoinedSession(null)
       setLectureId('')
+      setRequestedLectureId('')
       setQuestions([])
       setDraft('')
       setJoinError('')
@@ -196,16 +212,36 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
       nextPage === 'questions'
         ? basePath
         : `${basePath}/${nextPage === 'pastLectures' ? 'past-lectures' : nextPage}`
-    if (window.location.pathname !== path) {
-      window.history.pushState(null, '', `${path}${window.location.search}`)
+    const search =
+      nextPage === 'questions'
+        ? lectureId
+          ? `?lecture=${encodeURIComponent(lectureId)}`
+          : ''
+        : window.location.search
+    if (window.location.pathname + window.location.search !== path + search) {
+      window.history.pushState(null, '', path + search)
     }
+    if (nextPage === 'questions') setRequestedLectureId(lectureId)
     setPage(nextPage)
+    setFocused(false)
+    window.scrollTo(0, 0)
+  }
+
+  function openPastLecture(id: string) {
+    window.history.pushState(
+      null,
+      '',
+      `${basePath}?lecture=${encodeURIComponent(id)}`,
+    )
+    setRequestedLectureId(id)
+    setPage('questions')
     setFocused(false)
     window.scrollTo(0, 0)
   }
 
   useEffect(() => {
     function syncPage() {
+      setRequestedLectureId(initialLectureId())
       setPage(currentPage())
       setFocused(false)
       window.scrollTo(0, 0)
@@ -282,8 +318,14 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
             setJoinedSession(session)
             setLectureId(session.id)
             setQuestions([])
-            if (currentPage() === 'questions')
+            if (
+              !readingLecture &&
+              currentPage() === 'questions' &&
+              (!initialLectureId() || initialLectureId() === joinedSessionId)
+            ) {
+              setRequestedLectureId(session.id)
               window.history.replaceState(null, '', basePath)
+            }
           } else {
             setJoinedSession(null)
             setLectureId('')
@@ -291,8 +333,14 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
             setJoinError(
               'This lecture has ended or was left on another device. Enter a code to join.',
             )
-            if (currentPage() === 'questions')
+            if (
+              !readingLecture &&
+              currentPage() === 'questions' &&
+              (!initialLectureId() || initialLectureId() === joinedSessionId)
+            ) {
+              setRequestedLectureId('')
               window.history.replaceState(null, '', `${basePath}/join`)
+            }
           }
         })
         .catch(() => {
@@ -303,11 +351,11 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
       active = false
       window.clearInterval(timer)
     }
-  }, [joinedSessionId])
+  }, [joinedSessionId, readingLecture])
 
   useEffect(() => {
     if (!lectureId) return
-    rememberLecture(lectureId)
+    if (!initialLectureId()) rememberLecture(lectureId)
     let active = true
     const load = () => {
       const version = mutationVersion.current
@@ -486,40 +534,20 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
   }
 
   async function switchMobileView(next: 'mine' | 'other') {
-    if (next === mobileView || switchingView.current) return
-    switchingView.current = true
+    if (next === mobileView) return
     const previousScroll = window.scrollY
     const section = mobileListRef.current
-    const sectionTop = section
-      ? window.scrollY + section.getBoundingClientRect().top
-      : 0
-    const listTop = Math.max(0, sectionTop - 16)
-
-    // Keep enough scrollable space while a long list becomes a short one.
     if (section) {
-      section.style.minHeight = `${Math.ceil(previousScroll + window.innerHeight - sectionTop + 2)}px`
+      const sectionTop = previousScroll + section.getBoundingClientRect().top
+      // Keep the space supporting the current scroll position after switching
+      // and after the refreshed list arrives. Do not scroll back to the tabs.
+      section.style.minHeight = `${Math.max(
+        Number.parseFloat(section.style.minHeight) || 0,
+        Math.ceil(previousScroll + window.innerHeight - sectionTop + 2),
+      )}px`
     }
-
-    try {
-      flushSync(() => setMobileView(next))
-      window.scrollTo(0, previousScroll)
-      if (section) {
-        const content = section.querySelector('[role=tabpanel]:not([hidden])')
-        const contentBottom = content
-          ? window.scrollY + content.getBoundingClientRect().bottom
-          : sectionTop
-        const usefulScroll = Math.max(
-          listTop,
-          contentBottom - window.innerHeight + 80,
-        )
-        if (window.scrollY > usefulScroll + 24) {
-          await animateScrollTo(listTop, 500)
-        }
-      }
-    } finally {
-      if (section) section.style.minHeight = ''
-      switchingView.current = false
-    }
+    flushSync(() => setMobileView(next))
+    window.scrollTo({ top: previousScroll, behavior: 'instant' })
 
     try {
       if (
@@ -595,11 +623,25 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
       <SidePanel
         user={user}
         role="student"
-        page={page}
+        page={readingLecture ? null : page}
         onNavigate={navigate}
         launcherClassName="side-panel-launcher--student"
       />
-      {page === 'questions' && !joinedSession ? (
+      {readingLecture ? (
+        <StudentLecturePage
+          lecture={requestedLecture}
+          loading={lecturesLoading || sessionChecking}
+          error={lecturesError}
+          entry={history.entries[requestedLectureId]}
+          onRetry={() => {
+            if (!requestedLecture || lecturesError)
+              setLectureRetry((value) => value + 1)
+            if (requestedLecture?.endedAt)
+              void history.retry(requestedLectureId)
+          }}
+          onBack={() => navigate('pastLectures')}
+        />
+      ) : page === 'questions' && !joinedSession ? (
         <StudentJoinPage
           busy={joinBusy}
           checking={sessionChecking}
@@ -897,6 +939,7 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
                 entries={history.entries}
                 onRetryLectures={() => setLectureRetry((value) => value + 1)}
                 onRetryQuestions={(id) => void history.retry(id)}
+                onOpenLecture={openPastLecture}
               />
             ) : page === 'settings' ? (
               <div className="placeholder-page__card student-settings-card">

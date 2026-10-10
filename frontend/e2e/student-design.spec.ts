@@ -92,6 +92,9 @@ async function fixture(
   return {
     reads,
     mutations,
+    setItems: (next: Question[]) => {
+      items = next
+    },
     clear: () => {
       items = []
     },
@@ -109,11 +112,11 @@ async function noOverflow(page: Page) {
   ).toBe(true)
 }
 
-for (const width of [320, 390, 768, 1280]) {
-  test(`history sorting, expansion, counts and live continuity at ${width}px`, async ({
+for (const width of [320, 430, 768, 1280]) {
+  test(`history links, chronological sorting and live continuity at ${width}px`, async ({
     page,
   }, info) => {
-    await page.setViewportSize({ width, height: 844 })
+    await page.setViewportSize({ width, height: 932 })
     await page.emulateMedia({ reducedMotion: 'reduce' })
     const data = await fixture(page)
     await page.goto('/student')
@@ -127,35 +130,26 @@ for (const width of [320, 390, 768, 1280]) {
     }
     await page.locator('textarea').fill('Keep this unsent draft')
     await navigate(page, 'Past Lectures')
-    const summaries = page.locator('.student-history-summary')
     const titles = page.locator('.student-history-title')
-    await expect(summaries).toHaveCount(4)
     await expect(titles).toHaveText([
       longTitle,
       'Same start time',
       'Morning lecture',
       'Earlier lecture',
     ])
-    await expect(
-      page.locator('.student-history-summary[aria-expanded=true]'),
-    ).toHaveCount(0)
     const row = page
       .locator('.student-history-entry')
       .filter({ hasText: longTitle })
     await expect(row).toContainText('2 questions')
+    await expect(row.getByRole('link')).toHaveAttribute(
+      'href',
+      '/student?lecture=13',
+    )
     await expect(row.locator('time')).toHaveAttribute(
       'datetime',
       '2026-10-11T09:15:00.000Z',
     )
-    await expect(
-      page
-        .locator('.student-history-entry')
-        .filter({ hasText: 'Morning lecture' }),
-    ).toContainText('1 question')
-    await row.getByRole('button').click()
-    await expect(row.locator('.student-history-question')).toHaveCount(2)
-    await expect(row.getByText('Answered', { exact: true })).toBeVisible()
-    await expect(row.getByText('Unanswered', { exact: true })).toBeVisible()
+    await expect(page.locator('.student-history-question')).toHaveCount(0)
     const readsBefore = { ...data.reads }
     await page.getByLabel('Sort lectures by date').selectOption('oldest')
     await expect(titles).toHaveText([
@@ -164,20 +158,6 @@ for (const width of [320, 390, 768, 1280]) {
       longTitle,
       'Same start time',
     ])
-    await expect(row.getByRole('button')).toHaveAttribute(
-      'aria-expanded',
-      'true',
-    )
-    await row.getByRole('button').press('Enter')
-    await expect(row.getByRole('button')).toHaveAttribute(
-      'aria-expanded',
-      'false',
-    )
-    await row.getByRole('button').press('Space')
-    await expect(row.getByRole('button')).toHaveAttribute(
-      'aria-expanded',
-      'true',
-    )
     for (const id of ['11', '12', '13', '14'])
       expect(data.reads[`/api/lectures/${id}/questions`]).toBe(
         readsBefore[`/api/lectures/${id}/questions`],
@@ -187,16 +167,6 @@ for (const width of [320, 390, 768, 1280]) {
       .poll(() => data.reads['/api/lectures'])
       .toBeGreaterThan(readsBefore['/api/lectures'])
     await expect(page.getByLabel('Sort lectures by date')).toHaveValue('oldest')
-    await expect(row.getByRole('button')).toHaveAttribute(
-      'aria-expanded',
-      'true',
-    )
-    const empty = page
-      .locator('.student-history-entry')
-      .filter({ hasText: 'Earlier lecture' })
-    await expect(empty).toContainText('0 questions')
-    await empty.getByRole('button').click()
-    await expect(empty.getByText('No questions in this lecture.')).toBeVisible()
     await page.getByLabel('Sort lectures by date').selectOption('newest')
     await expect(titles).toHaveText([
       longTitle,
@@ -209,10 +179,44 @@ for (const width of [320, 390, 768, 1280]) {
       path: info.outputPath(`student-history-${width}.png`),
       fullPage: true,
     })
+    await row.getByRole('link').press('Enter')
+    await expect(page).toHaveURL(/\/student\?lecture=13$/)
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText(longTitle)
+    await expect(page.locator('.student-history-question')).toHaveCount(2)
+    await expect(page.getByText('Answered', { exact: true })).toBeVisible()
+    await expect(page.getByText('Unanswered', { exact: true })).toBeVisible()
+    await expect(page.locator('textarea')).toHaveCount(0)
+    await expect(
+      page.getByRole('button', { name: 'Leave lecture' }),
+    ).toHaveCount(0)
+    await page.screenshot({
+      path: info.outputPath(`student-lecture-${width}.png`),
+      fullPage: true,
+    })
     await navigate(page, 'Current Lecture')
     await expect(page.locator('.student-session-course')).toHaveText(live.title)
     await expect(page.locator('textarea')).toHaveValue('Keep this unsent draft')
     expect(new URL(page.url()).searchParams.get('lecture')).toBe(live.id)
+    await page.goBack()
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText(longTitle)
+    await page.goBack()
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText(
+      'Past Lectures',
+    )
+    // Direct and reloaded URLs must also show the archive, never the joined pool.
+    await page.goto('/student?lecture=13')
+    await expect(page.locator('.student-history-question')).toHaveCount(2)
+    await page.reload()
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText(longTitle)
+    await page.getByRole('link', { name: '← Past Lectures' }).click()
+    const empty = page
+      .locator('.student-history-entry')
+      .filter({ hasText: 'Earlier lecture' })
+    await expect(empty).toContainText('0 questions')
+    await empty.getByRole('link').click()
+    await expect(page).toHaveURL(/lecture=11$/)
+    await expect(page.getByText('No questions in this lecture.')).toBeVisible()
+    await noOverflow(page)
     expect(data.mutations).toEqual([])
   })
 }
@@ -314,8 +318,6 @@ test('history loading, failure, retry, stale data retention and empty history', 
     .locator('.student-history-entry')
     .filter({ hasText: longTitle })
   await expect(row).toContainText('Loading count…')
-  await row.getByRole('button').click()
-  await expect(row).toContainText('Loading questions…')
   await expect(row).not.toContainText('0 questions')
   release()
   await expect(row).toContainText('Count unavailable')
@@ -328,12 +330,10 @@ test('history loading, failure, retry, stale data retention and empty history', 
   failed = false
   await row.getByRole('button', { name: 'Try again' }).click()
   await expect(row).toContainText('1 question')
-  await expect(row).toContainText('Question recovered:')
   failed = true
   await page.evaluate(() => window.dispatchEvent(new Event('focus')))
   await expect(row).toContainText('Showing the last loaded questions.')
   await expect(row).toContainText('1 question')
-  await expect(row).toContainText('Question recovered:')
   await page.route('**/api/lectures', (route) =>
     route.fulfill({ status: 503, json: { error: 'Unavailable' } }),
   )
@@ -352,3 +352,132 @@ test('history loading, failure, retry, stale data retention and empty history', 
   await page.evaluate(() => window.dispatchEvent(new Event('focus')))
   await expect(page.getByText('No past lectures yet.')).toBeVisible()
 })
+
+test('switching a long mobile list retains exact scroll depth in both directions', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 430, height: 932 })
+  const data = await fixture(page)
+  data.setItems(
+    Array.from({ length: 18 }, (_, i) => question(`own-${i}`, true)),
+  )
+  await page.goto('/student')
+  const mine = page.getByRole('tab', { name: 'Your questions', exact: true })
+  const other = page.getByRole('tab', { name: 'Other questions', exact: true })
+  await mine.click()
+  await expect(
+    page.getByRole('tabpanel').locator('.question-card'),
+  ).toHaveCount(18)
+  await mine.focus()
+  await page.evaluate(() =>
+    window.scrollTo({
+      top:
+        document.querySelector('.mobile-question-tabs')!.getBoundingClientRect()
+          .top +
+        scrollY +
+        500,
+      behavior: 'instant',
+    }),
+  )
+  const scroll = await page.evaluate(() => scrollY)
+  await mine.press('End')
+  await expect(other).toHaveAttribute('aria-selected', 'true')
+  await expect(page.getByRole('tabpanel')).toHaveText(
+    'No questions from other students yet.',
+  )
+  expect(await page.evaluate(() => scrollY)).toBe(scroll)
+  expect(
+    await page
+      .locator('#questions-panel-other')
+      .evaluate((el) => parseFloat(getComputedStyle(el).paddingBottom)),
+  ).toBeGreaterThanOrEqual(932)
+  await other.press('Home')
+  await expect(mine).toHaveAttribute('aria-selected', 'true')
+  expect(await page.evaluate(() => scrollY)).toBe(scroll)
+})
+
+test('a past lecture link works with no joined session and survives live-session polling', async ({
+  page,
+}) => {
+  const data = await fixture(page)
+  await page.clock.install()
+  await page.goto('/student?lecture=13')
+  await expect(page.locator('.student-history-question')).toHaveCount(2)
+  await page.route('**/api/sessions/mine', (route) =>
+    route.fulfill({ json: { session: null } }),
+  )
+  await page.clock.fastForward(11_000)
+  await expect(page).toHaveURL(/lecture=13$/)
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText(longTitle)
+  await page.reload()
+  await expect(page.locator('.student-history-question')).toHaveCount(2)
+  await expect(page.getByLabel('Lecture code')).toHaveCount(0)
+  expect(data.mutations).toEqual([])
+})
+
+for (const width of [320, 430, 768, 1280]) {
+  test(`professor toolbar and ranked card presentation at ${width}px`, async ({
+    page,
+  }, info) => {
+    await page.setViewportSize({ width, height: 932 })
+    await page.emulateMedia({ reducedMotion: 'reduce' })
+    await page.route('**/api/**', async (route) => {
+      const path = new URL(route.request().url()).pathname
+      let data: unknown
+      if (path === '/api/me')
+        data = { id: 'professor-design', name: 'Professor' }
+      else if (path === '/api/professor/profile/initialize')
+        data = { onboardingCompleted: true, revision: 1, courses: [] }
+      else if (path === '/api/lectures') data = [{ ...live, canManage: true }]
+      else if (path === '/api/lectures/90/professor/questions')
+        data = [0, 1, 2].map((i) => ({
+          id: String(i),
+          text: `Question ${i}: why does the dimension of the kernel plus the rank equal the number of columns?`,
+          authorId: 'anonymous',
+          upvoteCount: 3 - i,
+          createdAt: new Date().toISOString(),
+          answered: false,
+          status: 'open',
+          answeredAt: null,
+          reportCount: 0,
+        }))
+      else throw new Error(`Unexpected professor request ${path}`)
+      await route.fulfill({ json: data })
+    })
+    await page.goto('/professor?lecture=90')
+    const clear = page.getByRole('button', {
+      name: 'Clear all questions',
+      exact: true,
+    })
+    const filter = page.getByLabel('Time filter')
+    const card = page.locator('.professor-question-card').first()
+    await expect(card).toBeVisible()
+    await expect(clear).toBeEnabled()
+    if (width < 720) {
+      const clearBox = (await clear.boundingBox())!
+      const filterBox = (await filter.boundingBox())!
+      expect(
+        Math.abs(clearBox.y + clearBox.height - filterBox.y - filterBox.height),
+      ).toBeLessThanOrEqual(2)
+      expect(filterBox.x).toBeGreaterThan(clearBox.x + clearBox.width)
+    }
+    await expect(page.locator('.professor-rank-decoration')).toHaveCount(0)
+    await expect(card.locator('.professor-question-rank')).toHaveText('#1')
+    await expect(card).toHaveCSS('background-color', 'rgb(239, 246, 255)')
+    await expect(
+      card.getByRole('button', { name: 'Mark answered', exact: true }),
+    ).toHaveCSS('background-color', 'rgb(29, 78, 216)')
+    await noOverflow(page)
+    await page.screenshot({
+      path: info.outputPath(`professor-cards-${width}.png`),
+      fullPage: true,
+    })
+    await filter.selectOption('5')
+    await expect(filter).toHaveValue('5')
+    await expect(card).toBeVisible()
+    await page.getByRole('tab', { name: 'Answered 0' }).click()
+    await expect(filter).toHaveCount(0)
+    await expect(clear).toHaveCount(0)
+    await noOverflow(page)
+  })
+}
