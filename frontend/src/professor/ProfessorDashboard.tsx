@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import type { Question } from './mockQuestions'
 import { mockQuestions } from './mockQuestions'
+import type { CurrentUser } from '../lib/api'
+import './professor.css'
 
 type Tab = 'open' | 'answered'
 type ProfessorPage = 'questions' | 'profile' | 'settings'
@@ -68,10 +70,13 @@ function ThumbsUpIcon() {
   )
 }
 
-export default function ProfessorDashboard() {
-  const [page, setPage] = useState<ProfessorPage>(() =>
-    pageFromPath(window.location.pathname),
-  )
+export default function ProfessorDashboard({
+  user,
+  onSwitchSpace,
+}: {
+  user: CurrentUser
+  onSwitchSpace: () => void
+}) {
   const [questions, setQuestions] = useState<Question[]>(() => [
     ...mockQuestions,
   ])
@@ -294,10 +299,49 @@ export default function ProfessorDashboard() {
               ASKPOOL
             </span>
           </div>
+          <div className="mt-12 flex items-center gap-3 border-b border-slate-200 pb-6">
+            <span
+              className="flex size-10 items-center justify-center rounded-full bg-blue-100 text-blue-700"
+              aria-hidden="true"
+            >
+              <svg
+                className="size-5"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+              >
+                <circle cx="12" cy="8" r="3.5" />
+                <path strokeLinecap="round" d="M5.5 20a6.5 6.5 0 0 1 13 0" />
+              </svg>
+            </span>
+            <div className="min-w-0 break-words">
+              <p className="text-sm font-semibold">{user.name}</p>
+              <p className="mt-1 text-xs text-slate-500">{user.id}</p>
+            </div>
+          </div>
           <nav
             aria-label="Professor navigation"
             className="mt-12 flex flex-col gap-1"
           >
+            <a
+              href="/"
+              onClick={(event) => {
+                if (
+                  event.button !== 0 ||
+                  event.metaKey ||
+                  event.ctrlKey ||
+                  event.shiftKey ||
+                  event.altKey
+                )
+                  return
+                event.preventDefault()
+                onSwitchSpace()
+              }}
+              className="rounded-lg px-3 py-3 text-left text-sm font-medium text-slate-700 hover:bg-white focus-visible:outline-2 focus-visible:outline-blue-600"
+            >
+              Switch space
+            </a>
             <button
               type="button"
               onClick={() => navigateTo('questions')}

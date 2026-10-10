@@ -3,7 +3,9 @@
 The app runs from `/home/viscon/hackathon` on SSH host `viscon-2026`.
 The portal at https://08.hackathon.ethz.ch handles TLS and login and forwards
 HTTP to port 8080. Caddy serves the production frontend and proxies `/api/*`
-to the Java 21 backend. Both containers restart automatically.
+to the Java 21 backend. Student question requests go to the existing Node demo
+API, whose state persists in the `hackathon_student-data` Docker volume. All
+containers restart automatically. The professor dashboard retains its mock data.
 
 ## Build and package (PowerShell, repository root)
 
@@ -20,6 +22,8 @@ Pop-Location
 New-Item -ItemType Directory -Force deploy/artifacts/frontend | Out-Null
 Copy-Item backend/build/libs/backend-0.0.1-SNAPSHOT.jar deploy/artifacts/backend.jar
 Copy-Item frontend/dist/* deploy/artifacts/frontend -Recurse -Force
+New-Item -ItemType Directory -Force deploy/artifacts/student-api | Out-Null
+Copy-Item frontend/student-frontend/server/*.mjs, frontend/student-frontend/server/seed.json deploy/artifacts/student-api
 tar -czf backend/build/viscon-deploy.tar.gz -C deploy compose.yaml Caddyfile artifacts
 scp backend/build/viscon-deploy.tar.gz viscon-2026:~/
 ```
