@@ -5,9 +5,10 @@
 }
 
 :root {
+  scrollbar-gutter: stable;
   font-family: var(--font-sans);
-  color: #203932;
-  background: #f8f9f5;
+  color: #0f172a;
+  background: #f7f8fc;
   font-synthesis: none;
   -webkit-font-smoothing: antialiased;
 }
@@ -15,25 +16,30 @@
 * {
   box-sizing: border-box;
 }
+
 body {
-  margin: 0;
   min-width: 320px;
+  margin: 0;
 }
+
 a {
   color: inherit;
   text-decoration: none;
 }
+
 button {
   font: inherit;
   cursor: pointer;
 }
+
 a:focus-visible,
 button:focus-visible {
-  outline: 3px solid #248e79;
-  outline-offset: 5px;
+  outline: 2px solid #2563eb;
+  outline-offset: 3px;
 }
+
 ::selection {
-  background: #c8e9dc;
+  background: #dbeafe;
 }
 
 .entry-page {
@@ -41,232 +47,82 @@ button:focus-visible {
   display: grid;
   place-items: center;
   padding: 32px;
-  background:
-    radial-gradient(ellipse at 50% 45%, #eaf0e4 0%, transparent 60%), #f8f9f5;
+  color: #0f172a;
+  background: #f7f8fc;
 }
+
 .entry-content {
-  text-align: center;
   margin-top: -40px;
+  text-align: center;
 }
+
 .entry-content h1 {
   margin: 0 0 36px;
   font-size: clamp(56px, 8vw, 80px);
   font-weight: 650;
-  letter-spacing: -4px;
+  letter-spacing: -0.04em;
   line-height: 1.1;
 }
+
 .entry-actions {
   display: flex;
   gap: 14px;
 }
+
 .entry-button {
   min-width: 160px;
+  min-height: 48px;
   padding: 15px 28px;
   border: 1px solid transparent;
   border-radius: 12px;
   font-size: 15px;
-  font-weight: 550;
+  font-weight: 600;
   transition:
-    background 0.18s,
-    transform 0.18s;
+    background 180ms ease-out,
+    transform 180ms ease-out;
 }
-.student-button {
-  color: #fff;
-  background: #176b59;
-}
-.student-button:hover:not(:disabled) {
-  background: #125b4b;
+
+.entry-button:hover:not(:disabled) {
   transform: translateY(-2px);
 }
-.professor-button {
-  color: #325a47;
-  background: #ffffff90;
-  border-color: #cbd9c4;
-}
-.professor-button:hover:not(:disabled) {
-  background: #e8eedf;
-  transform: translateY(-2px);
-}
+
 .entry-button:disabled {
   opacity: 0.5;
   cursor: wait;
 }
 
-.professor-drawer:not([open]) {
-  display: none;
+.student-button {
+  color: #fff;
+  background: #1d4ed8;
 }
 
-.professor-drawer[open] {
-  animation: professor-drawer-enter 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+.student-button:hover:not(:disabled) {
+  background: #1e40af;
 }
 
-.professor-drawer[open]::backdrop {
-  animation: professor-backdrop-enter 240ms ease-out both;
-}
-
-.professor-drawer[open][data-closing='true'] {
-  animation: professor-drawer-exit 180ms ease-in both;
-}
-
-.professor-drawer[open][data-closing='true']::backdrop {
-  animation: professor-backdrop-exit 180ms ease-in both;
-}
-
-.professor-page-enter {
-  animation: professor-page-enter 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-
-@keyframes professor-drawer-enter {
-  from {
-    transform: translateX(-100%);
-  }
-
-  to {
-    transform: translateX(0);
-  }
-}
-
-@keyframes professor-backdrop-enter {
-  from {
-    opacity: 0;
-  }
-
-  to {
-    opacity: 1;
-  }
-}
-
-@keyframes professor-drawer-exit {
-  to {
-    transform: translateX(-100%);
-  }
-}
-
-@keyframes professor-backdrop-exit {
-  to {
-    opacity: 0;
-  }
-}
-
-@keyframes professor-page-enter {
-  from {
-    opacity: 0.82;
-    transform: translateY(8px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .professor-drawer[open],
-  .professor-drawer[open]::backdrop,
-  .professor-drawer[open][data-closing='true'],
-  .professor-drawer[open][data-closing='true']::backdrop,
-  .professor-page-enter {
-    animation: none;
-  }
-}
-
-/* Small dashboard handoffs, replaced when the dashboard branches merge. */
-.handoff-page {
-  min-height: 100svh;
-}
-.page-width {
-  width: min(1160px, calc(100% - 48px));
-  margin-inline: auto;
-}
-.site-header {
-  min-height: 90px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 20px;
-}
-.brand {
-  font-size: 25px;
-  font-weight: 650;
-  letter-spacing: -1px;
-}
-.back-link {
-  font-size: 13px;
-}
-.handoff-panel {
-  width: min(560px, calc(100% - 40px));
-  margin: 70px auto;
-  padding: 40px;
+.professor-button {
+  color: #1d4ed8;
   background: #fff;
-  border-radius: 20px;
-  border: 1px solid #e2e8dc;
+  border-color: #e2e8f0;
 }
-.panel-kicker {
-  color: #62785d;
-  font-size: 10px;
-  letter-spacing: 1.5px;
-}
-.handoff-panel h1 {
-  font-size: 36px;
-  font-weight: 600;
-  line-height: 1.2;
-  letter-spacing: -1px;
-  overflow-wrap: anywhere;
-}
-.handoff-panel p {
-  font-size: 15px;
-  color: #687a60;
-  line-height: 1.8;
-  margin: 22px 0;
-}
-.handoff-identity {
-  background: #f6f8f2;
-  border-radius: 10px;
-  padding: 16px;
-  font-size: 12px;
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  flex-wrap: wrap;
-}
-.identity-check {
-  color: #627b52;
-}
-.handoff-identity > span:last-child {
-  width: 100%;
-  color: #657953;
-  overflow-wrap: anywhere;
-}
-.return-link {
-  display: inline-flex;
-  gap: 24px;
-  background: #176b59;
-  color: white;
-  border-radius: 9px;
-  padding: 13px 18px;
-  font-size: 13px;
-  margin-top: 26px;
+
+.professor-button:hover:not(:disabled) {
+  background: #eff6ff;
 }
 
 @media (max-width: 480px) {
-  .entry-content h1 {
-    letter-spacing: -3px;
-  }
   .entry-actions {
     flex-direction: column;
     gap: 12px;
   }
+
   .entry-button {
     min-width: 220px;
   }
-  .handoff-panel {
-    padding: 26px;
-  }
 }
+
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    transition: none !important;
+  .entry-button {
+    transition: none;
   }
 }

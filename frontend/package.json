@@ -4,10 +4,12 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "node scripts/dev.mjs",
     "build": "tsc -b && vite build",
     "lint": "eslint . --max-warnings 0",
-    "preview": "vite preview",
+    "test:student-api": "node --test scripts/student-api.test.mjs",
+    "reset-data": "node server/student-api/reset.mjs",
+    "preview": "node scripts/dev.mjs --preview",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },

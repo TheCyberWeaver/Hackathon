@@ -2,6 +2,20 @@ import { useEffect, useRef, useState } from 'react'
 import { mockPastLectures } from './mockPastLectures'
 import type { Question } from './mockQuestions'
 import { mockQuestions } from './mockQuestions'
+import type { CurrentUser } from '../lib/api'
+import { ThumbsUpIcon } from '../components/Icons'
+import SidePanel, { type SidePanelPage } from '../components/SidePanel'
+import {
+  readQuestionIntakePaused,
+  saveQuestionIntakePaused,
+  subscribeQuestionIntakePaused,
+} from '../lib/questionIntake'
+import {
+  clearLectureStart,
+  readLectureStart,
+  saveLectureStart,
+} from './lectureSession'
+import './professor.css'
 
 const questionTabs = ['open', 'answered', 'trash'] as const
 type Tab = (typeof questionTabs)[number]
@@ -67,22 +81,9 @@ function ChevronIcon({ expanded }: { expanded: boolean }) {
   )
 }
 
-function ThumbsUpIcon() {
-  return (
-    <svg
-      aria-hidden="true"
-      className="size-4"
-      fill="none"
-      viewBox="0 0 24 24"
-      stroke="currentColor"
-      strokeWidth="1.7"
-    >
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M7 10v11H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3Zm0 0 4.7-7.1A2 2 0 0 1 15.4 4v1.2c0 .5-.1 1-.3 1.5L14 10h5.5a2.5 2.5 0 0 1 2.5 3l-1.4 6a2.5 2.5 0 0 1-2.4 2H7"
-      />
-    </svg>
+export default function ProfessorDashboard({ user }: { user: CurrentUser }) {
+  const [lectureStartedAt, setLectureStartedAt] = useState<string | null>(() =>
+    readLectureStart(user.id),
   )
 }
 
@@ -153,10 +154,9 @@ export default function ProfessorDashboard() {
   const [drawerClosing, setDrawerClosing] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null)
   const [notice, setNotice] = useState('')
-  const drawerRef = useRef<HTMLDialogElement>(null)
-  const closeTimerRef = useRef<number | null>(null)
-  const menuButtonRef = useRef<HTMLButtonElement>(null)
   const dialogRef = useRef<HTMLDialogElement>(null)
+  const endDialogRef = useRef<HTMLDialogElement>(null)
+  const endTriggerRef = useRef<HTMLButtonElement>(null)
   const deleteTriggerRef = useRef<HTMLButtonElement | null>(null)
   const openTabRef = useRef<HTMLButtonElement>(null)
   const answeredTabRef = useRef<HTMLButtonElement>(null)
@@ -205,31 +205,13 @@ export default function ProfessorDashboard() {
   }, [])
 
   useEffect(() => {
-    if (!drawerOpen) return
-    const drawer = drawerRef.current
-    drawer?.showModal()
-    return () => {
-      if (drawer?.open) drawer.close()
-    }
-  }, [drawerOpen])
-
-  useEffect(() => {
-    function handleLocationChange() {
-      if (closeTimerRef.current !== null) {
-        window.clearTimeout(closeTimerRef.current)
-        closeTimerRef.current = null
-      }
+    const handleLocationChange = () =>
       setPage(pageFromPath(window.location.pathname))
-      setDrawerOpen(false)
-      setDrawerClosing(false)
-    }
     window.addEventListener('popstate', handleLocationChange)
-    return () => {
-      window.removeEventListener('popstate', handleLocationChange)
-      if (closeTimerRef.current !== null)
-        window.clearTimeout(closeTimerRef.current)
-    }
+    return () => window.removeEventListener('popstate', handleLocationChange)
   }, [])
+
+  useEffect(() => subscribeQuestionIntakePaused(setQuestionsPaused), [])
 
   useEffect(() => {
     if (!deleteTarget) return
@@ -239,6 +221,15 @@ export default function ProfessorDashboard() {
       if (dialog?.open) dialog.close()
     }
   }, [deleteTarget])
+
+  useEffect(() => {
+    if (!endConfirmationOpen) return
+    const dialog = endDialogRef.current
+    dialog?.showModal()
+    return () => {
+      if (dialog?.open) dialog.close()
+    }
+  }, [endConfirmationOpen])
 
   useEffect(() => {
     if (!notice) return
@@ -255,29 +246,65 @@ export default function ProfessorDashboard() {
     })
   }
 
-  function closeDrawer(nextPage?: ProfessorPage) {
-    if (closeTimerRef.current !== null) return
-    setDrawerClosing(true)
-    const delay = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-      ? 0
-      : 180
-    closeTimerRef.current = window.setTimeout(() => {
-      closeTimerRef.current = null
-      setDrawerOpen(false)
-      setDrawerClosing(false)
-      if (nextPage && nextPage !== page) {
-        window.history.pushState(null, '', professorRoutes[nextPage])
-        setPage(nextPage)
-        window.scrollTo(0, 0)
-        window.requestAnimationFrame(() => mainHeadingRef.current?.focus())
-      } else {
-        window.requestAnimationFrame(() => menuButtonRef.current?.focus())
-      }
-    }, delay)
+  function navigateTo(nextPage: SidePanelPage) {
+    if (nextPage === page) return
+    window.history.pushState(null, '', professorRoutes[nextPage])
+    setPage(nextPage)
+    window.scrollTo(0, 0)
+    window.requestAnimationFrame(() => mainHeadingRef.current?.focus())
   }
 
-  function navigateTo(nextPage: ProfessorPage) {
-    closeDrawer(nextPage)
+  function startLecture() {
+    const startedAt = new Date().toISOString()
+    setLectureStartedAt(startedAt)
+    setQuestionsPaused(false)
+    const saved = saveLectureStart(user.id, startedAt)
+    const intakeReset = saveQuestionIntakePaused(false)
+    if (!saved || !intakeReset) {
+      setNotice(
+        'Lecture started, but this browser may not remember its controls after a reload.',
+      )
+    }
+  }
+
+  function toggleQuestionIntake() {
+    const nextPaused = !questionsPaused
+    if (!saveQuestionIntakePaused(nextPaused)) {
+      setNotice('Could not update question submissions. Please try again.')
+      return
+    }
+    setQuestionsPaused(nextPaused)
+    setNotice(
+      nextPaused
+        ? 'Pool paused. A little thinking time never hurt.'
+        : 'Pool open. Let the questions roll in!',
+    )
+  }
+
+  function closeEndConfirmation(confirmed: boolean) {
+    setEndConfirmationOpen(false)
+    if (confirmed) {
+      const cleared = clearLectureStart(user.id)
+      const intakeReset = saveQuestionIntakePaused(false)
+      setLectureStartedAt(null)
+      setQuestionsPaused(false)
+      setQuestions([...mockQuestions])
+      setSelectedTab('open')
+      setExpandedIds(new Set())
+      setNotice(
+        cleared && intakeReset
+          ? ''
+          : 'The saved session controls could not be cleared and may reappear after a reload.',
+      )
+    }
+    window.requestAnimationFrame(() => {
+      if (confirmed) {
+        window.scrollTo(0, 0)
+        mainHeadingRef.current?.focus({ preventScroll: true })
+      } else {
+        endTriggerRef.current?.focus()
+      }
+    })
   }
 
   function changeStatus(question: Question) {
@@ -388,41 +415,53 @@ export default function ProfessorDashboard() {
         </div>
       </header>
 
-      {drawerOpen && (
-        <dialog
-          ref={drawerRef}
-          id="professor-drawer"
-          aria-label="Navigation"
-          data-closing={drawerClosing}
-          onCancel={(event) => {
-            event.preventDefault()
-            closeDrawer()
-          }}
-          onClick={(event) => {
-            if (event.target !== event.currentTarget) return
-            const bounds = event.currentTarget.getBoundingClientRect()
-            if (event.clientX > bounds.right) closeDrawer()
-          }}
-          className="professor-drawer fixed inset-y-0 left-0 right-auto m-0 flex h-dvh max-h-none w-[min(20rem,calc(100vw-2rem))] max-w-none flex-col border-0 bg-[#f7f8fc] p-6 text-slate-900 shadow-[12px_0_32px_rgba(15,23,42,0.12)] backdrop:bg-slate-950/35"
-        >
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              autoFocus
-              aria-label="Close navigation"
-              onClick={() => closeDrawer()}
-              className="flex size-10 items-center justify-center rounded-xl bg-white text-slate-500 shadow-[0_3px_12px_rgba(15,23,42,0.09)] hover:text-blue-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+      {page === 'questions' && lectureStartedAt === null && (
+        <main className="professor-page-enter grid min-h-[calc(100dvh-5rem)] place-items-center bg-[#f7f8fc] px-5 py-16 sm:px-6">
+          <section className="w-full max-w-xl text-center">
+            <span
+              aria-hidden="true"
+              className="mx-auto grid size-20 place-items-center rounded-3xl border border-blue-100 bg-white text-blue-700 shadow-[0_12px_32px_rgba(15,23,42,0.07)]"
             >
               <svg
-                aria-hidden="true"
-                className="size-5"
-                viewBox="0 0 24 24"
+                className="size-9"
                 fill="none"
+                viewBox="0 0 24 24"
                 stroke="currentColor"
-                strokeWidth="1.8"
+                strokeWidth="1.7"
+                strokeLinecap="round"
+                strokeLinejoin="round"
               >
-                <rect x="4" y="4.5" width="16" height="15" rx="2" />
-                <path d="M10 4.5v15" />
+                <rect x="3" y="4" width="18" height="12" rx="2" />
+                <path d="M12 16v4m-4 0h8" />
+              </svg>
+            </span>
+            <h1
+              ref={mainHeadingRef}
+              tabIndex={-1}
+              className="mt-8 text-3xl font-semibold tracking-tight text-slate-900 outline-none sm:text-4xl"
+            >
+              No session running
+            </h1>
+            <p className="mx-auto mt-4 max-w-md text-base leading-7 text-slate-600">
+              Start a lecture to open the question pool for this session.
+            </p>
+            <button
+              type="button"
+              onClick={startLecture}
+              className="mt-9 inline-flex min-h-12 items-center justify-center gap-3 rounded-xl bg-emerald-600 px-6 py-3 text-sm font-semibold text-white shadow-[0_8px_20px_rgba(5,150,105,0.2)] hover:bg-emerald-700 focus-visible:outline-2 focus-visible:outline-offset-3 focus-visible:outline-emerald-700 motion-safe:transition-[background,transform,box-shadow] motion-safe:duration-200 motion-safe:hover:-translate-y-0.5 motion-safe:hover:shadow-[0_12px_24px_rgba(5,150,105,0.24)] motion-safe:active:translate-y-0"
+            >
+              Start lecture
+              <svg
+                aria-hidden="true"
+                className="size-4"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M5 12h14m-6-6 6 6-6 6" />
               </svg>
             </button>
             <span className="text-lg font-bold tracking-[0.12em] text-blue-700">
@@ -458,77 +497,69 @@ export default function ProfessorDashboard() {
                 aria-current={page === 'profile' ? 'page' : undefined}
                 className={`flex min-w-0 flex-1 items-center gap-2.5 rounded-lg px-2 py-2 text-left hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-blue-600 ${page === 'profile' ? 'bg-blue-50' : ''}`}
               >
-                <span
-                  className="flex size-9 shrink-0 items-center justify-center rounded-full bg-blue-100 text-blue-700"
-                  aria-hidden="true"
-                >
-                  <svg
-                    className="size-5"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.8"
-                  >
-                    <circle cx="12" cy="8" r="3.5" />
-                    <path
-                      strokeLinecap="round"
-                      d="M5.5 20a6.5 6.5 0 0 1 13 0"
-                    />
-                  </svg>
-                </span>
-                <span className="min-w-0">
-                  <span className="block truncate text-sm font-semibold text-slate-900">
-                    {professorFullName}
-                  </span>
-                  <span className="block text-xs text-slate-500">
-                    Professor
-                  </span>
-                </span>
-              </button>
-              <button
-                type="button"
-                aria-label="Settings"
-                aria-current={page === 'settings' ? 'page' : undefined}
-                onClick={() => navigateTo('settings')}
-                className={`flex size-10 shrink-0 items-center justify-center rounded-lg hover:bg-slate-50 hover:text-blue-700 focus-visible:outline-2 focus-visible:outline-blue-600 ${page === 'settings' ? 'bg-blue-50 text-blue-700' : 'text-slate-500'}`}
-              >
-                <svg
-                  aria-hidden="true"
-                  className="size-5"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M9.8 3.8 10.2 2h3.6l.4 1.8a8.7 8.7 0 0 1 1.8.8l1.6-.9 2.5 2.5-.9 1.6c.3.6.6 1.2.8 1.8l1.8.4v3.6l-1.8.4a8.7 8.7 0 0 1-.8 1.8l.9 1.6-2.5 2.5-1.6-.9a8.7 8.7 0 0 1-1.8.8l-.4 1.8h-3.6l-.4-1.8a8.7 8.7 0 0 1-1.8-.8l-1.6.9-2.5-2.5.9-1.6a8.7 8.7 0 0 1-.8-1.8L2 13.8v-3.6l1.8-.4a8.7 8.7 0 0 1 .8-1.8l-.9-1.6 2.5-2.5 1.6.9a8.7 8.7 0 0 1 1.8-.8Z"
-                  />
-                  <circle cx="12" cy="12" r="3" />
-                </svg>
-              </button>
+                Lecture questions
+              </h1>
+              <p className="mt-3 text-sm text-slate-600">
+                Started{' '}
+                <time dateTime={lectureStartedAt}>
+                  {timestampFormatter.format(new Date(lectureStartedAt))}
+                </time>
+              </p>
             </div>
-            <button
-              type="button"
-              onClick={() => window.location.assign('/')}
-              className="mt-3 w-full rounded-lg border border-red-200 bg-red-100 px-3 py-3 text-left text-sm font-medium text-red-800 hover:bg-red-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-600"
+            <section
+              aria-labelledby="session-control-title"
+              className={`mt-6 flex flex-col gap-5 rounded-2xl border px-5 py-5 transition-colors min-[720px]:mt-0 min-[720px]:w-[328px] min-[720px]:shrink-0 min-[720px]:gap-3 min-[720px]:py-4 ${questionsPaused ? 'border-amber-200 bg-amber-50' : 'border-emerald-200 bg-emerald-50'}`}
             >
-              Log out
-            </button>
+              <div className="flex min-w-0 flex-wrap items-center gap-3">
+                <h2
+                  id="session-control-title"
+                  className="text-sm font-semibold text-slate-900"
+                >
+                  Session Control
+                </h2>
+                <span className="group relative inline-flex">
+                  <span
+                    tabIndex={0}
+                    aria-describedby="pool-status-description"
+                    className={`inline-flex cursor-help items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 ${questionsPaused ? 'border-amber-300 bg-amber-100 text-amber-900' : 'border-emerald-300 bg-emerald-100 text-emerald-900'}`}
+                  >
+                    <span
+                      aria-hidden="true"
+                      className={`size-1.5 rounded-full ${questionsPaused ? 'bg-amber-600' : 'bg-emerald-600'}`}
+                    />
+                    {questionsPaused ? 'Pool paused' : 'Pool open'}
+                  </span>
+                  <span
+                    id="pool-status-description"
+                    role="tooltip"
+                    className="pointer-events-none invisible absolute left-0 top-full z-30 mt-2 w-64 rounded-lg bg-slate-900 px-3 py-2 text-xs leading-5 font-medium text-white opacity-0 shadow-lg transition-opacity group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100"
+                  >
+                    {questionsPaused
+                      ? 'Students cannot submit new questions until you resume the pool.'
+                      : 'Students can submit new questions to this lecture.'}
+                  </span>
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-3 sm:shrink-0">
+                <button
+                  type="button"
+                  aria-pressed={questionsPaused}
+                  onClick={toggleQuestionIntake}
+                  className="min-h-11 rounded-lg border border-blue-300 bg-white px-4 py-2.5 text-sm font-semibold text-blue-700 transition-colors hover:border-blue-600 hover:bg-blue-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 min-[720px]:px-3"
+                >
+                  {questionsPaused ? 'Resume questions' : 'Pause questions'}
+                </button>
+                <button
+                  ref={endTriggerRef}
+                  type="button"
+                  onClick={() => setEndConfirmationOpen(true)}
+                  className="min-h-11 rounded-lg border border-rose-300 bg-white px-4 py-2.5 text-sm font-semibold text-rose-700 transition-colors hover:border-rose-700 hover:bg-rose-700 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-700 min-[720px]:px-3"
+                >
+                  End lecture
+                </button>
+              </div>
+            </section>
           </div>
-        </dialog>
-      )}
-
-      {page === 'questions' && (
-        <main className="professor-page-enter mx-auto max-w-[848px] px-5 pb-20 pt-10 sm:px-6 sm:pt-14">
-          <h1
-            ref={mainHeadingRef}
-            tabIndex={-1}
-            className="text-3xl font-semibold tracking-tight outline-none sm:text-4xl"
-          >
-            Lecture questions
-          </h1>
           <div
             role="tablist"
             aria-label="Question sections"
@@ -743,7 +774,7 @@ export default function ProfessorDashboard() {
                           className={`flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1 text-sm font-semibold tabular-nums ${topQuestion ? 'bg-orange-100 text-orange-800' : 'bg-white text-slate-700'}`}
                           aria-label={`${question.upvoteCount} votes`}
                         >
-                          <ThumbsUpIcon />
+                          <ThumbsUpIcon className="size-4" />
                           {question.upvoteCount}
                         </div>
                       </div>
@@ -979,7 +1010,10 @@ export default function ProfessorDashboard() {
         className="pointer-events-none fixed bottom-5 left-1/2 z-20 w-max max-w-[calc(100%-2rem)] -translate-x-1/2"
       >
         {notice && (
-          <p className="rounded-lg bg-slate-900 px-4 py-3 text-sm font-medium text-white shadow-lg">
+          <p
+            key={notice}
+            className="professor-toast rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-sm font-medium text-white shadow-xl"
+          >
             {notice}
           </p>
         )}
@@ -1043,6 +1077,57 @@ export default function ProfessorDashboard() {
                 : isPermanentDelete
                   ? 'Delete permanently'
                   : 'Delete question'}
+            </button>
+          </div>
+        </dialog>
+      )}
+
+      {endConfirmationOpen && (
+        <dialog
+          ref={endDialogRef}
+          aria-labelledby="end-lecture-title"
+          aria-describedby="end-lecture-description"
+          onCancel={(event) => {
+            event.preventDefault()
+            closeEndConfirmation(false)
+          }}
+          onClick={(event) => {
+            if (event.target !== event.currentTarget) return
+            const bounds = event.currentTarget.getBoundingClientRect()
+            if (
+              event.clientX < bounds.left ||
+              event.clientX > bounds.right ||
+              event.clientY < bounds.top ||
+              event.clientY > bounds.bottom
+            )
+              closeEndConfirmation(false)
+          }}
+          className="m-auto w-[calc(100%-2rem)] max-w-md rounded-2xl border border-slate-200 bg-white p-6 text-slate-900 shadow-xl backdrop:bg-slate-900/40"
+        >
+          <h2 id="end-lecture-title" className="text-xl font-semibold">
+            End this lecture?
+          </h2>
+          <p
+            id="end-lecture-description"
+            className="mt-2 text-sm leading-6 text-slate-600"
+          >
+            This demo session and any question changes will be discarded.
+          </p>
+          <div className="mt-7 flex justify-end gap-3">
+            <button
+              type="button"
+              autoFocus
+              onClick={() => closeEndConfirmation(false)}
+              className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => closeEndConfirmation(true)}
+              className="rounded-lg bg-rose-700 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-700"
+            >
+              End lecture
             </button>
           </div>
         </dialog>

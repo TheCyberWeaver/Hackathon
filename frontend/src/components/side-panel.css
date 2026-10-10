@@ -1,0 +1,223 @@
+.side-panel-launcher,
+.side-panel-heading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.side-panel-toggle {
+  display: grid;
+  place-items: center;
+  flex: 0 0 40px;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 0;
+  border-radius: 12px;
+  background: #fff;
+  color: #64748b;
+  box-shadow: 0 3px 12px rgb(15 23 42 / 9%);
+  cursor: pointer;
+}
+.side-panel-toggle:hover {
+  color: #1d4ed8;
+}
+.side-panel-brand {
+  color: #1d4ed8;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+}
+.side-panel:not([open]) {
+  display: none;
+}
+.side-panel[open] {
+  position: fixed;
+  inset: 0 auto 0 0;
+  display: flex;
+  flex-direction: column;
+  width: min(20rem, calc(100vw - 2rem));
+  height: 100dvh;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  padding: 24px;
+  border: 0;
+  background: #f7f8fc;
+  color: #0f172a;
+  font-family: var(--font-sans);
+  box-shadow: 12px 0 32px rgb(15 23 42 / 12%);
+  animation: side-panel-enter 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.side-panel[open]::backdrop {
+  background: rgb(2 6 23 / 35%);
+  animation: side-panel-backdrop-enter 240ms ease-out both;
+}
+.side-panel[open][data-closing='true'] {
+  animation: side-panel-exit 180ms ease-in both;
+}
+.side-panel[open][data-closing='true']::backdrop {
+  animation: side-panel-backdrop-exit 180ms ease-in both;
+}
+.side-panel button {
+  font-family: inherit;
+  cursor: pointer;
+}
+.side-panel button:focus-visible,
+.side-panel-toggle:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+.student-app .side-panel button:focus-visible,
+.student-app .side-panel-toggle:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+.side-panel-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 48px;
+}
+.side-panel-link {
+  min-height: 44px;
+  padding: 12px;
+  border: 0;
+  border-radius: 8px;
+  background: #f1f5f9;
+  color: #334155;
+  font-size: 14px;
+  font-weight: 500;
+  text-align: left;
+}
+.side-panel-link:hover,
+.side-panel-link[aria-current='page'] {
+  background: #fff;
+  color: #1d4ed8;
+}
+.side-panel-footer {
+  margin-top: auto;
+  padding-top: 20px;
+  border-top: 1px solid #e2e8f0;
+}
+.side-panel-account {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #fff;
+}
+.side-panel-profile {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+  gap: 10px;
+  padding: 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  text-align: left;
+}
+.side-panel-profile:hover,
+.side-panel-profile[aria-current='page'],
+.side-panel-settings:hover,
+.side-panel-settings[aria-current='page'] {
+  background: #eff6ff;
+}
+.side-panel-avatar {
+  display: grid;
+  place-items: center;
+  flex: 0 0 36px;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+.side-panel-person {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 2px;
+}
+.side-panel-name {
+  overflow: hidden;
+  color: #0f172a;
+  font-size: 14px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.side-panel-email {
+  overflow: hidden;
+  color: #64748b;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.side-panel-settings {
+  display: grid;
+  place-items: center;
+  flex: 0 0 40px;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #64748b;
+}
+.side-panel-settings:hover,
+.side-panel-settings[aria-current='page'] {
+  color: #1d4ed8;
+}
+.side-panel-logout {
+  width: 100%;
+  min-height: 48px;
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  background: #fee2e2;
+  color: #991b1b;
+  font-size: 14px;
+  font-weight: 500;
+  text-align: left;
+}
+.side-panel-logout:hover {
+  background: #fecaca;
+}
+@keyframes side-panel-enter {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+@keyframes side-panel-backdrop-enter {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes side-panel-exit {
+  to {
+    transform: translateX(-100%);
+  }
+}
+@keyframes side-panel-backdrop-exit {
+  to {
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .side-panel[open],
+  .side-panel[open]::backdrop {
+    animation: none;
+  }
+}

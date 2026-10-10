@@ -1,8 +1,10 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import EntryPage from './components/EntryPage'
-import DashboardEntry from './components/DashboardEntry'
 import { getCurrentUser, IdentityError } from './lib/api'
 import type { CurrentUser } from './lib/api'
+
+const StudentDashboard = lazy(() => import('./student/StudentDashboard'))
+const ProfessorDashboard = lazy(() => import('./professor/ProfessorDashboard'))
 
 export type IdentityState =
   | { status: 'loading' }
@@ -12,6 +14,24 @@ export type IdentityState =
 
 export default function App() {
   const [identity, setIdentity] = useState<IdentityState>({ status: 'loading' })
+  const [path, setPath] = useState(() => window.location.pathname)
+
+  useEffect(() => {
+    const syncPath = () => setPath(window.location.pathname)
+    window.addEventListener('popstate', syncPath)
+    return () => window.removeEventListener('popstate', syncPath)
+  }, [])
+
+  useEffect(() => {
+    if (path === '/') document.title = 'AskPool'
+    if (path.startsWith('/professor')) document.title = 'AskPool — Professor'
+  }, [path])
+
+  function navigate(nextPath: string) {
+    window.history.pushState(null, '', nextPath)
+    setPath(nextPath)
+    window.scrollTo(0, 0)
+  }
 
   useEffect(() => {
     const controller = new AbortController()
@@ -35,14 +55,14 @@ export default function App() {
       return
     }
     if (identity.status === 'ready') {
-      window.location.assign(`/${space}`)
+      navigate(`/${space}`)
       return
     }
     setIdentity({ status: 'loading' })
     try {
       const user = await getCurrentUser()
       setIdentity({ status: 'ready', user })
-      window.location.assign(`/${space}`)
+      navigate(`/${space}`)
     } catch (error) {
       if (error instanceof IdentityError && error.status === 401) {
         window.location.assign(`https://08.hackathon.ethz.ch/${space}`)
@@ -52,11 +72,40 @@ export default function App() {
     }
   }
 
-  const path = window.location.pathname.replace(/\/+$/, '') || '/'
-  // Integration points for the independently developed dashboards.
-  const space =
-    path === '/student' ? 'student' : path === '/professor' ? 'professor' : null
-  if (space && identity.status === 'ready')
-    return <DashboardEntry space={space} user={identity.user} />
+  const normalizedPath = path.replace(/\/+$/, '') || '/'
+  if (identity.status === 'ready') {
+    if (
+      normalizedPath === '/student' ||
+      normalizedPath.startsWith('/student/')
+    ) {
+      return (
+        <Suspense
+          fallback={
+            <main className="entry-page" role="status">
+              Loading your dashboard…
+            </main>
+          }
+        >
+          <StudentDashboard user={identity.user} />
+        </Suspense>
+      )
+    }
+    if (
+      normalizedPath === '/professor' ||
+      normalizedPath.startsWith('/professor/')
+    ) {
+      return (
+        <Suspense
+          fallback={
+            <main className="entry-page" role="status">
+              Loading your dashboard…
+            </main>
+          }
+        >
+          <ProfessorDashboard user={identity.user} />
+        </Suspense>
+      )
+    }
+  }
   return <EntryPage identity={identity} onEnter={enterSpace} />
 }

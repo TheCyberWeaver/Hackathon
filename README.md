@@ -64,7 +64,7 @@ Dev: start both
 
 This starts the frontend and backend in separate terminals. Wait for Java to finish starting; the first run downloads Gradle and dependencies.
 
-Open **http://localhost:5173** to see the AskPool name and **Student** / **Professor** entry buttons. Local development uses a sample identity (Alex Morgan) through the Vite proxy. Choose either button to open its dashboard handoff page.
+Open **http://localhost:5173** to see the AskPool name and **Student** / **Professor** entry buttons. Local development uses a sample identity (Alex Morgan) served by Vite, so both dashboards open even before Java starts. The frontend task also starts the student demo API on port 3001; the backend task serves the Java API on port 8080.
 
 Production uses the managed proxy's `X-User-Id` and `X-User-Name` headers via `GET /api/me`. Dashboard integration and local identity settings are documented in [docs/Entry_Page.md](docs/Entry_Page.md).
 
