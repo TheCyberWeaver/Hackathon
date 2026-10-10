@@ -7,6 +7,8 @@ type Props = {
   highlighted: boolean
   onVote: (question: Question) => void
   onReport: (question: Question) => void
+  onDelete: (question: Question) => void
+  deleting: boolean
 }
 
 export function QuestionCard({
@@ -14,6 +16,8 @@ export function QuestionCard({
   highlighted,
   onVote,
   onReport,
+  onDelete,
+  deleting,
 }: Props) {
   const [menuOpen, setMenuOpen] = useState(false)
 
@@ -29,6 +33,11 @@ export function QuestionCard({
           <span className="question-card__owner">Your Question</span>
         )}
         <p>{question.text}</p>
+        {question.answer && (
+          <p className="mt-3 text-sm">
+            <strong>Answer:</strong> {question.answer}
+          </p>
+        )}
         {question.status === 'selected' && (
           <span className="status status--selected">Being answered</span>
         )}
@@ -59,32 +68,32 @@ export function QuestionCard({
             <span>{question.votes}</span>
           </button>
         )}
-        {!question.mine && (
-          <div className="menu-wrap">
-            <button
-              type="button"
-              className="more-button"
-              aria-label={`More options for: ${question.text}`}
-              aria-expanded={menuOpen}
-              onClick={() => setMenuOpen((open) => !open)}
-            >
-              <MoreIcon width="18" height="18" />
-            </button>
-            {menuOpen && (
-              <div className="card-menu">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMenuOpen(false)
-                    onReport(question)
-                  }}
-                >
-                  Report question
-                </button>
-              </div>
-            )}
-          </div>
-        )}
+        <div className="menu-wrap">
+          <button
+            type="button"
+            className="more-button"
+            aria-label={`More options for: ${question.text}`}
+            aria-expanded={menuOpen}
+            disabled={deleting || question.id.startsWith('pending-')}
+            onClick={() => setMenuOpen((open) => !open)}
+          >
+            <MoreIcon width="18" height="18" />
+          </button>
+          {menuOpen && (
+            <div className="card-menu">
+              <button
+                type="button"
+                onClick={() => {
+                  setMenuOpen(false)
+                  if (question.mine) onDelete(question)
+                  else onReport(question)
+                }}
+              >
+                {question.mine ? 'Delete question' : 'Report question'}
+              </button>
+            </div>
+          )}
+        </div>
       </div>
     </article>
   )

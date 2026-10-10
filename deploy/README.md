@@ -1,81 +1,122 @@
-# VIScon deployment
+# Java + PostgreSQL deployment
 
-The managed address https://08.hackathon.ethz.ch handles TLS and login and
-forwards HTTP to VM port 8080. Caddy serves the single built frontend containing
-the entry page and both dashboards. It forwards `/api/me` and other Java routes
-to the Java 21 backend, and `/api/questions` routes to the Node student API.
-Student questions persist in the `hackathon_student-data` Docker volume.
-The professor dashboard retains its mock data. Keep the managed login enabled;
-the backend and student API have no published host ports.
+Caddy serves the frontend and proxies all `/api/*` to Java. Java joins the external `askpool_shared` network. The managed address https://08.hackathon.ethz.ch provides TLS/login. Java and PostgreSQL must have no public ports. The Node demo API is no longer deployed; its old data volume is neither migrated nor removed.
 
-## Automatic deployment from this Windows machine
+## Adopt the supplied VM schema
 
-The local `deploy-local.ps1` at the repository root is ignored by Git. It contains
-the temporary VM password and resolves `viscon-2026` through the existing
-OpenSSH configuration. The password is used for automatic SSH/SFTP login and
-is excluded from uploaded bundles. The script verifies the VM's existing key
-in `%USERPROFILE%\.ssh\known_hosts`.
+Back up the database. V1 matches the supplied schema; V2 adds lecture ownership, selection, soft deletion, votes, and reports. Do not run V1 again on the existing database.
 
-Prerequisites: Node.js, JDK 21, Windows OpenSSH, `tar.exe`, and Python 3.10+.
-The script prepares Paramiko 4.0.0 automatically in an isolated environment at
-`backend/build/deploy-tools/`; no global Python package installation is needed.
+Verify the three tables match V1 and are owned by `askpool_app`. Changing the database owner does not transfer existing table ownership. If initial SQL ran as postgres, run this from the database Compose directory:
 
-Run from any directory:
-
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File E:\Hackathon\deploy-local.ps1
+```bash
+docker compose exec -T postgres psql -U postgres -d askpool -v ON_ERROR_STOP=1 <<'SQL'
+ALTER TABLE public.users OWNER TO askpool_app;
+ALTER TABLE public.lectures OWNER TO askpool_app;
+ALTER TABLE public.questions OWNER TO askpool_app;
+SQL
 ```
 
-Optional checks:
+Build using backend `./gradlew test bootJar` (`gradlew.bat` on Windows), and frontend `npm run build` plus `npm run lint`. Place the executable Boot JAR at `artifacts/backend.jar` and frontend dist contents in `artifacts/frontend/` alongside the deployed Compose/Caddy files.
+
+Confirm the database is reachable as `postgres:5432` on `askpool_shared`, or set the actual network alias in DATABASE_URL. Use an absolute path to the existing secret; Java reads `/run/secrets/app_password`. In the VM release directory:
+
+```bash
+export ASKPOOL_APP_PASSWORD_FILE=/absolute/path/to/database/secrets/app_password
+export DATABASE_URL=jdbc:postgresql://postgres:5432/askpool
+# First adoption of the VERIFIED existing V1 schema only:
+export DATABASE_BASELINE=true
+docker compose up -d
+docker compose logs --tail 100 backend
+```
+
+Flyway baselines at V1 and applies V2 transactionally. Remove DATABASE_BASELINE after successful startup; the default is false. On an empty database leave it false, and both migrations run. Baseline does not validate that an untracked schema matches V1; verify first. See the [official Flyway baseline reference](https://documentation.red-gate.com/flyway/reference/commands/baseline).
+
+## Professor permissions
+
+The hackathon deployment currently defaults to `APP_TESTING_PERMISSIONS=true`:
+all signed-in users can submit, vote, create lectures, view authors/reports in
+the professor dashboard, and manage every lecture. This allows the same account
+to test both dashboards without changing database roles. The one-question quota
+and self-vote restriction still apply.
+
+To restore role/owner checks on the VM, set `APP_TESTING_PERMISSIONS=false` in
+the release `.env`, then run `docker compose -p hackathon up -d backend`.
+The instructions below apply when testing permissions are disabled.
+
+New identities default to students. Through an administrator database session, assign the exact identity supplied by the login proxy:
+
+```sql
+INSERT INTO users (eth_identity_ref, role)
+VALUES ('actual-professor@ethz.ch', 'professor')
+ON CONFLICT (eth_identity_ref) DO UPDATE SET role = EXCLUDED.role;
+```
+
+Professors create and own lectures. Legacy lectures have no owner; an admin can manage them, or assign their owner:
+
+```sql
+UPDATE lectures
+SET owner_id = (SELECT id FROM users WHERE eth_identity_ref = 'actual-professor@ethz.ch')
+WHERE id = 123;
+```
+
+## Verification and rollout
+
+Java tests start an isolated PostgreSQL instance and test empty databases, V1 adoption, permissions, privacy, voting, quota races, and moderation without contacting the VM. Verify `/api/hello`, unauthenticated 401 for `/api/lectures`, managed login, professor creation, student joining/submission, voting/reports, and answer synchronization.
+
+The ignored local `deploy-local.ps1` builds/lints the frontend, runs `test:api`,
+tests/builds Java, and packages only Java and frontend assets. It prepares the
+tracked `deploy/deploy-vm.sh` template, uploads with the existing SSH helper, and
+checks `/api/me`, `/api/lectures`, and frontend assets. Credentials remain in the
+ignored local helper and the existing VM secret; they are excluded from bundles.
 
 ```powershell
-# Verify automatic VM login and Docker prerequisites without deploying.
-.\deploy-local.ps1 -CheckConnection
-
-# Build, test, and package locally without connecting to the VM.
+# Local checks and packaging only; no VM connection.
 .\deploy-local.ps1 -BuildOnly
 
-# Test a temporary VM candidate, then clean it up without switching production.
+# Candidate validation only, using a disposable PostgreSQL database.
 .\deploy-local.ps1 -ValidateOnly
 
-# Reuse installed frontend dependencies, or select a JDK explicitly.
-.\deploy-local.ps1 -BuildOnly -SkipInstall
-.\deploy-local.ps1 -JdkPath 'C:\Program Files\Eclipse Adoptium\jdk-21.0.8.9-hotspot'
+# First adoption, AFTER verifying the supplied V1 schema and table ownership.
+.\deploy-local.ps1 -ValidateOnly -BaselineDatabase
+.\deploy-local.ps1 -BaselineDatabase
+
+# Subsequent deployments after Flyway tracks the database.
+.\deploy-local.ps1
 ```
 
-The script installs frontend dependencies, runs its build/lint/student API
-tests, and runs Java tests plus `bootJar`. It packages a fresh directory with
-`frontend/dist`, the Java JAR, and only `index.mjs`, `store.mjs`, and `seed.json`
-from `frontend/server/student-api/`. Local student data, development identity,
-credentials, and the obsolete nested student app are excluded.
+The helper discovers `secrets/app_password` beneath the VM user's home only
+when exactly one file matches. Otherwise provide
+`-AppPasswordFile '/absolute/vm/path/secrets/app_password'`. Override the Docker
+network address with `-DatabaseUrl 'jdbc:postgresql://actual-alias:5432/askpool'`.
+These arguments refer to the VM, not Windows. `-SkipInstall` reuses frontend
+dependencies; `-JdkPath` selects a Java 21 installation.
 
-## Rollout and rollback
+Before switching, read-only preflight checks verify connectivity, the three
+initial tables' ownership, and whether explicit baseline adoption is needed.
+Candidate validation applies migrations to its own empty PostgreSQL database;
+it does not apply migrations to the existing VM database. A real deployment
+creates a private `database-before.sql` backup in the release directory with a
+PostgreSQL client matching the server's major version, then switches and checks
+production. Baseline is disabled again after successful startup. Runtime
+configuration is saved in the release `.env` for later Compose commands.
 
-Each upload is checksum-verified and extracted into
-`/home/viscon/hackathon-releases/<release-id>`. A VM lock prevents overlapping
-deployments. The candidate runs on `127.0.0.1:18080` with its own disposable
-student-data volume. Checks cover the Java API, login name/ID, student API,
-unauthenticated HTTP 401 responses, frontend assets, and both dashboard routes.
+Retain PostgreSQL backups/volumes. V2 is additive and keeps the original answer constraint. A rollback to the former Node deployment shows its separate demo store while PostgreSQL data remains intact. Do not remove either data volume during rollout or rollback.
 
-After those checks pass, the script recreates project `hackathon` on port 8080
-and repeats the checks. Its existing student-data volume is preserved. Candidate
-containers and volumes are removed. If switching fails, the script restores
-the previous release; the supplied template containers are the first-release
-fallback. Previous release directories remain available for rollback.
+V3 handles the older VM schema where `lectures.professor_id` is required.
+It backfills missing `owner_id` values and installs an insert trigger to populate
+both ownership columns. Existing columns, constraints, lectures, and questions
+are preserved. Fresh databases without `professor_id` need no compatibility
+trigger. A DBA can apply the V3 SQL in a transaction to repair a running instance
+before releasing Java; run it with `SET LOCAL ROLE askpool_app` so the
+compatibility function belongs to the migration role. The subsequent Flyway
+migration safely repeats it. V4 removes the one-question-per-student constraint
+without deleting existing questions.
 
-To inspect the current release on the VM:
+V5 adds shared lecture start/end and intake state, course labels, and optional
+written answers. Existing pools become started sessions; new lectures must be
+started explicitly. The older VM `votes` foreign key is changed to cascade only
+when a question is permanently purged. Ordinary deletion still retains votes
+and reports for restoration. This frontend and backend must be released together.
 
-```bash
-release=$(docker inspect -f '{{index .Config.Labels "com.docker.compose.project.working_dir"}}' hackathon-frontend-1)
-docker compose -p hackathon -f "$release/compose.yaml" ps
-docker compose -p hackathon -f "$release/compose.yaml" logs --tail 100
-```
-
-For a manual rollback, use the previous release directory printed by the script:
-
-```bash
-docker compose -p hackathon -f /home/viscon/hackathon-releases/<previous-release>/compose.yaml up -d --force-recreate --remove-orphans
-```
-
-Keep the production student volume when rolling back; do not pass `--volumes`
-to a production `down` command.
+The ignored `deploy-local.ps1` contains the VM SSH configuration;
+`dev-local.ps1` runs locally and does not connect to the VM.

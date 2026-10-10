@@ -10,7 +10,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import static org.junit.jupiter.api.Assertions.*;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-class CurrentUserControllerTests {
+class CurrentUserControllerTests extends PostgresTestSupport {
     @Value("${local.server.port}")
     private int port;
     private final HttpClient client = HttpClient.newHttpClient();

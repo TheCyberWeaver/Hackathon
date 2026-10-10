@@ -1,7 +1,7 @@
 # Handoff to Codex: AskPool student frontend (clickable demo)
 
 > Historical design brief. The implemented student dashboard now lives in
-> `frontend/src/student/`, and its demo API lives in `frontend/server/student-api/`.
+> `frontend/src/student/`, and both dashboards use the Java PostgreSQL API.
 > The paths and setup commands below describe the original standalone prototype.
 > For the current setup and behavior, use `frontend/README.md` and
 > `docs/Entry_Page.md`. In the current app, votes always outrank submission time,

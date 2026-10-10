@@ -1,3 +1,5 @@
+import { request } from '../../lib/poolApi'
+
 export type QuestionStatus = 'open' | 'selected' | 'answered'
 
 export type Question = {
@@ -8,35 +10,26 @@ export type Question = {
   status: QuestionStatus
   mine: boolean
   votedByMe: boolean
+  answer?: string | null
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`/api${path}`, {
-    ...init,
-    credentials: 'same-origin',
-    headers: {
-      ...(init?.body ? { 'Content-Type': 'application/json' } : {}),
-      ...init?.headers,
+export function listQuestions(lectureId: string): Promise<Question[]> {
+  return request<Question[]>(
+    `/lectures/${encodeURIComponent(lectureId)}/questions`,
+  )
+}
+
+export function submitQuestion(
+  lectureId: string,
+  text: string,
+): Promise<Question> {
+  return request<Question>(
+    `/lectures/${encodeURIComponent(lectureId)}/questions`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ text }),
     },
-  })
-  if (!response.ok) {
-    const body = await response.json().catch(() => null)
-    throw new Error(body?.error || 'Something went wrong. Please try again.')
-  }
-  return response.status === 204
-    ? (undefined as T)
-    : ((await response.json()) as T)
-}
-
-export function listQuestions(): Promise<Question[]> {
-  return request<Question[]>('/questions')
-}
-
-export function submitQuestion(text: string): Promise<Question> {
-  return request<Question>('/questions', {
-    method: 'POST',
-    body: JSON.stringify({ text }),
-  })
+  )
 }
 
 export function setVote(id: string, voted: boolean): Promise<Question> {
@@ -49,5 +42,11 @@ export function setVote(id: string, voted: boolean): Promise<Question> {
 export function reportQuestion(id: string): Promise<void> {
   return request<void>(`/questions/${encodeURIComponent(id)}/report`, {
     method: 'POST',
+  })
+}
+
+export function deleteQuestion(id: string): Promise<void> {
+  return request<void>(`/questions/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
   })
 }

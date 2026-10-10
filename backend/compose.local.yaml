@@ -1,0 +1,13 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    ports:
+      - "127.0.0.1:5432:5432"
+    environment:
+      POSTGRES_DB: askpool
+      POSTGRES_USER: askpool_app
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:?Set a local DATABASE_PASSWORD}
+    volumes:
+      - local-postgres:/var/lib/postgresql/data
+volumes:
+  local-postgres:
