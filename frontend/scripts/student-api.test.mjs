@@ -7,62 +7,6 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
-import ts from 'typescript'
-
-test('student client relies on proxy identity for every request', async (t) => {
-  const source = await readFile(
-    new URL('../src/student/lib/studentApi.ts', import.meta.url),
-    'utf8',
-  )
-  const { outputText } = ts.transpileModule(source, {
-    compilerOptions: { module: ts.ModuleKind.ESNext },
-  })
-  const api = await import(
-    `data:text/javascript;base64,${Buffer.from(outputText).toString('base64')}`
-  )
-  const storageDescriptor = Object.getOwnPropertyDescriptor(
-    globalThis,
-    'localStorage',
-  )
-  let storageReads = 0
-  Object.defineProperty(globalThis, 'localStorage', {
-    configurable: true,
-    value: {
-      getItem(key) {
-        storageReads++
-        assert.equal(key, 'askpool-student-id')
-        return 'standalone-browser-id'
-      },
-      setItem() {
-        assert.fail('Integrated login must not create a browser identity')
-      },
-    },
-  })
-  t.after(() => {
-    if (storageDescriptor)
-      Object.defineProperty(globalThis, 'localStorage', storageDescriptor)
-    else delete globalThis.localStorage
-  })
-  const requests = []
-  t.mock.method(globalThis, 'fetch', async (url, init) => {
-    requests.push({ url, init })
-    return new Response(JSON.stringify({}), { status: 200 })
-  })
-
-  await api.listQuestions()
-  await api.submitQuestion('A question')
-  await api.setVote('question-1', true)
-  await api.reportQuestion('question-1')
-  assert.equal(storageReads, 0)
-  assert.equal(requests.length, 4)
-  for (const { init } of requests) {
-    const headers = new Headers(init.headers)
-    assert.equal(headers.has('X-Student-Id'), false)
-    assert.equal(headers.has('X-User-Id'), false)
-    assert.equal(headers.has('X-User-Name'), false)
-    assert.equal(init.credentials, 'same-origin')
-  }
-})
 
 test('integrated student API uses proxy identity for ownership and votes', async () => {
   const reservation = createServer()

@@ -1,27 +1,15 @@
-# Professor dashboard handoff
+# Professor dashboard
 
-The professor demo lives at `/professor`, reached through the Professor button on the entry page. `frontend/src/App.tsx` loads `/api/me` before rendering the dashboard and passes the signed-in user as a prop. The restored PR #2 component uses Vite, React, TypeScript, and Tailwind CSS v4. Both Vite and Caddy serve `/professor` on reload through their SPA fallback.
+The merged dashboard uses the Java API through `frontend/src/professor/professorApi.ts` and the shared transport. Mock question/archive data and browser-local session controls have been replaced with PostgreSQL records.
 
-## Files and data
+Create a lecture with a title and optional course, then start it. The lecture picker preserves join links and selection. Start, pause, resume, and end are shared across browsers. Pausing disables the student composer and the API rejects new submissions. Ending preserves the question pool in Past Lectures instead of resetting it.
 
-- `frontend/src/professor/mockQuestions.ts` defines the `Question` type and 12 fixed fictional questions (9 open, 3 answered). The card data contains no student identity fields.
-- `frontend/src/professor/mockPastLectures.ts` contains two fictional previous lectures with a course name, date, Zurich-time slot, and three saved question-and-answer pairs each. They are static demo records, not persisted lecture history.
-- `frontend/src/professor/ProfessorDashboard.tsx` owns rendering and in-memory state. The data module has no rendering or network logic.
-- `frontend/src/professor/lectureSession.ts` keeps the active lecture's start timestamp in browser local storage, scoped to the signed-in user ID. It is a frontend placeholder until the lecture API is available.
-- `frontend/src/lib/questionIntake.ts` shares the browser-local paused state between the professor controls and student composer. It updates other tabs in the same browser through storage events.
+Open, Answered, and Deleted tabs use saved status and deletion timestamps. Sort by most votes (earlier questions first on ties) or newest first; ID resolves remaining ties. The top-three decoration continues to use vote ranking regardless of display sort. Cards display question text, votes, and submission time without student names. Expanded cards show report counts and an optional written-answer editor. Marking unanswered clears the saved answer and answer timestamp.
 
-The component copies the mock question array on first render. Status changes and deletions update only that state, so a reload restores the initial questions. Question data has no persistence or backend request. To connect real data later, replace the initialization source and state mutations in the dashboard; keep the `Question` shape and sorting rule unless the product requirements change.
+Moving a question to Deleted keeps its status, answer, votes, and reports. Restore returns it to Open or Answered. Permanent deletion and Delete all remove only already-deleted questions, with dependent votes and reports. The dialog preserves the incoming cancel/Escape/focus behavior, and mutations are confirmed by the API before state changes. Students may also hide their own questions.
 
-## Behavior
+Past Lectures uses the persisted ended-session archive, including unanswered questions and saved written answers. Profile uses the signed-in user's name and server counts across manageable lecture pools, excluding Deleted. Polling refreshes the active lecture, questions, archive, and profile data every five seconds as applicable.
 
-Open, Answered, and Deleted are derived from current state. A Sort by control applies to all three tabs: Most votes (the default, with older questions first on ties) or Time asked (newest first). ID breaks remaining ties. The flame decoration always marks the three most-voted open questions, even when sorting by time. The selected tab and sort mode stay selected after a status change. A question can be expanded independently to show its locally formatted submission time. Vote counts are display only.
+Normal mode permits only lecture owners/admins to manage sessions, read private moderation data, restore, and purge. Existing hackathon testing permissions continue to allow all signed-in accounts to manage pools; they still cannot submit to scheduled/paused/ended lectures or vote for themselves. See [the API contract](API.md).
 
-With no stored active lecture, Current Lecture shows an empty state and a green Start lecture button. Starting a lecture stores and displays the start timestamp, then reveals the existing mock question view. End lecture opens a confirmation dialog; confirming clears the browser-local timestamp and resets in-memory question changes before returning to the start screen. Live questions and durable lecture records await the backend. The browser-local timestamp survives reloads in the same browser but is not a shared or authoritative lecture record.
-
-The active lecture has Pause questions and End lecture in one controls row. Pausing disables and grays out the student question composer in the same browser; resuming re-enables it. Starting or ending a lecture clears the paused state. This is a frontend demo state only: other browsers and devices do not receive it, and the question API does not enforce it. The backend will need to publish the lecture's intake state and reject submissions while paused.
-
-Deletion uses a native modal dialog. Cancel, Escape, or backdrop click preserves the question and returns focus to its Delete button. Confirmation removes the question and focuses the selected tab. The navigation button in the header opens the shared side panel with Current Lecture, Past Lectures, a profile card with email, Settings, and Log out. The panel closes with its button, Escape, or a backdrop click, then returns focus to the header button. The same panel is used in the student dashboard; its component and styles live in `frontend/src/components/`.
-
-## Local checks
-
-From `frontend/`, run `npm run lint` and `npm run build`. Run `npm run dev`, then choose Professor at `http://localhost:5173`. Development uses a sample identity without Java; production requires managed-proxy identity headers. Choosing Professor is demo navigation and does not assign privileged backend permissions.
+Verify with frontend `npm run test:api`, `npm run build`, and `npm run lint`, and backend `./gradlew test bootJar`. Unit tests cover session transitions and ownership rules; PostgreSQL-backed tests cover lifecycle persistence, intake races, archive retention, written answers, counts, restore, scoped purging, privacy, and legacy schema adoption. See [local development](Local_Development.md) for the no-Docker runner.

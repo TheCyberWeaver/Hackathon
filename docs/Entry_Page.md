@@ -5,15 +5,14 @@ The entry page is `/`. It reads the signed-in user from `GET /api/me` and opens
 `frontend/src/student/` and `frontend/src/professor/`. A reload on either route
 checks identity again. Vite and Caddy use an SPA fallback for dashboard routes.
 
-The student dashboard uses the Node demo API at `frontend/server/student-api/`
-for questions, votes, and reports. Its client makes same-origin requests without
-creating a browser identity or sending trusted user headers. In production, the
-managed proxy supplies `X-User-Id` to the API. The professor dashboard still
-uses mock questions and past lectures, so its data is not shared with students.
+Both dashboards use the Java PostgreSQL API for shared lecture questions,
+votes, reports, and moderation. Clients make same-origin requests without
+creating browser identities or sending trusted user headers. The managed proxy
+supplies `X-User-Id`. See [the current API contract](API.md).
 
 Choosing Student or Professor is demo navigation, not an authorization grant.
-Real professor permissions and lecture ownership must be enforced by the
-backend. The current “Log out” controls return to the entry page; the managed
+Professor permissions and lecture ownership are enforced by Java using
+database roles. The current “Log out” controls return to the entry page; the managed
 login portal must handle actual sign-out when it is integrated.
 
 ## Identity endpoint
@@ -28,9 +27,9 @@ Successful responses have `Cache-Control: no-store` and this shape:
 
 ## Local development
 
-Run `npm run dev` from `frontend/`. This starts Vite on port 5173 and the student
-demo API on port 3001. Vite serves a fictional `Alex Morgan` identity in
-development, so both dashboards can open without Java on port 8080. Set
+Run `npm run dev` from `frontend/`. This starts Vite on port 5173. Java on port
+8080 and PostgreSQL are required for dashboard data. Vite serves a fictional
+`Alex Morgan` identity in development; it defaults to a student. Set
 `ASKPOOL_DEMO_AUTH=false` in `frontend/.env.local` to require the backend
 identity instead. This simulation is absent from production builds and
 `vite preview`.

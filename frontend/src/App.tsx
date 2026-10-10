@@ -28,7 +28,7 @@ export default function App() {
   }, [path])
 
   function navigate(nextPath: string) {
-    window.history.pushState(null, '', nextPath)
+    window.history.pushState(null, '', `${nextPath}${window.location.search}`)
     setPath(nextPath)
     window.scrollTo(0, 0)
   }
@@ -51,7 +51,9 @@ export default function App() {
 
   async function enterSpace(space: 'student' | 'professor') {
     if (identity.status === 'signed-out') {
-      window.location.assign(`https://08.hackathon.ethz.ch/${space}`)
+      window.location.assign(
+        `https://08.hackathon.ethz.ch/${space}${window.location.search}`,
+      )
       return
     }
     if (identity.status === 'ready') {
@@ -65,7 +67,9 @@ export default function App() {
       navigate(`/${space}`)
     } catch (error) {
       if (error instanceof IdentityError && error.status === 401) {
-        window.location.assign(`https://08.hackathon.ethz.ch/${space}`)
+        window.location.assign(
+          `https://08.hackathon.ethz.ch/${space}${window.location.search}`,
+        )
       } else {
         setIdentity({ status: 'error' })
       }
