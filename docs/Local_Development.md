@@ -92,6 +92,13 @@ From `backend/`, run `./gradlew localRun` (Windows: `./gradlew.bat localRun`).
 In another terminal, run `npm run dev` from `frontend/`. This uses the same
 persistent database on port 55432 and Java on port 8080. Java must be JDK 21.
 
+Both `http://localhost:5173` and `http://127.0.0.1:5173` are allowed locally,
+including the VS Code browser preview. Restart Java after updating the CORS
+configuration. With normal backend startup, `APP_FRONTEND_ORIGIN` accepts a
+comma-separated list of exact origins; the deployment sets its public frontend
+origin. The isolated `localRun` task instead uses the local origins above, and
+`dev-local.ps1` adjusts both origins to its configured frontend port.
+
 ## Automated database tests
 
 From `backend/`, run `./gradlew test` (Windows: `./gradlew.bat test`). Tests use

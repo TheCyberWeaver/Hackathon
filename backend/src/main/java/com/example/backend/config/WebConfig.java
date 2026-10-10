@@ -8,12 +8,12 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 @Configuration
 public class WebConfig implements WebMvcConfigurer {
     @Value("${app.frontend-origin}")
-    private String frontendOrigin;
+    private String[] frontendOrigins;
 
     @Override
     public void addCorsMappings(CorsRegistry registry) {
         registry.addMapping("/api/**")
-            .allowedOrigins(frontendOrigin)
+            .allowedOrigins(frontendOrigins)
             .allowedMethods("GET", "POST", "PUT", "PATCH", "DELETE")
             .allowedHeaders("Content-Type", "Authorization");
     }

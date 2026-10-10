@@ -59,7 +59,7 @@ try {
     Write-Host "Local app: http://localhost:$FrontendPort (wait for Java to report Started LocalApplication)"
     Write-Host "Database: 127.0.0.1:$DatabasePort / askpool / askpool_app / empty password"
     Write-Host 'All signed-in users have testing permissions. Ctrl+C stops the local app; database contents are retained.'
-    & "$JdkPath/bin/java.exe" -cp $taskClasspath com.example.backend.dev.LocalApplication (Join-Path $PSScriptRoot 'backend/.local-postgres') $DatabasePort $BackendPort "http://localhost:$FrontendPort"
+    & "$JdkPath/bin/java.exe" -cp $taskClasspath com.example.backend.dev.LocalApplication (Join-Path $PSScriptRoot 'backend/.local-postgres') $DatabasePort $BackendPort "http://localhost:$FrontendPort,http://127.0.0.1:$FrontendPort"
     if ($LASTEXITCODE -ne 0) { throw "Local Java exited with code $LASTEXITCODE. Inspect the output above." }
 } finally {
     if ($taskFrontend -and -not $taskFrontend.HasExited) { Stop-Process -Id $taskFrontend.Id }
