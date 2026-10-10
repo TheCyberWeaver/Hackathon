@@ -6,21 +6,16 @@ services:
     environment:
       PORT: "8080"
       APP_FRONTEND_ORIGIN: https://08.hackathon.ethz.ch
+      DATABASE_URL: ${DATABASE_URL:-jdbc:postgresql://postgres:5432/askpool}
+      DATABASE_USER: askpool_app
+      DATABASE_BASELINE: ${DATABASE_BASELINE:-false}
+    secrets:
+      - app_password
+    networks:
+      - default
+      - askpool_shared
     volumes:
       - ./artifacts/backend.jar:/app/backend.jar:ro
-    restart: unless-stopped
-
-  student-api:
-    image: node:24-alpine
-    working_dir: /app
-    command: ["node", "index.mjs"]
-    environment:
-      PORT: "3001"
-      ASKPOOL_REQUIRE_USER_ID: "true"
-      ASKPOOL_DATA_DIR: /data
-    volumes:
-      - ./artifacts/student-api:/app:ro
-      - student-data:/data
     restart: unless-stopped
 
   frontend:
@@ -32,8 +27,12 @@ services:
       - ./artifacts/frontend:/srv:ro
     depends_on:
       - backend
-      - student-api
     restart: unless-stopped
 
-volumes:
-  student-data:
+secrets:
+  app_password:
+    file: ${ASKPOOL_APP_PASSWORD_FILE:?Set ASKPOOL_APP_PASSWORD_FILE to the VM app_password file}
+
+networks:
+  askpool_shared:
+    external: true

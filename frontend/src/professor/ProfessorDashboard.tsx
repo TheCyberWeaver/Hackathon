@@ -1,7 +1,18 @@
 import { useEffect, useRef, useState } from 'react'
-import { mockPastLectures } from './mockPastLectures'
-import type { Question } from './mockQuestions'
-import { mockQuestions } from './mockQuestions'
+import {
+  changeQuestionStatus,
+  deleteQuestion,
+  listProfessorQuestions,
+  type Question,
+} from './professorApi'
+import type { QuestionStatus } from '../student/lib/studentApi'
+import {
+  initialLectureId,
+  listLectures,
+  rememberLecture,
+  type Lecture,
+} from '../lib/poolApi'
+import LecturePicker from '../components/LecturePicker'
 import type { CurrentUser } from '../lib/api'
 import { ThumbsUpIcon } from '../components/Icons'
 import SidePanel, { type SidePanelPage } from '../components/SidePanel'
@@ -16,8 +27,6 @@ const professorRoutes: Record<ProfessorPage, string> = {
   profile: '/professor/profile',
   settings: '/professor/settings',
 }
-
-const professorFullName = 'Alex Morgan'
 
 function pageFromPath(pathname: string): ProfessorPage {
   const path = pathname.replace(/\/$/, '')
@@ -61,9 +70,11 @@ function ChevronIcon({ expanded }: { expanded: boolean }) {
 }
 
 export default function ProfessorDashboard({ user }: { user: CurrentUser }) {
-  const [questions, setQuestions] = useState<Question[]>(() => [
-    ...mockQuestions,
-  ])
+  const [questions, setQuestions] = useState<Question[]>([])
+  const [lectures, setLectures] = useState<Lecture[]>([])
+  const [lectureId, setLectureId] = useState(initialLectureId)
+  const [apiError, setApiError] = useState('')
+  const [busyId, setBusyId] = useState<string | null>(null)
   const [selectedTab, setSelectedTab] = useState<Tab>('open')
   const [page, setPage] = useState<ProfessorPage>(() =>
     pageFromPath(window.location.pathname),
@@ -76,6 +87,8 @@ export default function ProfessorDashboard({ user }: { user: CurrentUser }) {
   const openTabRef = useRef<HTMLButtonElement>(null)
   const answeredTabRef = useRef<HTMLButtonElement>(null)
   const mainHeadingRef = useRef<HTMLHeadingElement>(null)
+  const mutationVersion = useRef(0)
+  const mutationPending = useRef(false)
 
   const openQuestions = sortQuestions(
     questions.filter((question) => !question.answered),
@@ -87,8 +100,70 @@ export default function ProfessorDashboard({ user }: { user: CurrentUser }) {
     selectedTab === 'open' ? openQuestions : answeredQuestions
 
   useEffect(() => {
-    const handleLocationChange = () =>
+    let active = true
+    listLectures()
+      .then((items) => {
+        if (!active) return
+        const managed = items.filter((lecture) => lecture.canManage)
+        setLectures(managed)
+        setLectureId((id) => id || managed[0]?.id || '')
+      })
+      .catch((error: unknown) => {
+        if (active)
+          setApiError(
+            error instanceof Error ? error.message : 'Could not load lectures.',
+          )
+      })
+    return () => {
+      active = false
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!lectureId) return
+    rememberLecture(lectureId)
+    let active = true
+    const load = () => {
+      const version = mutationVersion.current
+      return listProfessorQuestions(lectureId)
+        .then((items) => {
+          if (
+            active &&
+            !mutationPending.current &&
+            version === mutationVersion.current
+          ) {
+            setQuestions(items)
+            setApiError('')
+          }
+        })
+        .catch((error: unknown) => {
+          if (active)
+            setApiError(
+              error instanceof Error
+                ? error.message
+                : 'Could not load questions.',
+            )
+        })
+    }
+    void load()
+    const timer = window.setInterval(() => {
+      void load()
+    }, 5000)
+    return () => {
+      active = false
+      window.clearInterval(timer)
+    }
+  }, [lectureId])
+
+  useEffect(() => {
+    const handleLocationChange = () => {
       setPage(pageFromPath(window.location.pathname))
+      const id = initialLectureId()
+      if (id) {
+        setLectureId(id)
+        setQuestions([])
+      }
+    }
     window.addEventListener('popstate', handleLocationChange)
     return () => window.removeEventListener('popstate', handleLocationChange)
   }, [])
@@ -119,23 +194,40 @@ export default function ProfessorDashboard({ user }: { user: CurrentUser }) {
 
   function navigateTo(nextPage: SidePanelPage) {
     if (nextPage === page) return
-    window.history.pushState(null, '', professorRoutes[nextPage])
+    window.history.pushState(
+      null,
+      '',
+      `${professorRoutes[nextPage]}${window.location.search}`,
+    )
     setPage(nextPage)
     window.scrollTo(0, 0)
     window.requestAnimationFrame(() => mainHeadingRef.current?.focus())
   }
 
-  function changeStatus(question: Question) {
-    setQuestions((current) =>
-      current.map((item) =>
-        item.id === question.id ? { ...item, answered: !item.answered } : item,
-      ),
-    )
-    setNotice(
-      question.answered
-        ? 'Question marked unanswered.'
-        : 'Question marked answered.',
-    )
+  async function changeStatus(
+    question: Question,
+    status: QuestionStatus = question.answered ? 'open' : 'answered',
+  ) {
+    if (busyId) return
+    setBusyId(question.id)
+    mutationPending.current = true
+    mutationVersion.current++
+    try {
+      const updated = await changeQuestionStatus(question.id, status)
+      setQuestions((current) =>
+        current.map((item) => (item.id === question.id ? updated : item)),
+      )
+    } catch (error) {
+      setNotice(
+        error instanceof Error ? error.message : 'Could not update question.',
+      )
+      return
+    } finally {
+      setBusyId(null)
+      mutationPending.current = false
+      mutationVersion.current++
+    }
+    setNotice(`Question marked ${status}.`)
     window.requestAnimationFrame(() => {
       ;(selectedTab === 'open'
         ? openTabRef.current
@@ -144,8 +236,24 @@ export default function ProfessorDashboard({ user }: { user: CurrentUser }) {
     })
   }
 
-  function closeDialog(confirmed: boolean) {
+  async function closeDialog(confirmed: boolean) {
+    if (busyId) return
     if (confirmed && deleteId) {
+      setBusyId(deleteId)
+      mutationPending.current = true
+      mutationVersion.current++
+      try {
+        await deleteQuestion(deleteId)
+      } catch (error) {
+        setNotice(
+          error instanceof Error ? error.message : 'Could not delete question.',
+        )
+        return
+      } finally {
+        setBusyId(null)
+        mutationPending.current = false
+        mutationVersion.current++
+      }
       setQuestions((current) =>
         current.filter((question) => question.id !== deleteId),
       )
@@ -194,6 +302,26 @@ export default function ProfessorDashboard({ user }: { user: CurrentUser }) {
           >
             Lecture questions
           </h1>
+          <LecturePicker
+            lectures={lectures}
+            lectureId={lectureId}
+            disabled={busyId !== null}
+            onSelect={(id) => {
+              setQuestions([])
+              setLectureId(id)
+              setDeleteId(null)
+            }}
+            onCreated={(lecture) => {
+              setQuestions([])
+              setLectures((items) => [lecture, ...items])
+              setLectureId(lecture.id)
+            }}
+          />
+          {apiError && (
+            <p role="alert" className="mt-3 text-red-700">
+              {apiError}
+            </p>
+          )}
           <div
             role="tablist"
             aria-label="Question status"
@@ -286,6 +414,10 @@ export default function ProfessorDashboard({ user }: { user: CurrentUser }) {
                         >
                           <p>Author: {question.authorId}</p>
                           <p>
+                            Status: {question.status} · Reports:{' '}
+                            {question.reportCount}
+                          </p>
+                          <p>
                             Submitted:{' '}
                             <time dateTime={question.createdAt}>
                               {timestampFormatter.format(
@@ -298,13 +430,33 @@ export default function ProfessorDashboard({ user }: { user: CurrentUser }) {
                       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 pb-4 pt-4 sm:px-5 sm:pb-5">
                         <button
                           type="button"
-                          onClick={() => changeStatus(question)}
+                          disabled={busyId !== null}
+                          onClick={() => void changeStatus(question)}
                           className="rounded-md bg-blue-600 px-3.5 py-2 text-sm font-semibold text-white hover:bg-blue-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
                         >
                           {question.answered
                             ? 'Mark unanswered'
                             : 'Mark answered'}
                         </button>
+                        {!question.answered && (
+                          <button
+                            type="button"
+                            disabled={busyId !== null}
+                            onClick={() =>
+                              void changeStatus(
+                                question,
+                                question.status === 'selected'
+                                  ? 'open'
+                                  : 'selected',
+                              )
+                            }
+                            className="rounded-md border border-blue-300 px-3 py-2 text-sm text-blue-700"
+                          >
+                            {question.status === 'selected'
+                              ? 'Unselect'
+                              : 'Select'}
+                          </button>
+                        )}
                         <button
                           type="button"
                           onClick={(event) => {
@@ -335,46 +487,37 @@ export default function ProfessorDashboard({ user }: { user: CurrentUser }) {
             Past Lectures
           </h1>
           <p className="mt-3 text-sm leading-6 text-slate-600">
-            Browse questions and answers from previous lectures. This is a mock
-            archive for the demo.
+            Choose a lecture to review its saved questions and answer statuses.
           </p>
           <div className="mt-8 space-y-4">
-            {mockPastLectures.map((lecture, index) => (
-              <details
+            {lectures.map((lecture) => (
+              <article
                 key={lecture.id}
-                open={index === 0}
                 className="rounded-xl border border-slate-200 bg-slate-50"
               >
-                <summary className="cursor-pointer px-5 py-5 marker:text-blue-600 hover:bg-slate-100 focus-visible:rounded-xl focus-visible:outline-2 focus-visible:outline-blue-600 sm:px-6">
+                <button
+                  type="button"
+                  disabled={busyId !== null}
+                  onClick={() => {
+                    setQuestions([])
+                    setLectureId(lecture.id)
+                    rememberLecture(lecture.id)
+                    navigateTo('questions')
+                  }}
+                  className="w-full px-5 py-5 text-left hover:bg-slate-100 sm:px-6"
+                >
                   <span className="font-semibold text-slate-900">
                     {lecture.title}
                   </span>
                   <span className="mt-2 block pl-4 text-xs text-slate-600">
-                    <time dateTime={lecture.date}>
-                      {lectureDateFormatter.format(new Date(lecture.date))}
+                    <time dateTime={lecture.lectureTime}>
+                      {lectureDateFormatter.format(
+                        new Date(lecture.lectureTime),
+                      )}
                     </time>{' '}
-                    · {lecture.questions.length} answered questions
                   </span>
-                </summary>
-                <div className="space-y-3 border-t border-slate-200 px-5 py-5 sm:px-6">
-                  {lecture.questions.map((question) => (
-                    <article
-                      key={question.id}
-                      className="rounded-lg border border-slate-200 bg-white p-4"
-                    >
-                      <h2 className="text-sm font-semibold leading-6 text-slate-900">
-                        {question.text}
-                      </h2>
-                      <p className="mt-3 text-xs font-bold uppercase tracking-wide text-blue-700">
-                        Answer
-                      </p>
-                      <p className="mt-1 text-sm leading-6 text-slate-700">
-                        {question.answer}
-                      </p>
-                    </article>
-                  ))}
-                </div>
-              </details>
+                </button>
+              </article>
             ))}
           </div>
         </main>
@@ -395,7 +538,7 @@ export default function ProfessorDashboard({ user }: { user: CurrentUser }) {
           >
             <p className="text-sm font-medium text-slate-600">Full name</p>
             <p className="mt-2 text-xl font-semibold text-slate-900">
-              {professorFullName}
+              {user.name}
             </p>
           </section>
         </main>

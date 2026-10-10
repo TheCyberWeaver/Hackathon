@@ -54,7 +54,29 @@ chmod +x backend/gradlew
 
 No `.env` file is required for the default local setup.
 
-### 4. Start development
+### 4. Configure PostgreSQL
+
+Java now requires PostgreSQL. For a new local database, set a local password
+and start the optional Docker service from the repository root:
+
+```powershell
+$env:DATABASE_PASSWORD = 'choose-a-local-development-password'
+docker compose -f backend/compose.local.yaml up -d
+```
+
+Set `DATABASE_PASSWORD` in the terminal running Java too. Defaults are
+`DATABASE_URL=jdbc:postgresql://localhost:5432/askpool` and
+`DATABASE_USER=askpool_app`. Spring does not load `.env` files automatically.
+Flyway migrates an empty database on startup. For the existing VM database, see
+[deployment and schema adoption](deploy/README.md), including table ownership
+and the one-time baseline flag.
+
+Local demo accounts default to students. Assign the demo identity professor
+permissions through an administrator database session as documented in the
+deployment guide; use another `ASKPOOL_DEMO_USER_ID` in `frontend/.env.local`
+for student testing.
+
+### 5. Start development
 
 Press **Ctrl+Shift+P**, select **Tasks: Run Task**, then choose:
 
@@ -64,11 +86,11 @@ Dev: start both
 
 This starts the frontend and backend in separate terminals. Wait for Java to finish starting; the first run downloads Gradle and dependencies.
 
-Open **http://localhost:5173** to see the AskPool name and **Student** / **Professor** entry buttons. Local development uses a sample identity (Alex Morgan) served by Vite, so both dashboards open even before Java starts. The frontend task also starts the student demo API on port 3001; the backend task serves the Java API on port 8080.
+Open **http://localhost:5173** to see the AskPool entry buttons. Vite supplies a sample identity (Alex Morgan) locally. Dashboard data requires Java on port 8080 and PostgreSQL. Professors create lectures and share student join links; both dashboards use the same persisted questions.
 
 Production uses the managed proxy's `X-User-Id` and `X-User-Name` headers via `GET /api/me`. Dashboard integration and local identity settings are documented in [docs/Entry_Page.md](docs/Entry_Page.md).
 
-### 5. Make changes
+### 6. Make changes
 
 - Frontend: edit `frontend/src/` — browser updates automatically.
 - Backend: edit `backend/src/main/java/` — restart **Backend: dev** after changes.
@@ -76,3 +98,9 @@ Production uses the managed proxy's `X-User-Id` and `X-User-Name` headers via `G
 - Debug Java: stop the backend task, then select **Debug backend** in Run and Debug and press **F5**.
 
 Full commands and troubleshooting are in the repository’s **README.md**.
+
+Verify with backend `./gradlew.bat test bootJar` (Windows) or
+`./gradlew test bootJar` (macOS/Linux), and frontend `npm run build` plus
+`npm run lint`. Java tests start an isolated PostgreSQL process automatically,
+without Docker or VM credentials. The first run downloads platform binaries.
+See the [API contract](docs/API.md) for routes, errors, and permissions.

@@ -11,7 +11,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
     properties = "app.frontend-origin=https://app.example.com")
-class HelloControllerTests {
+class HelloControllerTests extends PostgresTestSupport {
     @Value("${local.server.port}")
     private int port;
 

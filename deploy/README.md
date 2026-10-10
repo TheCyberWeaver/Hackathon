@@ -1,65 +1,58 @@
-# VIScon deployment
+# Java + PostgreSQL deployment
 
-The app runs from `/home/viscon/hackathon` on SSH host `viscon-2026`.
-The portal at https://08.hackathon.ethz.ch handles TLS and login and forwards
-HTTP to port 8080. Caddy serves the production frontend and proxies `/api/*`
-to the Java 21 backend. Student question requests go to the existing Node demo
-API, whose state persists in the `hackathon_student-data` Docker volume. All
-containers restart automatically. The professor dashboard retains its mock data.
+Caddy serves the frontend and proxies all `/api/*` to Java. Java joins the external `askpool_shared` network. The managed address https://08.hackathon.ethz.ch provides TLS/login. Java and PostgreSQL must have no public ports. The Node demo API is no longer deployed; its old data volume is neither migrated nor removed.
 
-## Build and package (PowerShell, repository root)
+## Adopt the supplied VM schema
 
-Use JDK 21 with `JAVA_HOME` pointing to the JDK root directory.
+Back up the database. V1 matches the supplied schema; V2 adds lecture ownership, selection, soft deletion, votes, and reports. Do not run V1 again on the existing database.
 
-```powershell
-npm.cmd --prefix frontend ci
-npm.cmd --prefix frontend run build
-npm.cmd --prefix frontend run lint
-$env:GRADLE_USER_HOME = "$PWD/.gradle-user-home"
-Push-Location backend
-.\gradlew.bat test bootJar --no-daemon
-Pop-Location
-New-Item -ItemType Directory -Force deploy/artifacts/frontend | Out-Null
-Copy-Item backend/build/libs/backend-0.0.1-SNAPSHOT.jar deploy/artifacts/backend.jar
-Copy-Item frontend/dist/* deploy/artifacts/frontend -Recurse -Force
-New-Item -ItemType Directory -Force deploy/artifacts/student-api | Out-Null
-Copy-Item frontend/server/student-api/*.mjs, frontend/server/student-api/seed.json deploy/artifacts/student-api
-tar -czf backend/build/viscon-deploy.tar.gz -C deploy compose.yaml Caddyfile artifacts
-scp backend/build/viscon-deploy.tar.gz viscon-2026:~/
-```
-
-For subsequent deployments, build into a fresh artifacts directory to avoid
-retaining obsolete frontend assets. Transfer only build outputs and deployment
-configuration; credentials are not part of the bundle.
-
-## Run (on the VM)
+Verify the three tables match V1 and are owned by `askpool_app`. Changing the database owner does not transfer existing table ownership. If initial SQL ran as postgres, run this from the database Compose directory:
 
 ```bash
-mkdir -p ~/hackathon
-tar -xzf ~/viscon-deploy.tar.gz -C ~/hackathon
-cd ~/hackathon
-docker compose -p hackathon pull
-docker compose -p hackathon up -d
-curl --fail http://localhost:8080/
-curl --fail http://localhost:8080/api/hello
+docker compose exec -T postgres psql -U postgres -d askpool -v ON_ERROR_STOP=1 <<'SQL'
+ALTER TABLE public.users OWNER TO askpool_app;
+ALTER TABLE public.lectures OWNER TO askpool_app;
+ALTER TABLE public.questions OWNER TO askpool_app;
+SQL
 ```
 
-The API should return `{"message":"Hello from Java 21"}`.
-Inspect status and logs with `docker compose -p hackathon ps` and
-`docker compose -p hackathon logs --tail 100`.
+Build using backend `./gradlew test bootJar` (`gradlew.bat` on Windows), and frontend `npm run build` plus `npm run lint`. Place the executable Boot JAR at `artifacts/backend.jar` and frontend dist contents in `artifacts/frontend/` alongside the deployed Compose/Caddy files.
 
-Before replacing the supplied demo, run with `HTTP_PORT=18080` and verify both
-URLs at that port. Then stop `template-frontend-1` and `template-backend-1`,
-and run `docker compose -p hackathon up -d` again without `HTTP_PORT`.
-The original demo files and containers remain available.
-
-## Roll back to the supplied demo
+Confirm the database is reachable as `postgres:5432` on `askpool_shared`, or set the actual network alias in DATABASE_URL. Use an absolute path to the existing secret; Java reads `/run/secrets/app_password`. In the VM release directory:
 
 ```bash
-cd ~/hackathon
-docker compose -p hackathon down
-docker start template-backend-1 template-frontend-1
+export ASKPOOL_APP_PASSWORD_FILE=/absolute/path/to/database/secrets/app_password
+export DATABASE_URL=jdbc:postgresql://postgres:5432/askpool
+# First adoption of the VERIFIED existing V1 schema only:
+export DATABASE_BASELINE=true
+docker compose up -d
+docker compose logs --tail 100 backend
 ```
 
-## cmd - auto deployment
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File E:\Hackathon\deploy-local.ps1
+Flyway baselines at V1 and applies V2 transactionally. Remove DATABASE_BASELINE after successful startup; the default is false. On an empty database leave it false, and both migrations run. Baseline does not validate that an untracked schema matches V1; verify first. See the [official Flyway baseline reference](https://documentation.red-gate.com/flyway/reference/commands/baseline).
+
+## Professor permissions
+
+New identities default to students. Through an administrator database session, assign the exact identity supplied by the login proxy:
+
+```sql
+INSERT INTO users (eth_identity_ref, role)
+VALUES ('actual-professor@ethz.ch', 'professor')
+ON CONFLICT (eth_identity_ref) DO UPDATE SET role = EXCLUDED.role;
+```
+
+Professors create and own lectures. Legacy lectures have no owner; an admin can manage them, or assign their owner:
+
+```sql
+UPDATE lectures
+SET owner_id = (SELECT id FROM users WHERE eth_identity_ref = 'actual-professor@ethz.ch')
+WHERE id = 123;
+```
+
+## Verification and rollout
+
+Java tests start an isolated PostgreSQL instance and test empty databases, V1 adoption, permissions, privacy, voting, quota races, and moderation without contacting the VM. Verify `/api/hello`, unauthenticated 401 for `/api/lectures`, managed login, professor creation, student joining/submission, voting/reports, and answer synchronization.
+
+The ignored legacy `deploy-local.ps1` is incompatible with this contract: its Node packaging, `/api/questions` smoke checks, candidate database assumptions, and secret configuration need updating before reuse. This change does not deploy or alter that credential-bearing script.
+
+Retain PostgreSQL backups/volumes. V2 is additive and keeps the original answer constraint. A rollback to the former Node deployment shows its separate demo store while PostgreSQL data remains intact. Do not remove either data volume during rollout or rollback.
