@@ -68,10 +68,6 @@ textarea:focus-visible {
 }
 
 .sidebar-trigger {
-  position: absolute;
-  z-index: 51;
-  left: max(20px, env(safe-area-inset-left));
-  top: max(18px, env(safe-area-inset-top));
   width: 44px;
   height: 44px;
   display: grid;
@@ -86,16 +82,18 @@ textarea:focus-visible {
     border-color 180ms,
     background 180ms;
 }
+.sidebar-trigger--site {
+  position: absolute;
+  z-index: 30;
+  left: max(20px, env(safe-area-inset-left));
+  top: max(18px, env(safe-area-inset-top));
+}
 .sidebar-trigger:hover {
   color: var(--color-accent);
   border-color: var(--color-accent-ring);
   background: var(--color-accent-soft);
 }
 .brand-mark {
-  position: absolute;
-  z-index: 51;
-  top: max(18px, env(safe-area-inset-top));
-  left: calc(max(20px, env(safe-area-inset-left)) + 57px);
   display: flex;
   align-items: center;
   height: 44px;
@@ -104,6 +102,12 @@ textarea:focus-visible {
   font-weight: 700;
   letter-spacing: 0.15em;
   text-decoration: none;
+}
+.brand-mark--site {
+  position: absolute;
+  z-index: 30;
+  top: max(18px, env(safe-area-inset-top));
+  left: calc(max(20px, env(safe-area-inset-left)) + 57px);
 }
 .sidebar-scrim {
   position: fixed;
@@ -126,7 +130,9 @@ textarea:focus-visible {
   inset-block: 0;
   left: 0;
   width: min(60vw, 350px);
-  padding: 116px 24px 24px;
+  display: flex;
+  flex-direction: column;
+  padding: 116px 18px max(24px, env(safe-area-inset-bottom));
   background: var(--color-page);
   box-shadow: 8px 0 35px rgb(15 23 42 / 8%);
   opacity: 0;
@@ -143,32 +149,44 @@ textarea:focus-visible {
     mask-position 250ms var(--ease-out-quad),
     visibility 250ms;
 }
+.sidebar__header {
+  position: absolute;
+  top: max(18px, env(safe-area-inset-top));
+  left: max(20px, env(safe-area-inset-left));
+  display: flex;
+  align-items: center;
+  gap: 13px;
+}
+.sidebar-trigger--inside {
+  flex: 0 0 44px;
+}
+.brand-mark--inside {
+  min-width: 0;
+}
 .sidebar--open {
   opacity: 1;
   visibility: visible;
   -webkit-mask-position: 0 0;
   mask-position: 0 0;
 }
-.sidebar__identity {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  min-height: 54px;
-}
 .sidebar__avatar {
   display: grid;
   place-items: center;
-  flex: 0 0 54px;
-  width: 54px;
-  height: 54px;
+  flex: 0 0 42px;
+  width: 42px;
+  height: 42px;
   border-radius: 50%;
   color: var(--color-accent);
   background: var(--color-avatar);
 }
 .sidebar__name {
+  min-width: 0;
+  overflow: hidden;
   color: var(--color-ink);
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .sidebar__account {
   min-width: 0;
@@ -183,13 +201,67 @@ textarea:focus-visible {
 }
 .sidebar__divider {
   height: 1px;
-  margin: 27px 0 22px;
+  margin-bottom: 20px;
   background: var(--color-border);
 }
 .sidebar__nav {
   display: flex;
   flex-direction: column;
   gap: 5px;
+}
+.sidebar__account {
+  margin-top: auto;
+}
+.sidebar__profile {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 66px;
+  padding: 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  background: var(--color-surface);
+}
+.sidebar__settings {
+  display: grid;
+  place-items: center;
+  flex: 0 0 34px;
+  width: 34px;
+  height: 34px;
+  margin-left: auto;
+  border-radius: 9px;
+  color: var(--color-secondary);
+  transition:
+    color 180ms,
+    background 180ms;
+}
+.sidebar__settings:hover,
+.sidebar__settings:focus-visible,
+.sidebar__settings--active {
+  color: var(--color-accent);
+  background: var(--color-accent-soft);
+}
+.sidebar__settings:focus-visible {
+  outline: 3px solid var(--color-accent-ring);
+  outline-offset: 2px;
+}
+.sidebar__logout {
+  width: 100%;
+  min-height: 48px;
+  margin-top: 12px;
+  padding: 10px 14px;
+  border: 1px solid #fecaca;
+  border-radius: 10px;
+  color: #991b1b;
+  background: #fee2e2;
+  font-size: 16px;
+  font-weight: 600;
+  text-align: left;
+  transition: background 180ms;
+}
+.sidebar__logout:hover,
+.sidebar__logout:focus-visible {
+  background: #fecaca;
 }
 .sidebar__link {
   display: flex;
@@ -212,7 +284,31 @@ textarea:focus-visible {
 }
 .sidebar__link--active {
   color: var(--color-accent);
-  background: var(--color-accent-soft);
+  background: var(--color-surface);
+}
+
+@media (max-width: 359px) {
+  .sidebar__link {
+    padding-inline: 9px;
+    font-size: 14px;
+  }
+  .sidebar__profile {
+    gap: 4px;
+    padding: 6px;
+  }
+  .sidebar__avatar {
+    flex-basis: 32px;
+    width: 32px;
+    height: 32px;
+  }
+  .sidebar__settings {
+    flex-basis: 28px;
+    width: 28px;
+    height: 28px;
+  }
+  .sidebar__name {
+    font-size: 14px;
+  }
 }
 
 .placeholder-page {
@@ -683,13 +779,17 @@ h1 {
   .page-column {
     width: min(60%, 1120px);
   }
-  .sidebar-trigger {
+  .sidebar-trigger--site,
+  .sidebar__header {
     left: 30px;
     top: 28px;
   }
-  .brand-mark {
+  .brand-mark--site {
     left: 87px;
     top: 28px;
+  }
+  .sidebar {
+    padding-inline: 24px;
   }
   .hero {
     height: 65dvh;

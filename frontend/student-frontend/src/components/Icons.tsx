@@ -39,6 +39,18 @@ export function ProfileIcon(props: IconProps) {
   )
 }
 
+export function GearIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path
+        d="M10 2.5h4l.5 2.1a7.8 7.8 0 0 1 1.8.8l1.9-1.1 2.8 2.8-1.1 1.9c.4.6.6 1.2.8 1.8l2.1.5v4l-2.1.5a7.8 7.8 0 0 1-.8 1.8l1.1 1.9-2.8 2.8-1.9-1.1a7.8 7.8 0 0 1-1.8.8L14 23h-4l-.5-2.1a7.8 7.8 0 0 1-1.8-.8l-1.9 1.1L3 18.4l1.1-1.9a7.8 7.8 0 0 1-.8-1.8L1.2 14v-4l2.1-.5a7.8 7.8 0 0 1 .8-1.8L3 5.8 5.8 3l1.9 1.1a7.8 7.8 0 0 1 1.8-.8L10 2.5Z"
+        transform="translate(0 0) scale(.96)"
+      />
+      <circle cx="11.5" cy="12.2" r="3" />
+    </Icon>
+  )
+}
+
 export function SendIcon(props: IconProps) {
   return (
     <Icon {...props}>
