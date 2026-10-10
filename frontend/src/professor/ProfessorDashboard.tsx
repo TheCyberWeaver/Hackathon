@@ -135,7 +135,14 @@ function QuestionStatusSummary({
   )
 }
 
-export default function ProfessorDashboard({ user }: { user: CurrentUser }) {
+export default function ProfessorDashboard({
+  user,
+  onResetOnboarding,
+}: {
+  user: CurrentUser
+  onResetOnboarding?: () => boolean
+}) {
+  const [resetError, setResetError] = useState('')
   const [lectures, setLectures] = useState<Lecture[]>([])
   const [lectureId, setLectureId] = useState(initialLectureId)
   const [questions, setQuestions] = useState<Question[]>([])
@@ -1240,6 +1247,31 @@ export default function ProfessorDashboard({ user }: { user: CurrentUser }) {
             </p>
           </section>
         </main>
+      )}
+
+      {import.meta.env.DEV && page === 'settings' && onResetOnboarding && (
+        <div className="fixed bottom-4 right-4 z-10 max-w-[calc(100%-2rem)] text-right">
+          <button
+            type="button"
+            className="min-h-11 rounded-lg border border-slate-300 bg-white px-4 py-2 text-xs font-medium text-slate-600 shadow-sm hover:border-slate-400 hover:text-slate-900"
+            onClick={() => {
+              if (!onResetOnboarding())
+                setResetError(
+                  'Could not reset the saved courses in this browser. Try again.',
+                )
+            }}
+          >
+            Reset onboarding (dev)
+          </button>
+          <p className="mt-1 text-xs text-slate-500">
+            Clears saved courses and starts again.
+          </p>
+          {resetError && (
+            <p role="alert" className="mt-2 max-w-xs text-xs text-red-700">
+              {resetError}
+            </p>
+          )}
+        </div>
       )}
 
       <div
