@@ -3,6 +3,10 @@ import { flushSync } from 'react-dom'
 import { QuestionCard } from './components/QuestionCard'
 import { SendIcon } from './components/Icons'
 import SidePanel, { type SidePanelPage } from '../components/SidePanel'
+import {
+  readQuestionIntakePaused,
+  subscribeQuestionIntakePaused,
+} from '../lib/questionIntake'
 import { ViewSwitchButton } from './components/ViewSwitchButton'
 import { animateScrollTo, prefersReducedMotion } from './lib/motion'
 import type { CurrentUser } from '../lib/api'
@@ -51,6 +55,9 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
   const [page, setPage] = useState<Page>(currentPage)
   const [questions, setQuestions] = useState<Question[]>([])
   const [draft, setDraft] = useState('')
+  const [questionsPaused, setQuestionsPaused] = useState(
+    readQuestionIntakePaused,
+  )
   const [focused, setFocused] = useState(false)
   const [sending, setSending] = useState(false)
   const [mobileView, setMobileView] = useState<'other' | 'mine'>('other')
@@ -94,6 +101,18 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
     window.addEventListener('popstate', syncPage)
     return () => window.removeEventListener('popstate', syncPage)
   }, [])
+
+  useEffect(
+    () =>
+      subscribeQuestionIntakePaused((paused) => {
+        setQuestionsPaused(paused)
+        if (paused) {
+          textareaRef.current?.blur()
+          setFocused(false)
+        }
+      }),
+    [],
+  )
 
   useEffect(() => {
     document.title = `AskPool — ${page === 'questions' ? 'Student' : page === 'pastLectures' ? 'Past Lectures' : page === 'profile' ? 'Profile' : 'Settings'}`
@@ -148,7 +167,8 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
 
   async function handleSend() {
     const text = draft.trim()
-    if (!text || sending) return
+    if (!text || sending || questionsPaused || readQuestionIntakePaused())
+      return
     setSending(true)
     textareaRef.current?.blur()
     setFocused(false)
@@ -330,8 +350,14 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
             aria-label="Ask a question"
           >
             <div className="hero__content page-column">
-              <h1>What&apos;s your question?</h1>
-              <div className={`composer ${focused ? 'composer--focused' : ''}`}>
+              <h1>
+                {questionsPaused
+                  ? 'Questions are paused'
+                  : "What's your question?"}
+              </h1>
+              <div
+                className={`composer ${focused ? 'composer--focused' : ''} ${questionsPaused ? 'composer--paused' : ''}`}
+              >
                 <label className="sr-only" htmlFor="question-input">
                   Your anonymous question
                 </label>
@@ -341,7 +367,13 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
                   rows={1}
                   maxLength={200}
                   value={draft}
-                  placeholder={placeholder}
+                  placeholder={
+                    questionsPaused
+                      ? 'Question submissions are paused'
+                      : placeholder
+                  }
+                  disabled={questionsPaused}
+                  aria-describedby="question-input-status"
                   onFocus={() => setFocused(true)}
                   onBlur={() => setFocused(false)}
                   onChange={(event) => {
@@ -361,15 +393,21 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
                   }}
                 />
                 <div className="composer__bottom">
-                  <span className="anonymous-note">
-                    Anonymous to classmates. Professors can view authors.
+                  <span
+                    id="question-input-status"
+                    className="anonymous-note"
+                    aria-live="polite"
+                  >
+                    {questionsPaused
+                      ? 'The professor has paused new questions.'
+                      : 'Anonymous to classmates. Professors can view authors.'}
                   </span>
                   <div className="composer__send">
                     <button
                       type="button"
                       className="send-button"
                       aria-label="Send question"
-                      disabled={!draft.trim() || sending}
+                      disabled={!draft.trim() || sending || questionsPaused}
                       onClick={() => void handleSend()}
                     >
                       <SendIcon width="23" height="23" />
