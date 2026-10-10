@@ -3,7 +3,7 @@
   "configurations": [
     {
       "type": "java",
-      "name": "Debug backend",
+      "name": "Debug backend (external database)",
       "request": "launch",
       "mainClass": "com.example.backend.BackendApplication",
       "projectName": "backend",

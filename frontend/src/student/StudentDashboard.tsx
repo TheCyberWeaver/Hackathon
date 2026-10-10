@@ -3,16 +3,20 @@ import { flushSync } from 'react-dom'
 import { QuestionCard } from './components/QuestionCard'
 import { SendIcon } from './components/Icons'
 import SidePanel, { type SidePanelPage } from '../components/SidePanel'
-import {
-  readQuestionIntakePaused,
-  subscribeQuestionIntakePaused,
-} from '../lib/questionIntake'
 import { ViewSwitchButton } from './components/ViewSwitchButton'
 import { animateScrollTo, prefersReducedMotion } from './lib/motion'
 import type { CurrentUser } from '../lib/api'
+import LecturePicker from '../components/LecturePicker'
+import {
+  initialLectureId,
+  watchLectures,
+  rememberLecture,
+  type Lecture,
+} from '../lib/poolApi'
 import './student.css'
 import {
   listQuestions,
+  deleteQuestion,
   reportQuestion,
   setVote,
   submitQuestion,
@@ -54,12 +58,18 @@ function sleep(ms: number) {
 export default function StudentDashboard({ user }: { user: CurrentUser }) {
   const [page, setPage] = useState<Page>(currentPage)
   const [questions, setQuestions] = useState<Question[]>([])
+  const [lectures, setLectures] = useState<Lecture[]>([])
+  const [lectureId, setLectureId] = useState(initialLectureId)
+  const selectedLecture = lectures.find((lecture) => lecture.id === lectureId)
+  const questionsPaused =
+    !selectedLecture ||
+    !selectedLecture.startedAt ||
+    !!selectedLecture.endedAt ||
+    selectedLecture.questionsPaused
   const [draft, setDraft] = useState('')
-  const [questionsPaused, setQuestionsPaused] = useState(
-    readQuestionIntakePaused,
-  )
   const [focused, setFocused] = useState(false)
   const [sending, setSending] = useState(false)
+  const [votePendingCount, setVotePendingCount] = useState(0)
   const [mobileView, setMobileView] = useState<'other' | 'mine'>('other')
   const [reportTarget, setReportTarget] = useState<Question | null>(null)
   const [toast, setToast] = useState('')
@@ -70,6 +80,10 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const mobileListRef = useRef<HTMLElement>(null)
   const pendingVotes = useRef(new Set<string>())
+  const pendingDeletes = useRef(new Set<string>())
+  const [deletingIds, setDeletingIds] = useState(new Set<string>())
+  const mutationVersion = useRef(0)
+  const pendingSend = useRef(false)
   const switchingView = useRef(false)
   const toastTimer = useRef<number | undefined>(undefined)
 
@@ -85,7 +99,7 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
         ? basePath
         : `${basePath}/${nextPage === 'pastLectures' ? 'past-lectures' : nextPage}`
     if (window.location.pathname !== path) {
-      window.history.pushState(null, '', path)
+      window.history.pushState(null, '', `${path}${window.location.search}`)
     }
     setPage(nextPage)
     setFocused(false)
@@ -95,6 +109,11 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
   useEffect(() => {
     function syncPage() {
       setPage(currentPage())
+      const id = initialLectureId()
+      if (id) {
+        setLectureId(id)
+        setQuestions([])
+      }
       setFocused(false)
       window.scrollTo(0, 0)
     }
@@ -102,37 +121,70 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
     return () => window.removeEventListener('popstate', syncPage)
   }, [])
 
-  useEffect(
-    () =>
-      subscribeQuestionIntakePaused((paused) => {
-        setQuestionsPaused(paused)
-        if (paused) {
-          textareaRef.current?.blur()
-          setFocused(false)
-        }
-      }),
-    [],
-  )
-
   useEffect(() => {
     document.title = `AskPool — ${page === 'questions' ? 'Student' : page === 'pastLectures' ? 'Past Lectures' : page === 'profile' ? 'Profile' : 'Settings'}`
   }, [page])
 
   useEffect(() => {
+    if (questionsPaused) {
+      textareaRef.current?.blur()
+    }
+  }, [questionsPaused])
+
+  useEffect(() => {
+    return watchLectures(
+      (items) => {
+        setLectures(items)
+        setLectureId(
+          (id) =>
+            id ||
+            items.find((lecture) => lecture.startedAt && !lecture.endedAt)
+              ?.id ||
+            items[0]?.id ||
+            '',
+        )
+      },
+      (error) =>
+        showToast(
+          error instanceof Error ? error.message : 'Could not load lectures.',
+        ),
+    )
+  }, [])
+
+  useEffect(() => {
+    if (!lectureId) return
+    rememberLecture(lectureId)
     let active = true
-    listQuestions()
-      .then((items) => {
-        if (active) setQuestions(items)
-      })
-      .catch(() => {
-        if (active)
-          showToast('Could not load questions. Please refresh to try again.')
-      })
+    const load = () => {
+      const version = mutationVersion.current
+      return listQuestions(lectureId)
+        .then((items) => {
+          if (
+            active &&
+            version === mutationVersion.current &&
+            !pendingSend.current &&
+            !pendingVotes.current.size &&
+            !pendingDeletes.current.size
+          )
+            setQuestions(items)
+        })
+        .catch(() => {
+          if (active)
+            showToast(
+              'Could not load questions. Check your lecture link and try again.',
+            )
+        })
+    }
+    void load()
+    const timer = window.setInterval(() => {
+      void load()
+    }, 5000)
     return () => {
       active = false
+      window.clearInterval(timer)
       window.clearTimeout(toastTimer.current)
     }
-  }, [])
+  }, [lectureId])
 
   useEffect(() => {
     const viewport = window.visualViewport
@@ -167,9 +219,10 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
 
   async function handleSend() {
     const text = draft.trim()
-    if (!text || sending || questionsPaused || readQuestionIntakePaused())
-      return
+    if (!text || pendingSend.current || !lectureId || questionsPaused) return
     setSending(true)
+    pendingSend.current = true
+    mutationVersion.current++
     textareaRef.current?.blur()
     setFocused(false)
     const optimisticId = `pending-${Date.now()}-${Math.random().toString(36).slice(2)}`
@@ -193,7 +246,7 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
     })
     if (textareaRef.current) growTextarea(textareaRef.current)
 
-    const result = submitQuestion(text).then(
+    const result = submitQuestion(lectureId, text).then(
       (created) => ({ created, error: null }),
       (error: unknown) => ({ created: null, error }),
     )
@@ -202,8 +255,6 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
       document.documentElement.scrollHeight - window.innerHeight,
       1000,
     )
-    setSending(false)
-
     const { created, error } = await result
     if (created) {
       setQuestions((items) =>
@@ -217,13 +268,19 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
           ? error.message
           : 'Could not send your question.',
       )
+      setDraft(text)
     }
+    setSending(false)
+    pendingSend.current = false
+    mutationVersion.current++
     window.setTimeout(() => setNewQuestionId(null), 2200)
   }
 
   async function handleVote(question: Question) {
     if (pendingVotes.current.has(question.id)) return
     pendingVotes.current.add(question.id)
+    setVotePendingCount(pendingVotes.current.size)
+    mutationVersion.current++
     const voted = !question.votedByMe
     setQuestions((items) =>
       items.map((item) =>
@@ -244,6 +301,35 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
       showToast('Vote could not be saved. Please try again.')
     } finally {
       pendingVotes.current.delete(question.id)
+      setVotePendingCount(pendingVotes.current.size)
+      mutationVersion.current++
+    }
+  }
+
+  async function handleDelete(question: Question) {
+    if (
+      !question.mine ||
+      question.id.startsWith('pending-') ||
+      pendingDeletes.current.has(question.id)
+    )
+      return
+    pendingDeletes.current.add(question.id)
+    setDeletingIds(new Set(pendingDeletes.current))
+    mutationVersion.current++
+    try {
+      await deleteQuestion(question.id)
+      setQuestions((items) => items.filter((item) => item.id !== question.id))
+      showToast('Your question was deleted.')
+    } catch (error) {
+      showToast(
+        error instanceof Error
+          ? error.message
+          : 'Could not delete your question. Please try again.',
+      )
+    } finally {
+      pendingDeletes.current.delete(question.id)
+      setDeletingIds(new Set(pendingDeletes.current))
+      mutationVersion.current++
     }
   }
 
@@ -285,7 +371,22 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
     }
 
     try {
-      const refreshed = await listQuestions()
+      if (
+        !lectureId ||
+        pendingSend.current ||
+        pendingVotes.current.size ||
+        pendingDeletes.current.size
+      )
+        return
+      const version = mutationVersion.current
+      const refreshed = await listQuestions(lectureId)
+      if (
+        version !== mutationVersion.current ||
+        pendingSend.current ||
+        pendingVotes.current.size ||
+        pendingDeletes.current.size
+      )
+        return
       await runTransition(() => setQuestions(refreshed))
     } catch {
       showToast(
@@ -327,6 +428,8 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
             highlighted={question.id === newQuestionId}
             onVote={handleVote}
             onReport={setReportTarget}
+            onDelete={(question) => void handleDelete(question)}
+            deleting={deletingIds.has(question.id)}
           />
         ))}
       </div>
@@ -351,10 +454,24 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
           >
             <div className="hero__content page-column">
               <h1>
-                {questionsPaused
-                  ? 'Questions are paused'
-                  : "What's your question?"}
+                {selectedLecture?.endedAt
+                  ? 'This lecture has ended'
+                  : questionsPaused
+                    ? 'Questions are paused'
+                    : "What's your question?"}
               </h1>
+              <LecturePicker
+                lectures={lectures}
+                lectureId={lectureId}
+                disabled={
+                  sending || votePendingCount > 0 || deletingIds.size > 0
+                }
+                onSelect={(id) => {
+                  setQuestions([])
+                  setLectureId(id)
+                  setReportTarget(null)
+                }}
+              />
               <div
                 className={`composer ${focused ? 'composer--focused' : ''} ${questionsPaused ? 'composer--paused' : ''}`}
               >
@@ -369,7 +486,7 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
                   value={draft}
                   placeholder={
                     questionsPaused
-                      ? 'Question submissions are paused'
+                      ? 'Question submissions are closed'
                       : placeholder
                   }
                   disabled={questionsPaused}
@@ -399,15 +516,20 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
                     aria-live="polite"
                   >
                     {questionsPaused
-                      ? 'The professor has paused new questions.'
-                      : 'Anonymous to classmates. Professors can view authors.'}
+                      ? 'Submissions are unavailable until the professor opens this lecture.'
+                      : 'Your name is not shown on question cards. Professors can view authors.'}
                   </span>
                   <div className="composer__send">
                     <button
                       type="button"
                       className="send-button"
                       aria-label="Send question"
-                      disabled={!draft.trim() || sending || questionsPaused}
+                      disabled={
+                        !draft.trim() ||
+                        sending ||
+                        !lectureId ||
+                        questionsPaused
+                      }
                       onClick={() => void handleSend()}
                     >
                       <SendIcon width="23" height="23" />
@@ -482,11 +604,32 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
               </h2>
               <p>
                 {page === 'pastLectures'
-                  ? 'Past lectures will appear here.'
+                  ? 'Choose a saved lecture to review its question pool.'
                   : page === 'profile'
                     ? 'Your profile will appear here.'
                     : 'This is a placeholder for your settings.'}
               </p>
+              {page === 'pastLectures' &&
+                lectures.map((lecture) => (
+                  <p key={lecture.id}>
+                    <button
+                      type="button"
+                      className="text-blue-700 underline"
+                      disabled={
+                        sending || votePendingCount > 0 || deletingIds.size > 0
+                      }
+                      onClick={() => {
+                        setQuestions([])
+                        setLectureId(lecture.id)
+                        rememberLecture(lecture.id)
+                        navigate('questions')
+                      }}
+                    >
+                      {lecture.title} —{' '}
+                      {new Date(lecture.lectureTime).toLocaleString()}
+                    </button>
+                  </p>
+                ))}
             </div>
           </section>
         </main>

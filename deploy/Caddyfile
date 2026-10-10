@@ -1,9 +1,4 @@
 :8080 {
-    @studentApi path /api/questions /api/questions/*
-    handle @studentApi {
-        reverse_proxy student-api:3001
-    }
-
     handle /api/* {
         reverse_proxy backend:8080
     }

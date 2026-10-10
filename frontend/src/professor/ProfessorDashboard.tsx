@@ -1,27 +1,35 @@
 import { useEffect, useRef, useState } from 'react'
-import { mockPastLectures } from './mockPastLectures'
-import type { Question } from './mockQuestions'
-import { mockQuestions } from './mockQuestions'
+import {
+  changeQuestionStatus,
+  deleteQuestion,
+  emptyTrash,
+  getSummary,
+  listArchive,
+  listProfessorQuestions,
+  permanentlyDeleteQuestion,
+  restoreQuestion as restoreSavedQuestion,
+  type ArchivedLecture,
+  type Question,
+  type Summary,
+} from './professorApi'
+import {
+  changeLectureSession,
+  initialLectureId,
+  rememberLecture,
+  watchLectures,
+  type Lecture,
+} from '../lib/poolApi'
+import LecturePicker from '../components/LecturePicker'
 import type { CurrentUser } from '../lib/api'
 import { ThumbsUpIcon } from '../components/Icons'
 import SidePanel, { type SidePanelPage } from '../components/SidePanel'
-import {
-  readQuestionIntakePaused,
-  saveQuestionIntakePaused,
-  subscribeQuestionIntakePaused,
-} from '../lib/questionIntake'
-import {
-  clearLectureStart,
-  readLectureStart,
-  saveLectureStart,
-} from './lectureSession'
 import './professor.css'
 
 const questionTabs = ['open', 'answered', 'trash'] as const
 type Tab = (typeof questionTabs)[number]
 type SortMode = 'votes' | 'newest'
 type DeleteTarget = { kind: 'question'; id: string } | { kind: 'allTrash' }
-type ProfessorPage = 'questions' | 'pastLectures' | 'profile' | 'settings'
+type ProfessorPage = SidePanelPage
 
 const professorRoutes: Record<ProfessorPage, string> = {
   questions: '/professor',
@@ -29,12 +37,6 @@ const professorRoutes: Record<ProfessorPage, string> = {
   profile: '/professor/profile',
   settings: '/professor/settings',
 }
-
-const professorFullName = 'Alex Morgan'
-const archivedAnsweredCount = mockPastLectures.reduce(
-  (total, lecture) => total + lecture.questions.length,
-  0,
-)
 
 function pageFromPath(pathname: string): ProfessorPage {
   const path = pathname.replace(/\/$/, '')
@@ -81,12 +83,6 @@ function ChevronIcon({ expanded }: { expanded: boolean }) {
   )
 }
 
-export default function ProfessorDashboard({ user }: { user: CurrentUser }) {
-  const [lectureStartedAt, setLectureStartedAt] = useState<string | null>(() =>
-    readLectureStart(user.id),
-  )
-}
-
 function QuestionStatusSummary({
   lectureCount,
   unansweredCount,
@@ -106,7 +102,7 @@ function QuestionStatusSummary({
           Question status
         </h2>
         <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs text-slate-600">
-          All {lectureCount} demo lectures
+          All {lectureCount} lectures
         </span>
       </div>
       <div className="mt-3 grid grid-cols-2 gap-3">
@@ -139,20 +135,40 @@ function QuestionStatusSummary({
   )
 }
 
-export default function ProfessorDashboard() {
+export default function ProfessorDashboard({ user }: { user: CurrentUser }) {
+  const [lectures, setLectures] = useState<Lecture[]>([])
+  const [lectureId, setLectureId] = useState(initialLectureId)
+  const [questions, setQuestions] = useState<Question[]>([])
+  const [archive, setArchive] = useState<ArchivedLecture[]>([])
+  const [summary, setSummary] = useState<Summary>({
+    lectureCount: 0,
+    unansweredCount: 0,
+    answeredCount: 0,
+  })
+  const [apiError, setApiError] = useState('')
+  const [busyId, setBusyId] = useState<string | null>(null)
+  const [answerDrafts, setAnswerDrafts] = useState<Record<string, string>>({})
+  const selectedLecture = lectures.find((lecture) => lecture.id === lectureId)
+  const lectureStartedAt =
+    selectedLecture?.startedAt && !selectedLecture.endedAt
+      ? selectedLecture.startedAt
+      : null
+  const questionsPaused = selectedLecture?.questionsPaused ?? false
+  const trashedIds = new Set(
+    questions
+      .filter((question) => question.deletedAt)
+      .map((question) => question.id),
+  )
+  const mutationPending = useRef(false)
+  const mutationVersion = useRef(0)
+  const [selectedTab, setSelectedTab] = useState<Tab>('open')
   const [page, setPage] = useState<ProfessorPage>(() =>
     pageFromPath(window.location.pathname),
   )
-  const [questions, setQuestions] = useState<Question[]>(() => [
-    ...mockQuestions,
-  ])
-  const [trashedIds, setTrashedIds] = useState<Set<string>>(() => new Set())
-  const [selectedTab, setSelectedTab] = useState<Tab>('open')
   const [sortMode, setSortMode] = useState<SortMode>('votes')
   const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set())
-  const [drawerOpen, setDrawerOpen] = useState(false)
-  const [drawerClosing, setDrawerClosing] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null)
+  const [endConfirmationOpen, setEndConfirmationOpen] = useState(false)
   const [notice, setNotice] = useState('')
   const dialogRef = useRef<HTMLDialogElement>(null)
   const endDialogRef = useRef<HTMLDialogElement>(null)
@@ -211,7 +227,99 @@ export default function ProfessorDashboard() {
     return () => window.removeEventListener('popstate', handleLocationChange)
   }, [])
 
-  useEffect(() => subscribeQuestionIntakePaused(setQuestionsPaused), [])
+  useEffect(
+    () =>
+      watchLectures(
+        (items) => {
+          if (mutationPending.current) return
+          const managed = items.filter((lecture) => lecture.canManage)
+          setLectures(managed)
+          setApiError('')
+          setLectureId(
+            (id) =>
+              id ||
+              managed.find((lecture) => lecture.startedAt && !lecture.endedAt)
+                ?.id ||
+              managed[0]?.id ||
+              '',
+          )
+        },
+        (error) =>
+          setApiError(
+            error instanceof Error ? error.message : 'Could not load lectures.',
+          ),
+        () => mutationVersion.current,
+      ),
+    [],
+  )
+
+  useEffect(() => {
+    if (!lectureId) return
+    rememberLecture(lectureId)
+    let active = true
+    const load = async () => {
+      const version = mutationVersion.current
+      try {
+        const items = await listProfessorQuestions(lectureId, true)
+        if (
+          active &&
+          !mutationPending.current &&
+          version === mutationVersion.current
+        ) {
+          setQuestions(items)
+          setApiError('')
+        }
+      } catch (error) {
+        if (active)
+          setApiError(
+            error instanceof Error
+              ? error.message
+              : 'Could not load questions.',
+          )
+      }
+    }
+    void load()
+    const timer = window.setInterval(() => void load(), 5000)
+    return () => {
+      active = false
+      window.clearInterval(timer)
+    }
+  }, [lectureId])
+
+  useEffect(() => {
+    if (page !== 'pastLectures' && page !== 'profile') return
+    let active = true
+    const load = async () => {
+      try {
+        if (page === 'pastLectures') {
+          const items = await listArchive()
+          if (active) {
+            setArchive(items)
+            setApiError('')
+          }
+        } else {
+          const counts = await getSummary()
+          if (active) {
+            setSummary(counts)
+            setApiError('')
+          }
+        }
+      } catch (error) {
+        if (active)
+          setApiError(
+            error instanceof Error
+              ? error.message
+              : 'Could not load saved lecture data.',
+          )
+      }
+    }
+    void load()
+    const timer = window.setInterval(() => void load(), 5000)
+    return () => {
+      active = false
+      window.clearInterval(timer)
+    }
+  }, [page])
 
   useEffect(() => {
     if (!deleteTarget) return
@@ -248,72 +356,113 @@ export default function ProfessorDashboard() {
 
   function navigateTo(nextPage: SidePanelPage) {
     if (nextPage === page) return
-    window.history.pushState(null, '', professorRoutes[nextPage])
+    window.history.pushState(
+      null,
+      '',
+      `${professorRoutes[nextPage]}${window.location.search}`,
+    )
     setPage(nextPage)
     window.scrollTo(0, 0)
     window.requestAnimationFrame(() => mainHeadingRef.current?.focus())
   }
 
-  function startLecture() {
-    const startedAt = new Date().toISOString()
-    setLectureStartedAt(startedAt)
-    setQuestionsPaused(false)
-    const saved = saveLectureStart(user.id, startedAt)
-    const intakeReset = saveQuestionIntakePaused(false)
-    if (!saved || !intakeReset) {
+  async function runMutation(
+    id: string,
+    work: () => Promise<void>,
+    message: string,
+  ) {
+    if (mutationPending.current) return false
+    mutationPending.current = true
+    mutationVersion.current++
+    setBusyId(id)
+    setApiError('')
+    try {
+      await work()
+      setNotice(message)
+      return true
+    } catch (error) {
       setNotice(
-        'Lecture started, but this browser may not remember its controls after a reload.',
+        error instanceof Error ? error.message : 'Could not save this change.',
       )
+      return false
+    } finally {
+      mutationPending.current = false
+      mutationVersion.current++
+      setBusyId(null)
     }
   }
 
-  function toggleQuestionIntake() {
-    const nextPaused = !questionsPaused
-    if (!saveQuestionIntakePaused(nextPaused)) {
-      setNotice('Could not update question submissions. Please try again.')
-      return
+  async function updateSession(
+    action: 'start' | 'pause' | 'resume' | 'end',
+    message: string,
+  ) {
+    if (!lectureId) {
+      setNotice('Create or choose a lecture first.')
+      return false
     }
-    setQuestionsPaused(nextPaused)
-    setNotice(
-      nextPaused
-        ? 'Pool paused. A little thinking time never hurt.'
-        : 'Pool open. Let the questions roll in!',
+    return runMutation(
+      'session',
+      async () => {
+        const updated = await changeLectureSession(lectureId, action)
+        setLectures((items) =>
+          items.map((lecture) =>
+            lecture.id === updated.id ? updated : lecture,
+          ),
+        )
+      },
+      message,
     )
   }
 
-  function closeEndConfirmation(confirmed: boolean) {
+  async function startLecture() {
+    await updateSession(
+      'start',
+      'Lecture started. Students can now submit questions.',
+    )
+  }
+
+  async function toggleQuestionIntake() {
+    await updateSession(
+      questionsPaused ? 'resume' : 'pause',
+      questionsPaused
+        ? 'Pool open. Let the questions roll in!'
+        : 'Pool paused. A little thinking time never hurt.',
+    )
+  }
+
+  async function closeEndConfirmation(confirmed: boolean) {
     setEndConfirmationOpen(false)
-    if (confirmed) {
-      const cleared = clearLectureStart(user.id)
-      const intakeReset = saveQuestionIntakePaused(false)
-      setLectureStartedAt(null)
-      setQuestionsPaused(false)
-      setQuestions([...mockQuestions])
-      setSelectedTab('open')
+    if (
+      confirmed &&
+      (await updateSession(
+        'end',
+        'Lecture ended. Its questions and answers are saved.',
+      ))
+    ) {
       setExpandedIds(new Set())
-      setNotice(
-        cleared && intakeReset
-          ? ''
-          : 'The saved session controls could not be cleared and may reappear after a reload.',
-      )
+      navigateTo('pastLectures')
+    } else {
+      window.requestAnimationFrame(() => endTriggerRef.current?.focus())
     }
-    window.requestAnimationFrame(() => {
-      if (confirmed) {
-        window.scrollTo(0, 0)
-        mainHeadingRef.current?.focus({ preventScroll: true })
-      } else {
-        endTriggerRef.current?.focus()
-      }
-    })
   }
 
-  function changeStatus(question: Question) {
-    setQuestions((current) =>
-      current.map((item) =>
-        item.id === question.id ? { ...item, answered: !item.answered } : item,
-      ),
-    )
-    setNotice(
+  async function changeStatus(question: Question) {
+    await runMutation(
+      question.id,
+      async () => {
+        const updated = await changeQuestionStatus(
+          question.id,
+          question.answered ? 'open' : 'answered',
+        )
+        setQuestions((items) =>
+          items.map((item) => (item.id === updated.id ? updated : item)),
+        )
+        setAnswerDrafts((items) => {
+          const next = { ...items }
+          delete next[question.id]
+          return next
+        })
+      },
       question.answered
         ? 'Question marked unanswered.'
         : 'Question marked answered.',
@@ -321,60 +470,81 @@ export default function ProfessorDashboard() {
     window.requestAnimationFrame(() => tabRefs[selectedTab].current?.focus())
   }
 
-  function restoreQuestion(question: Question) {
-    setTrashedIds((current) => {
-      const next = new Set(current)
-      next.delete(question.id)
-      return next
-    })
-    setExpandedIds((current) => {
-      const next = new Set(current)
-      next.delete(question.id)
-      return next
-    })
-    setNotice(
+  async function saveAnswer(question: Question) {
+    await runMutation(
+      question.id,
+      async () => {
+        const updated = await changeQuestionStatus(
+          question.id,
+          'answered',
+          answerDrafts[question.id] ?? question.answer ?? '',
+        )
+        setQuestions((items) =>
+          items.map((item) => (item.id === updated.id ? updated : item)),
+        )
+      },
+      'Written answer saved.',
+    )
+  }
+
+  async function selectQuestion(question: Question) {
+    await runMutation(
+      question.id,
+      async () => {
+        const updated = await changeQuestionStatus(
+          question.id,
+          question.status === 'selected' ? 'open' : 'selected',
+        )
+        setQuestions((items) =>
+          items.map((item) => (item.id === updated.id ? updated : item)),
+        )
+      },
+      question.status === 'selected'
+        ? 'Question unselected.'
+        : 'Question selected for answering.',
+    )
+  }
+
+  async function restoreQuestion(question: Question) {
+    await runMutation(
+      question.id,
+      async () => {
+        const updated = await restoreSavedQuestion(question.id)
+        setQuestions((items) =>
+          items.map((item) => (item.id === updated.id ? updated : item)),
+        )
+      },
       `Question restored to ${question.answered ? 'Answered' : 'Open'}.`,
     )
     window.requestAnimationFrame(() => trashTabRef.current?.focus())
   }
 
-  function closeDialog(confirmed: boolean) {
-    if (confirmed && deleteTarget) {
-      if (deleteTarget.kind === 'allTrash') {
-        setQuestions((current) =>
-          current.filter((question) => !trashedIds.has(question.id)),
-        )
-        setTrashedIds(new Set())
-        setExpandedIds((current) => {
-          const next = new Set(current)
-          for (const id of trashedIds) next.delete(id)
-          return next
-        })
-        setNotice('All deleted questions permanently removed.')
-      } else {
-        const deleteId = deleteTarget.id
-        if (trashedIds.has(deleteId)) {
-          setQuestions((current) =>
-            current.filter((question) => question.id !== deleteId),
-          )
-          setTrashedIds((current) => {
-            const next = new Set(current)
-            next.delete(deleteId)
-            return next
-          })
-          setNotice('Question permanently deleted.')
-        } else {
-          setTrashedIds((current) => new Set(current).add(deleteId))
-          setNotice('Question moved to Deleted.')
-        }
-        setExpandedIds((current) => {
-          const next = new Set(current)
-          next.delete(deleteId)
-          return next
-        })
-      }
-    }
+  async function closeDialog(confirmed: boolean) {
+    const target = deleteTarget
     setDeleteTarget(null)
+    if (confirmed && target) {
+      const permanent = target.kind === 'allTrash' || trashedIds.has(target.id)
+      await runMutation(
+        target.kind === 'allTrash' ? 'trash' : target.id,
+        async () => {
+          if (target.kind === 'allTrash') {
+            await emptyTrash(lectureId)
+            setQuestions(await listProfessorQuestions(lectureId, true))
+          } else if (permanent) {
+            await permanentlyDeleteQuestion(target.id)
+            setQuestions((items) =>
+              items.filter((item) => item.id !== target.id),
+            )
+          } else {
+            await deleteQuestion(target.id)
+            setQuestions(await listProfessorQuestions(lectureId, true))
+          }
+        },
+        permanent
+          ? 'Deleted questions permanently removed.'
+          : 'Question moved to Deleted.',
+      )
+    }
     window.requestAnimationFrame(() => {
       const focusTarget = confirmed
         ? tabRefs[selectedTab].current
@@ -387,33 +557,43 @@ export default function ProfessorDashboard() {
   return (
     <div className="min-h-screen bg-white font-sans text-slate-900">
       <header className="bg-[#f7f8fc]">
-        <div className="flex h-20 items-center gap-3 px-6">
-          <button
-            ref={menuButtonRef}
-            type="button"
-            aria-label="Open navigation"
-            aria-expanded={drawerOpen}
-            aria-controls="professor-drawer"
-            onClick={() => setDrawerOpen(true)}
-            className="flex size-10 items-center justify-center rounded-xl bg-white text-slate-500 shadow-[0_3px_12px_rgba(15,23,42,0.09)] hover:text-blue-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
-          >
-            <svg
-              aria-hidden="true"
-              className="size-5"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.8"
-            >
-              <rect x="4" y="4.5" width="16" height="15" rx="2" />
-              <path d="M10 4.5v15" />
-            </svg>
-          </button>
-          <span className="text-lg font-bold tracking-[0.12em] text-blue-700">
-            ASKPOOL
-          </span>
+        <div className="flex h-20 items-center px-6">
+          <SidePanel
+            user={user}
+            role="professor"
+            page={page}
+            onNavigate={navigateTo}
+          />
         </div>
       </header>
+
+      {page === 'questions' && (
+        <div className="mx-auto max-w-[848px] px-5 sm:px-6">
+          <LecturePicker
+            lectures={lectures}
+            lectureId={lectureId}
+            disabled={busyId !== null}
+            onSelect={(id) => {
+              setLectureId(id)
+              setQuestions([])
+              setExpandedIds(new Set())
+              setAnswerDrafts({})
+            }}
+            onCreated={(lecture) => {
+              setLectures((items) => [lecture, ...items])
+              setLectureId(lecture.id)
+              setQuestions([])
+              setExpandedIds(new Set())
+              setAnswerDrafts({})
+            }}
+          />
+        </div>
+      )}
+      {apiError && (
+        <p role="alert" className="mx-auto max-w-[848px] px-5 text-red-700">
+          {apiError}
+        </p>
+      )}
 
       {page === 'questions' && lectureStartedAt === null && (
         <main className="professor-page-enter grid min-h-[calc(100dvh-5rem)] place-items-center bg-[#f7f8fc] px-5 py-16 sm:px-6">
@@ -448,6 +628,9 @@ export default function ProfessorDashboard() {
             <button
               type="button"
               onClick={startLecture}
+              disabled={
+                !selectedLecture || !!selectedLecture.endedAt || busyId !== null
+              }
               className="mt-9 inline-flex min-h-12 items-center justify-center gap-3 rounded-xl bg-emerald-600 px-6 py-3 text-sm font-semibold text-white shadow-[0_8px_20px_rgba(5,150,105,0.2)] hover:bg-emerald-700 focus-visible:outline-2 focus-visible:outline-offset-3 focus-visible:outline-emerald-700 motion-safe:transition-[background,transform,box-shadow] motion-safe:duration-200 motion-safe:hover:-translate-y-0.5 motion-safe:hover:shadow-[0_12px_24px_rgba(5,150,105,0.24)] motion-safe:active:translate-y-0"
             >
               Start lecture
@@ -464,64 +647,33 @@ export default function ProfessorDashboard() {
                 <path d="M5 12h14m-6-6 6 6-6 6" />
               </svg>
             </button>
-            <span className="text-lg font-bold tracking-[0.12em] text-blue-700">
-              ASKPOOL
-            </span>
-          </div>
-          <nav
-            aria-label="Professor navigation"
-            className="mt-12 flex flex-col gap-1"
-          >
-            {(
-              [
-                ['questions', 'Current Lecture'],
-                ['pastLectures', 'Past Lectures'],
-              ] as const
-            ).map(([destination, label]) => (
-              <button
-                key={destination}
-                type="button"
-                onClick={() => navigateTo(destination)}
-                aria-current={page === destination ? 'page' : undefined}
-                className={`rounded-lg px-3 py-3 text-left text-sm font-medium hover:bg-white focus-visible:outline-2 focus-visible:outline-blue-600 ${page === destination ? 'bg-white text-blue-700' : 'bg-slate-100 text-slate-700'}`}
-              >
-                {label}
-              </button>
-            ))}
-          </nav>
-          <div className="mt-auto border-t border-slate-200 pt-5">
-            <div className="flex items-center gap-1 rounded-xl border border-slate-200 bg-white p-1.5">
-              <button
-                type="button"
-                onClick={() => navigateTo('profile')}
-                aria-current={page === 'profile' ? 'page' : undefined}
-                className={`flex min-w-0 flex-1 items-center gap-2.5 rounded-lg px-2 py-2 text-left hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-blue-600 ${page === 'profile' ? 'bg-blue-50' : ''}`}
+          </section>
+        </main>
+      )}
+
+      {page === 'questions' && lectureStartedAt !== null && (
+        <main className="professor-page-enter mx-auto max-w-[848px] px-5 pb-20 pt-8 sm:px-6 sm:pt-10">
+          <div className="min-[720px]:flex min-[720px]:items-center min-[720px]:justify-between min-[720px]:gap-6">
+            <div className="min-w-0">
+              <h1
+                ref={mainHeadingRef}
+                tabIndex={-1}
+                className="text-[28px] leading-tight font-semibold tracking-tight outline-none sm:text-[30px]"
               >
                 Lecture questions
               </h1>
-              <p className="mt-3 text-sm text-slate-600">
-                Started{' '}
-                <time dateTime={lectureStartedAt}>
-                  {timestampFormatter.format(new Date(lectureStartedAt))}
-                </time>
-              </p>
-            </div>
-            <section
-              aria-labelledby="session-control-title"
-              className={`mt-6 flex flex-col gap-5 rounded-2xl border px-5 py-5 transition-colors min-[720px]:mt-0 min-[720px]:w-[328px] min-[720px]:shrink-0 min-[720px]:gap-3 min-[720px]:py-4 ${questionsPaused ? 'border-amber-200 bg-amber-50' : 'border-emerald-200 bg-emerald-50'}`}
-            >
-              <div className="flex min-w-0 flex-wrap items-center gap-3">
-                <h2
-                  id="session-control-title"
-                  className="text-sm font-semibold text-slate-900"
-                >
-                  Session Control
-                </h2>
+              <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2">
+                <p className="text-sm text-slate-500">
+                  Started{' '}
+                  <time dateTime={lectureStartedAt}>
+                    {timestampFormatter.format(new Date(lectureStartedAt))}
+                  </time>
+                </p>
                 <span className="group relative inline-flex">
                   <span
                     tabIndex={0}
                     aria-describedby="pool-status-description"
-                    className={`inline-flex cursor-help items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 ${questionsPaused ? 'border-amber-300 bg-amber-100 text-amber-900' : 'border-emerald-300 bg-emerald-100 text-emerald-900'}`}
+                    className={`inline-flex cursor-help items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 ${questionsPaused ? 'bg-amber-100 text-amber-900' : 'bg-emerald-100 text-emerald-900'}`}
                   >
                     <span
                       aria-hidden="true"
@@ -532,7 +684,7 @@ export default function ProfessorDashboard() {
                   <span
                     id="pool-status-description"
                     role="tooltip"
-                    className="pointer-events-none invisible absolute left-0 top-full z-30 mt-2 w-64 rounded-lg bg-slate-900 px-3 py-2 text-xs leading-5 font-medium text-white opacity-0 shadow-lg transition-opacity group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100"
+                    className="pointer-events-none invisible absolute right-0 top-full z-30 mt-2 w-60 max-w-[calc(100vw-2rem)] rounded-lg bg-slate-900 px-3 py-2 text-xs leading-5 font-medium text-white opacity-0 shadow-lg transition-opacity group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100"
                   >
                     {questionsPaused
                       ? 'Students cannot submit new questions until you resume the pool.'
@@ -540,81 +692,177 @@ export default function ProfessorDashboard() {
                   </span>
                 </span>
               </div>
-              <div className="flex flex-wrap gap-3 sm:shrink-0">
+            </div>
+            <div
+              role="group"
+              aria-label="Session controls"
+              className="mt-5 flex flex-wrap gap-2 min-[720px]:mt-0 min-[720px]:shrink-0"
+            >
+              <span className="group relative inline-flex">
                 <button
                   type="button"
                   aria-pressed={questionsPaused}
+                  aria-describedby="question-intake-action-description"
                   onClick={toggleQuestionIntake}
-                  className="min-h-11 rounded-lg border border-blue-300 bg-white px-4 py-2.5 text-sm font-semibold text-blue-700 transition-colors hover:border-blue-600 hover:bg-blue-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 min-[720px]:px-3"
+                  disabled={busyId !== null}
+                  className="min-h-11 rounded-lg border border-blue-200 bg-blue-50 px-3.5 py-2 text-sm font-semibold text-blue-700 transition-colors hover:border-blue-300 hover:bg-blue-100 hover:text-blue-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
                 >
                   {questionsPaused ? 'Resume questions' : 'Pause questions'}
                 </button>
-                <button
-                  ref={endTriggerRef}
-                  type="button"
-                  onClick={() => setEndConfirmationOpen(true)}
-                  className="min-h-11 rounded-lg border border-rose-300 bg-white px-4 py-2.5 text-sm font-semibold text-rose-700 transition-colors hover:border-rose-700 hover:bg-rose-700 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-700 min-[720px]:px-3"
-                >
-                  End lecture
-                </button>
-              </div>
-            </section>
-          </div>
-          <div
-            role="tablist"
-            aria-label="Question sections"
-            className="mt-8 flex gap-6 overflow-x-auto border-b border-slate-200"
-          >
-            {questionTabs.map((tab) => (
-              <button
-                key={tab}
-                ref={tabRefs[tab]}
-                type="button"
-                role="tab"
-                id={`${tab}-tab`}
-                aria-controls="questions-panel"
-                aria-selected={selectedTab === tab}
-                tabIndex={selectedTab === tab ? 0 : -1}
-                onClick={() => setSelectedTab(tab)}
-                onKeyDown={(event) => {
-                  if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight')
-                    return
-                  event.preventDefault()
-                  const currentIndex = questionTabs.indexOf(tab)
-                  const direction = event.key === 'ArrowRight' ? 1 : -1
-                  const next =
-                    questionTabs[
-                      (currentIndex + direction + questionTabs.length) %
-                        questionTabs.length
-                    ]
-                  setSelectedTab(next)
-                  tabRefs[next].current?.focus()
-                }}
-                className={`-mb-px flex min-h-12 shrink-0 items-center gap-2 border-b-2 text-sm font-semibold focus-visible:rounded-t focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 ${selectedTab === tab ? 'border-blue-600 text-blue-700' : 'border-transparent text-slate-600 hover:text-slate-900'}`}
-              >
-                {tab === 'open'
-                  ? 'Open'
-                  : tab === 'answered'
-                    ? 'Answered'
-                    : 'Deleted'}
                 <span
-                  className={`rounded-full px-2 py-0.5 text-xs tabular-nums ${selectedTab === tab ? 'bg-blue-50 text-blue-700' : 'bg-slate-100 text-slate-700'}`}
+                  id="question-intake-action-description"
+                  role="tooltip"
+                  className="pointer-events-none invisible absolute left-0 top-full z-30 mt-2 w-60 max-w-[calc(100vw-2rem)] rounded-lg bg-slate-900 px-3 py-2 text-xs leading-5 font-medium text-white opacity-0 shadow-lg transition-opacity group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100 min-[720px]:left-auto min-[720px]:right-0"
                 >
-                  {tab === 'open'
-                    ? openQuestions.length
-                    : tab === 'answered'
-                      ? answeredQuestions.length
-                      : trashQuestions.length}
+                  {questionsPaused
+                    ? 'Allow students to submit new questions again.'
+                    : 'Pause new question submissions. Existing questions stay visible.'}
                 </span>
+              </span>
+              <button
+                ref={endTriggerRef}
+                type="button"
+                onClick={() => setEndConfirmationOpen(true)}
+                disabled={busyId !== null}
+                className="min-h-11 rounded-lg border border-rose-200 bg-rose-100 px-3.5 py-2 text-sm font-semibold text-rose-800 transition-colors hover:border-rose-300 hover:bg-rose-200 hover:text-rose-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-700"
+              >
+                End lecture
               </button>
-            ))}
+            </div>
+          </div>
+          <div className="professor-question-toolbar mt-8 min-[720px]:mt-6">
+            <div className="professor-question-toolbar__layout">
+              <div
+                role="tablist"
+                aria-label="Question sections"
+                className="professor-question-tabs flex min-w-0 flex-wrap gap-x-3 sm:gap-x-5"
+              >
+                {questionTabs.map((tab) => (
+                  <button
+                    key={tab}
+                    ref={tabRefs[tab]}
+                    type="button"
+                    role="tab"
+                    id={`${tab}-tab`}
+                    aria-controls="questions-panel"
+                    aria-selected={selectedTab === tab}
+                    tabIndex={selectedTab === tab ? 0 : -1}
+                    onClick={() => setSelectedTab(tab)}
+                    onKeyDown={(event) => {
+                      if (
+                        event.key !== 'ArrowLeft' &&
+                        event.key !== 'ArrowRight'
+                      )
+                        return
+                      event.preventDefault()
+                      const currentIndex = questionTabs.indexOf(tab)
+                      const direction = event.key === 'ArrowRight' ? 1 : -1
+                      const next =
+                        questionTabs[
+                          (currentIndex + direction + questionTabs.length) %
+                            questionTabs.length
+                        ]
+                      setSelectedTab(next)
+                      tabRefs[next].current?.focus()
+                    }}
+                    className={`-mb-px flex min-h-12 shrink-0 items-center gap-2 border-b-2 text-sm font-semibold focus-visible:rounded-t focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 ${selectedTab === tab ? 'border-blue-600 text-blue-700' : 'border-transparent text-slate-600 hover:text-slate-900'}`}
+                  >
+                    {tab === 'open'
+                      ? 'Open'
+                      : tab === 'answered'
+                        ? 'Answered'
+                        : 'Deleted'}
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-xs tabular-nums ${selectedTab === tab ? 'bg-blue-50 text-blue-700' : 'bg-slate-100 text-slate-700'}`}
+                    >
+                      {tab === 'open'
+                        ? openQuestions.length
+                        : tab === 'answered'
+                          ? answeredQuestions.length
+                          : trashQuestions.length}
+                    </span>
+                  </button>
+                ))}
+              </div>
+              <details
+                ref={sortMenuRef}
+                className="professor-question-sort relative w-full max-w-[204px]"
+                onBlur={(event) => {
+                  if (
+                    !event.currentTarget.contains(
+                      event.relatedTarget as Node | null,
+                    )
+                  )
+                    event.currentTarget.open = false
+                }}
+                onKeyDown={(event) => {
+                  if (event.key !== 'Escape') return
+                  event.preventDefault()
+                  event.currentTarget.open = false
+                  event.currentTarget.querySelector('summary')?.focus()
+                }}
+              >
+                <summary className="relative flex min-h-10 cursor-pointer list-none items-center gap-1 rounded-lg border border-slate-200 bg-white py-2 pr-8 pl-3 text-slate-700 transition-colors hover:border-slate-300 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 [&::-webkit-details-marker]:hidden">
+                  <span className="text-xs text-slate-500">Sort:</span>
+                  <span className="text-sm font-medium">
+                    {sortMode === 'votes' ? 'Most votes' : 'Newest first'}
+                  </span>
+                  <svg
+                    aria-hidden="true"
+                    className="pointer-events-none absolute top-1/2 right-2.5 size-4 -translate-y-1/2 text-slate-500"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="m6 9 6 6 6-6"
+                    />
+                  </svg>
+                </summary>
+                <div
+                  role="group"
+                  aria-label="Sort questions by"
+                  className="absolute right-0 left-0 z-30 mt-1 rounded-lg border border-slate-200 bg-white p-1 shadow-lg"
+                >
+                  {(
+                    [
+                      ['votes', 'Most votes'],
+                      ['newest', 'Time asked (newest first)'],
+                    ] as const
+                  ).map(([mode, label]) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      aria-pressed={sortMode === mode}
+                      onClick={() => {
+                        setSortMode(mode)
+                        if (sortMenuRef.current)
+                          sortMenuRef.current.open = false
+                        sortMenuRef.current?.querySelector('summary')?.focus()
+                      }}
+                      className={`flex w-full cursor-pointer items-center justify-between gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors focus-visible:outline-2 focus-visible:outline-blue-600 ${sortMode === mode ? 'bg-blue-50 font-semibold text-blue-700' : 'text-slate-700 hover:bg-slate-100'}`}
+                    >
+                      <span>{label}</span>
+                      {sortMode === mode && (
+                        <span aria-hidden="true" className="text-blue-700">
+                          ✓
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </details>
+            </div>
           </div>
 
-          <div className="mt-4 flex flex-wrap items-end justify-between gap-3">
-            {selectedTab === 'trash' && (
+          {selectedTab === 'trash' && (
+            <div className="mt-4">
               <button
                 type="button"
-                disabled={trashQuestions.length === 0}
+                disabled={trashQuestions.length === 0 || busyId !== null}
                 onClick={(event) => {
                   deleteTriggerRef.current = event.currentTarget
                   setDeleteTarget({ kind: 'allTrash' })
@@ -635,82 +883,8 @@ export default function ProfessorDashboard() {
                 </svg>
                 Delete all
               </button>
-            )}
-            <details
-              ref={sortMenuRef}
-              className="relative ml-auto w-full max-w-[240px]"
-              onBlur={(event) => {
-                if (
-                  !event.currentTarget.contains(
-                    event.relatedTarget as Node | null,
-                  )
-                )
-                  event.currentTarget.open = false
-              }}
-              onKeyDown={(event) => {
-                if (event.key !== 'Escape') return
-                event.preventDefault()
-                event.currentTarget.open = false
-                event.currentTarget.querySelector('summary')?.focus()
-              }}
-            >
-              <summary className="relative cursor-pointer list-none rounded-lg border border-[#d8c6d3] bg-[#faf6f9] pt-1.5 pr-9 pb-1.5 pl-3 text-[#61395c] shadow-sm transition-colors hover:border-[#a6809f] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#70476a] [&::-webkit-details-marker]:hidden">
-                <span className="block text-[10px] font-bold uppercase tracking-wide text-[#8d6b83]">
-                  Sort questions
-                </span>
-                <span className="mt-0.5 block text-sm font-semibold">
-                  {sortMode === 'votes'
-                    ? 'Most votes'
-                    : 'Time asked (newest first)'}
-                </span>
-                <svg
-                  aria-hidden="true"
-                  className="pointer-events-none absolute top-1/2 right-3 size-4 -translate-y-1/2 text-[#70476a]"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="m6 9 6 6 6-6"
-                  />
-                </svg>
-              </summary>
-              <div
-                role="group"
-                aria-label="Sort questions by"
-                className="absolute right-0 left-0 z-30 mt-1 rounded-lg border border-[#d8c6d3] bg-white p-1 shadow-lg"
-              >
-                {(
-                  [
-                    ['votes', 'Most votes'],
-                    ['newest', 'Time asked (newest first)'],
-                  ] as const
-                ).map(([mode, label]) => (
-                  <button
-                    key={mode}
-                    type="button"
-                    aria-pressed={sortMode === mode}
-                    onClick={() => {
-                      setSortMode(mode)
-                      if (sortMenuRef.current) sortMenuRef.current.open = false
-                      sortMenuRef.current?.querySelector('summary')?.focus()
-                    }}
-                    className={`flex w-full cursor-pointer items-center justify-between gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors focus-visible:outline-2 focus-visible:outline-[#70476a] ${sortMode === mode ? 'bg-[#f5edf3] font-semibold text-[#61395c]' : 'text-slate-700 hover:bg-slate-100'}`}
-                  >
-                    <span>{label}</span>
-                    {sortMode === mode && (
-                      <span aria-hidden="true" className="text-[#70476a]">
-                        ✓
-                      </span>
-                    )}
-                  </button>
-                ))}
-              </div>
-            </details>
-          </div>
+            </div>
+          )}
 
           <section
             id="questions-panel"
@@ -783,7 +957,6 @@ export default function ProfessorDashboard() {
                           id={`details-${question.id}`}
                           className="mx-4 mt-4 border-t border-slate-200 pt-3 text-sm leading-6 text-slate-600 sm:mx-5"
                         >
-                          <p>Author: {question.authorId}</p>
                           <p>
                             Submitted:{' '}
                             <time dateTime={question.createdAt}>
@@ -792,13 +965,63 @@ export default function ProfessorDashboard() {
                               )}
                             </time>
                           </p>
+                          <p>Reports: {question.reportCount}</p>
+                          {selectedTab !== 'trash' && (
+                            <div className="mt-3 space-y-2">
+                              <label
+                                className="block text-sm font-medium"
+                                htmlFor={`answer-${question.id}`}
+                              >
+                                Written answer (optional)
+                              </label>
+                              <textarea
+                                id={`answer-${question.id}`}
+                                className="w-full rounded-lg border border-slate-300 bg-white p-3"
+                                rows={3}
+                                maxLength={4000}
+                                value={
+                                  answerDrafts[question.id] ??
+                                  question.answer ??
+                                  ''
+                                }
+                                onChange={(event) =>
+                                  setAnswerDrafts((items) => ({
+                                    ...items,
+                                    [question.id]: event.target.value,
+                                  }))
+                                }
+                                disabled={busyId !== null}
+                              />
+                              <button
+                                type="button"
+                                className="rounded-lg bg-blue-700 px-3 py-2 text-white"
+                                disabled={busyId !== null}
+                                onClick={() => void saveAnswer(question)}
+                              >
+                                Save answer and mark answered
+                              </button>
+                            </div>
+                          )}
                         </div>
                       )}
                       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 pb-4 pt-4 sm:px-5 sm:pb-5">
+                        {selectedTab === 'open' && (
+                          <button
+                            type="button"
+                            className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-700"
+                            disabled={busyId !== null}
+                            onClick={() => void selectQuestion(question)}
+                          >
+                            {question.status === 'selected'
+                              ? 'Unselect question'
+                              : 'Select to answer'}
+                          </button>
+                        )}
                         {selectedTab === 'trash' ? (
                           <button
                             type="button"
                             onClick={() => restoreQuestion(question)}
+                            disabled={busyId !== null}
                             className="inline-flex min-h-9 items-center gap-2 rounded-md border border-[#70476a] bg-[#70476a] px-3 py-2 text-sm font-semibold text-white transition-colors hover:border-[#583651] hover:bg-[#583651] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#70476a]"
                           >
                             <svg
@@ -819,6 +1042,7 @@ export default function ProfessorDashboard() {
                           <button
                             type="button"
                             onClick={() => changeStatus(question)}
+                            disabled={busyId !== null}
                             className={`inline-flex min-h-9 items-center gap-2 rounded-md border px-3 py-2 text-sm font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#70476a] ${question.answered ? 'border-[#bd9db6] bg-[#f5edf3]/80 text-[#61395c] hover:border-[#a6809f] hover:bg-[#eadce7]' : 'border-[#70476a] bg-[#70476a] text-white hover:border-[#583651] hover:bg-[#583651]'}`}
                           >
                             <svg
@@ -851,6 +1075,7 @@ export default function ProfessorDashboard() {
                               id: question.id,
                             })
                           }}
+                          disabled={busyId !== null}
                           aria-label={
                             selectedTab === 'trash'
                               ? undefined
@@ -900,11 +1125,10 @@ export default function ProfessorDashboard() {
             Past Lectures
           </h1>
           <p className="mt-3 text-sm leading-6 text-slate-600">
-            Browse questions and answers from previous lectures. This is a mock
-            archive for the demo.
+            Browse saved questions and answers from ended lectures.
           </p>
           <div className="mt-8 space-y-4">
-            {mockPastLectures.map((lecture, index) => (
+            {archive.map(({ lecture, questions }, index) => (
               <details
                 key={lecture.id}
                 open={index === 0}
@@ -912,24 +1136,35 @@ export default function ProfessorDashboard() {
               >
                 <summary className="cursor-pointer px-5 py-5 marker:text-blue-600 hover:bg-slate-100 focus-visible:rounded-xl focus-visible:outline-2 focus-visible:outline-blue-600 sm:px-6">
                   <span className="block pl-4 text-xs font-semibold text-blue-700">
-                    Course · {lecture.course}
+                    Course · {lecture.course || 'Not specified'}
                   </span>
                   <span className="mt-1 block pl-4 font-semibold text-slate-900">
                     {lecture.title}
                   </span>
                   <span className="mt-2 block pl-4 text-xs text-slate-600">
                     Time slot ·{' '}
-                    <time dateTime={lecture.date}>
-                      {lectureDateFormatter.format(new Date(lecture.date))}
+                    <time dateTime={lecture.startedAt || lecture.lectureTime}>
+                      {lectureDateFormatter.format(
+                        new Date(lecture.startedAt || lecture.lectureTime),
+                      )}
                     </time>{' '}
-                    · {lecture.startsAt}–{lecture.endsAt} (Zurich time)
+                    ·{' '}
+                    {timestampFormatter.format(
+                      new Date(lecture.startedAt || lecture.lectureTime),
+                    )}
+                    –
+                    {lecture.endedAt
+                      ? timestampFormatter.format(new Date(lecture.endedAt))
+                      : ''}
                   </span>
                   <span className="mt-1 block pl-4 text-xs text-slate-500">
-                    {lecture.questions.length} answered questions
+                    {questions.length} questions ·{' '}
+                    {questions.filter((question) => question.answered).length}{' '}
+                    answered
                   </span>
                 </summary>
                 <div className="space-y-3 border-t border-slate-200 px-5 py-5 sm:px-6">
-                  {lecture.questions.map((question) => (
+                  {questions.map((question) => (
                     <article
                       key={question.id}
                       className="rounded-lg border border-slate-200 bg-white p-4"
@@ -938,10 +1173,13 @@ export default function ProfessorDashboard() {
                         {question.text}
                       </h2>
                       <p className="mt-3 text-xs font-bold uppercase tracking-wide text-blue-700">
-                        Answer
+                        {question.answered ? 'Answer' : 'Unanswered'}
                       </p>
                       <p className="mt-1 text-sm leading-6 text-slate-700">
-                        {question.answer}
+                        {question.answer ||
+                          (question.answered
+                            ? 'Answered during the lecture; no written answer was saved.'
+                            : 'Awaiting an answer.')}
                       </p>
                     </article>
                   ))}
@@ -967,16 +1205,16 @@ export default function ProfessorDashboard() {
           >
             <p className="text-sm font-medium text-slate-600">Full name</p>
             <p className="mt-2 text-xl font-semibold text-slate-900">
-              {professorFullName}
+              {user.name}
             </p>
           </section>
           <QuestionStatusSummary
-            lectureCount={mockPastLectures.length + 1}
-            unansweredCount={openQuestions.length}
-            answeredCount={answeredQuestions.length + archivedAnsweredCount}
+            lectureCount={summary.lectureCount}
+            unansweredCount={summary.unansweredCount}
+            answeredCount={summary.answeredCount}
           />
           <p className="mt-3 text-xs text-slate-500">
-            The mock archive contains answered questions only.
+            Counts cover your saved lecture pools and exclude deleted questions.
           </p>
         </main>
       )}
@@ -1111,7 +1349,8 @@ export default function ProfessorDashboard() {
             id="end-lecture-description"
             className="mt-2 text-sm leading-6 text-slate-600"
           >
-            This demo session and any question changes will be discarded.
+            New submissions will close. Questions and answers will remain
+            available in Past Lectures.
           </p>
           <div className="mt-7 flex justify-end gap-3">
             <button
