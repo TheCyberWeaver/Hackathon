@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import EntryPage from './components/EntryPage'
 import { getCurrentUser, IdentityError } from './lib/api'
 import type { CurrentUser } from './lib/api'
@@ -110,6 +110,7 @@ export type IdentityState =
 export default function App() {
   const [identity, setIdentity] = useState<IdentityState>({ status: 'loading' })
   const [path, setPath] = useState(() => window.location.pathname)
+  const signedInUserId = useRef<string | null>(null)
 
   useEffect(() => {
     const syncPath = () => setPath(window.location.pathname)
@@ -129,19 +130,43 @@ export default function App() {
   }
 
   useEffect(() => {
-    const controller = new AbortController()
-    getCurrentUser(controller.signal)
-      .then((user) => setIdentity({ status: 'ready', user }))
-      .catch((error: unknown) => {
-        if (controller.signal.aborted) return
-        setIdentity({
-          status:
-            error instanceof IdentityError && error.status === 401
-              ? 'signed-out'
-              : 'error',
+    let controller: AbortController | null = null
+    function refreshIdentity() {
+      controller?.abort()
+      const requestController = new AbortController()
+      controller = requestController
+      getCurrentUser(requestController.signal)
+        .then((user) => {
+          if (requestController.signal.aborted) return
+          if (signedInUserId.current && signedInUserId.current !== user.id) {
+            const url = new URL(window.location.href)
+            url.searchParams.delete('lecture')
+            url.searchParams.delete('code')
+            window.history.replaceState(null, '', url)
+          }
+          signedInUserId.current = user.id
+          setIdentity({ status: 'ready', user })
         })
-      })
-    return () => controller.abort()
+        .catch((error: unknown) => {
+          if (requestController.signal.aborted) return
+          if (error instanceof IdentityError && error.status === 401) {
+            setIdentity({ status: 'signed-out' })
+          } else if (!signedInUserId.current) {
+            setIdentity({ status: 'error' })
+          }
+        })
+    }
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') refreshIdentity()
+    }
+    refreshIdentity()
+    window.addEventListener('focus', refreshIdentity)
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => {
+      controller?.abort()
+      window.removeEventListener('focus', refreshIdentity)
+      document.removeEventListener('visibilitychange', onVisibility)
+    }
   }, [])
 
   async function enterSpace(space: 'student' | 'professor') {
@@ -185,7 +210,7 @@ export default function App() {
             </main>
           }
         >
-          <StudentDashboard user={identity.user} />
+          <StudentDashboard key={identity.user.id} user={identity.user} />
         </Suspense>
       )
     }

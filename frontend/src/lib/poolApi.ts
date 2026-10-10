@@ -55,11 +55,15 @@ export type Lecture = {
 export function listLectures() {
   return request<Lecture[]>('/lectures')
 }
+export function getLecture(id: string) {
+  return request<Lecture>(`/lectures/${encodeURIComponent(id)}`)
+}
 // Both dashboards need fresh lecture options even when initially opened empty.
 export function watchLectures(
   onLectures: (lectures: Lecture[]) => void,
   onError: (error: unknown) => void,
   currentVersion: () => number = () => 0,
+  loadLectures: () => Promise<Lecture[]> = listLectures,
 ) {
   let active = true
   let pending = false
@@ -68,7 +72,7 @@ export function watchLectures(
     pending = true
     const version = currentVersion()
     try {
-      const lectures = await listLectures()
+      const lectures = await loadLectures()
       if (active && version === currentVersion()) onLectures(lectures)
     } catch (error) {
       if (active) onError(error)
@@ -108,6 +112,7 @@ export function initialLectureId(): string {
 }
 export function rememberLecture(id: string) {
   const url = new URL(window.location.href)
+  url.searchParams.delete('code')
   url.searchParams.set('lecture', id)
   window.history.replaceState(null, '', url)
 }

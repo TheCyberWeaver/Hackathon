@@ -100,9 +100,10 @@ export default function StudentJoinPage({
   error: string
   onJoin: (code: string) => void
 }) {
-  const [code, setCode] = useState(
-    () => new URLSearchParams(window.location.search).get('code') || '',
-  )
+  const [code, setCode] = useState(() => {
+    const params = new URLSearchParams(window.location.search)
+    return params.get('code') || params.get('lecture') || ''
+  })
   const [localError, setLocalError] = useState('')
   const [scannerOpen, setScannerOpen] = useState(false)
 

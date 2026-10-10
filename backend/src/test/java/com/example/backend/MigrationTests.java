@@ -11,6 +11,58 @@ import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import static org.junit.jupiter.api.Assertions.*;
 
 class MigrationTests extends PostgresTestSupport {
+    @Test void backfillsOnlyRecordedLectureParticipationAndPreservesProfilesAndRoles() {
+        String schema = "history_" + UUID.randomUUID().toString().replace("-", "");
+        String url = POSTGRES.getJdbcUrl("postgres", "postgres");
+        var admin = new JdbcTemplate(new DriverManagerDataSource(url, "postgres", ""));
+        admin.execute("CREATE SCHEMA " + schema);
+        try {
+            var source = new DriverManagerDataSource(url + (url.contains("?") ? "&" : "?") + "currentSchema=" + schema, "postgres", "");
+            var db = new JdbcTemplate(source);
+            Flyway.configure().dataSource(source).schemas(schema).target("9").load().migrate();
+            long owner = db.queryForObject("INSERT INTO users (eth_identity_ref, role) VALUES ('owner', 'student') RETURNING id", Long.class);
+            long author = db.queryForObject("INSERT INTO users (eth_identity_ref, role) VALUES ('author', 'professor') RETURNING id", Long.class);
+            long voter = db.queryForObject("INSERT INTO users (eth_identity_ref, role) VALUES ('voter', 'admin') RETURNING id", Long.class);
+            long reporter = db.queryForObject("INSERT INTO users (eth_identity_ref) VALUES ('reporter') RETURNING id", Long.class);
+            long member = db.queryForObject("INSERT INTO users (eth_identity_ref) VALUES ('member') RETURNING id", Long.class);
+            long idle = db.queryForObject("INSERT INTO users (eth_identity_ref) VALUES ('idle') RETURNING id", Long.class);
+            long lecture = db.queryForObject("INSERT INTO lectures (title, lecture_time, owner_id) VALUES ('Participated', CURRENT_TIMESTAMP, ?) RETURNING id", Long.class, owner);
+            long membershipOnly = db.queryForObject("INSERT INTO lectures (title, lecture_time, owner_id) VALUES ('Membership only', CURRENT_TIMESTAMP, ?) RETURNING id", Long.class, owner);
+            long unrelated = db.queryForObject("INSERT INTO lectures (title, lecture_time, owner_id) VALUES ('Unvisited', CURRENT_TIMESTAMP, ?) RETURNING id", Long.class, owner);
+            long firstQuestion = db.queryForObject("INSERT INTO questions (lecture_id, author_id, text, submitted_at) VALUES (?, ?, 'Earlier question', '2026-10-01T10:00:00Z') RETURNING id", Long.class, lecture, author);
+            long laterQuestion = db.queryForObject("INSERT INTO questions (lecture_id, author_id, text, submitted_at) VALUES (?, ?, 'Later question', '2026-10-03T10:00:00Z') RETURNING id", Long.class, lecture, author);
+            db.update("INSERT INTO question_votes (question_id, user_id) VALUES (?, ?), (?, ?)", firstQuestion, voter, laterQuestion, voter);
+            db.update("INSERT INTO question_reports (question_id, user_id, reported_at) VALUES (?, ?, '2026-10-05T10:00:00Z')", firstQuestion, reporter);
+            db.update("INSERT INTO lecture_memberships (user_id, lecture_id, joined_at) VALUES (?, ?, '2026-10-07T10:00:00Z'), (?, ?, '2026-10-06T10:00:00Z')", member, lecture, author, membershipOnly);
+            db.update("INSERT INTO professor_profiles (user_id, onboarding_completed, revision) VALUES (?, TRUE, 7)", owner);
+            db.update("INSERT INTO professor_courses (user_id, id, title, position) VALUES (?, 'saved-course', 'Stored course', 0)", owner);
+
+            var flyway = Flyway.configure().dataSource(source).schemas(schema).load();
+            assertEquals(flyway.info().pending().length, flyway.migrate().migrationsExecuted);
+            assertEquals(5L, db.queryForObject("SELECT count(*) FROM lecture_history", Long.class));
+            assertEquals(java.util.Set.of(author, voter, reporter, member), new java.util.HashSet<>(db.queryForList("SELECT user_id FROM lecture_history WHERE lecture_id = ?", Long.class, lecture)));
+            assertEquals(java.util.List.of(author), db.queryForList("SELECT user_id FROM lecture_history WHERE lecture_id = ?", Long.class, membershipOnly));
+            assertEquals(0L, db.queryForObject("SELECT count(*) FROM lecture_history WHERE user_id IN (?, ?) OR lecture_id = ?", Long.class, owner, idle, unrelated));
+            assertEquals(java.time.Instant.parse("2026-10-01T10:00:00Z"), db.queryForObject("SELECT first_visited_at FROM lecture_history WHERE user_id = ? AND lecture_id = ?", java.time.OffsetDateTime.class, author, lecture).toInstant());
+            assertEquals(java.time.Instant.parse("2026-10-03T10:00:00Z"), db.queryForObject("SELECT last_visited_at FROM lecture_history WHERE user_id = ? AND lecture_id = ?", java.time.OffsetDateTime.class, author, lecture).toInstant());
+            assertEquals(java.time.Instant.parse("2026-10-05T10:00:00Z"), db.queryForObject("SELECT first_visited_at FROM lecture_history WHERE user_id = ? AND lecture_id = ?", java.time.OffsetDateTime.class, reporter, lecture).toInstant());
+            assertTrue(db.queryForObject("SELECT bool_and(first_visited_at IS NOT NULL AND last_visited_at >= first_visited_at) FROM lecture_history", Boolean.class));
+            assertThrows(org.springframework.dao.DataIntegrityViolationException.class,
+                () -> db.update("INSERT INTO lecture_history (user_id, lecture_id) VALUES (?, ?)", author, lecture));
+            assertEquals(2L, db.queryForObject("SELECT count(*) FROM lecture_memberships", Long.class));
+            assertEquals(2L, db.queryForObject("SELECT count(*) FROM questions", Long.class));
+            assertEquals(2L, db.queryForObject("SELECT count(*) FROM question_votes", Long.class));
+            assertEquals(1L, db.queryForObject("SELECT count(*) FROM question_reports", Long.class));
+            assertEquals(7L, db.queryForObject("SELECT revision FROM professor_profiles WHERE user_id = ?", Long.class, owner));
+            assertTrue(db.queryForObject("SELECT onboarding_completed FROM professor_profiles WHERE user_id = ?", Boolean.class, owner));
+            assertEquals("Stored course", db.queryForObject("SELECT title FROM professor_courses WHERE user_id = ?", String.class, owner));
+            assertEquals("student", db.queryForObject("SELECT role FROM users WHERE id = ?", String.class, owner));
+            assertEquals("professor", db.queryForObject("SELECT role FROM users WHERE id = ?", String.class, author));
+            assertEquals("admin", db.queryForObject("SELECT role FROM users WHERE id = ?", String.class, voter));
+            assertEquals(0, flyway.migrate().migrationsExecuted);
+        } finally { admin.execute("DROP SCHEMA " + schema + " CASCADE"); }
+    }
+
     @Test void removesLegacyWrittenTextAndTrashWhileKeepingQuestionStateAndVotes() {
         String schema = "product_" + UUID.randomUUID().toString().replace("-", "");
         String url = POSTGRES.getJdbcUrl("postgres", "postgres");
@@ -51,7 +103,7 @@ class MigrationTests extends PostgresTestSupport {
             db.update("INSERT INTO question_moderation_warnings (lecture_id, user_id, reason) VALUES (?, ?, 'moderation_service')", lecture, user);
 
             var flyway = Flyway.configure().dataSource(source).schemas(schema).load();
-            assertEquals(2, flyway.migrate().migrationsExecuted);
+            assertEquals(flyway.info().pending().length, flyway.migrate().migrationsExecuted);
             assertEquals("moderation_service", db.queryForObject("SELECT reason FROM question_moderation_warnings", String.class));
             assertNotNull(db.queryForObject("SELECT join_code FROM lectures WHERE id = ?", String.class, lecture));
             db.update("INSERT INTO lecture_memberships (user_id, lecture_id) VALUES (?, ?)", user, lecture);

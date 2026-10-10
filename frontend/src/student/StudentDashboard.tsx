@@ -16,7 +16,7 @@ import {
 import type { CurrentUser } from '../lib/api'
 import {
   ApiRequestError,
-  watchLectures,
+  getLecture,
   rememberLecture,
   type Lecture,
 } from '../lib/poolApi'
@@ -24,6 +24,7 @@ import {
   getJoinedSession,
   joinSession,
   leaveJoinedSession,
+  parseJoinCode,
   type SharedSession,
 } from '../lib/sessions'
 import './student.css'
@@ -33,6 +34,9 @@ import {
   reportQuestion,
   setVote,
   submitQuestion,
+  visitLecture,
+  removeLectureFromHistory,
+  watchLectureHistory,
   type Question,
 } from './lib/studentApi'
 
@@ -70,6 +74,7 @@ function sleep(ms: number) {
 
 export default function StudentDashboard({ user }: { user: CurrentUser }) {
   const [page, setPage] = useState<Page>(currentPage)
+  const [locationVersion, setLocationVersion] = useState(0)
   const [joinedSession, setJoinedSession] = useState<SharedSession | null>(null)
   const [sessionChecking, setSessionChecking] = useState(true)
   const [joinBusy, setJoinBusy] = useState(false)
@@ -77,13 +82,19 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
   const [joinError, setJoinError] = useState('')
   const [questions, setQuestions] = useState<Question[]>([])
   const [lectures, setLectures] = useState<Lecture[]>([])
+  const [viewedLecture, setViewedLecture] = useState<Lecture | null>(null)
   const [lectureId, setLectureId] = useState('')
-  const selectedLecture = lectures.find((lecture) => lecture.id === lectureId)
-  const questionsPaused =
-    !selectedLecture ||
-    !selectedLecture.startedAt ||
+  const [historyLoading, setHistoryLoading] = useState(true)
+  const [historyError, setHistoryError] = useState('')
+  const [removingHistoryId, setRemovingHistoryId] = useState<string | null>(
+    null,
+  )
+  const selectedLecture = viewedLecture
+  const readOnly =
+    !selectedLecture?.startedAt ||
     !!selectedLecture.endedAt ||
-    selectedLecture.questionsPaused
+    joinedSession?.id !== lectureId
+  const questionsPaused = readOnly || !!selectedLecture?.questionsPaused
   const [draft, setDraft] = useState('')
   const [focused, setFocused] = useState(false)
   const [sending, setSending] = useState(false)
@@ -116,7 +127,71 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
   const switchingView = useRef(false)
   const toastTimer = useRef<number | undefined>(undefined)
   const tutorialReturnFocus = useRef<HTMLElement | null>(null)
-  const joinedSessionId = joinedSession?.id
+  const historyVersion = useRef(0)
+  const sessionVersion = useRef(0)
+  const historyMutationPending = useRef(false)
+  const selectedIdRef = useRef('')
+  const selectionBusy =
+    sending ||
+    votePendingCount > 0 ||
+    deletingIds.size > 0 ||
+    joinBusy ||
+    leaveBusy
+
+  function selectLecture(lecture: Lecture | null) {
+    selectedIdRef.current = lecture?.id || ''
+    mutationVersion.current++
+    setViewedLecture(lecture)
+    setLectureId(lecture?.id || '')
+    setQuestions([])
+    setDraft('')
+    setReportTarget(null)
+    setModerationWarning(null)
+    setFocused(false)
+  }
+
+  function rememberVisit(lecture: Lecture) {
+    setLectures((items) => [
+      lecture,
+      ...items.filter((item) => item.id !== lecture.id),
+    ])
+  }
+
+  function showLecture(lecture: Lecture, includeLink = true) {
+    selectLecture(lecture)
+    window.history.pushState(
+      null,
+      '',
+      includeLink
+        ? `${basePath}?lecture=${encodeURIComponent(lecture.id)}`
+        : basePath,
+    )
+    setPage('questions')
+    window.scrollTo(0, 0)
+  }
+
+  async function returnToCurrentLecture() {
+    if (selectionBusy) return
+    if (
+      !joinedSession ||
+      (joinedSession.id === lectureId && selectedLecture?.endedAt)
+    ) {
+      selectLecture(null)
+      window.history.pushState(null, '', `${basePath}/join`)
+      setPage('questions')
+      return
+    }
+    try {
+      // Returning to the active pool must not restore a removed history entry.
+      showLecture(await getLecture(joinedSession.id), false)
+    } catch (error) {
+      showToast(
+        error instanceof Error
+          ? error.message
+          : 'Could not load your current lecture.',
+      )
+    }
+  }
 
   function openTutorial() {
     tutorialReturnFocus.current =
@@ -154,34 +229,69 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
   }
 
   async function joinLecture(code: string) {
-    if (joinBusy) return
+    if (selectionBusy || historyMutationPending.current) return
+    const id = parseJoinCode(code)
+    if (!id) {
+      setJoinError('Enter a valid numeric lecture ID.')
+      return
+    }
     setJoinBusy(true)
     setJoinError('')
+    sessionVersion.current++
+    historyMutationPending.current = true
+    historyVersion.current++
     try {
-      const session = await joinSession(code)
-      setJoinedSession(session)
-      setLectureId(session.id)
-      setQuestions([])
-      window.history.replaceState(null, '', basePath)
-      showToast(`Joined ${session.course || 'lecture'}.`)
+      const lecture = await visitLecture(id)
+      rememberVisit(lecture)
+      if (lecture.startedAt && !lecture.endedAt) {
+        const session = await joinSession(id)
+        setJoinedSession(session)
+        showToast(`Joined ${session.course || 'lecture'}.`)
+      }
+      showLecture(lecture)
     } catch (error) {
-      setJoinError(
-        error instanceof Error ? error.message : 'Could not join this lecture.',
-      )
+      const message =
+        error instanceof Error ? error.message : 'Could not open this lecture.'
+      setJoinError(message)
+      if (lectureId) showToast(message)
     } finally {
+      sessionVersion.current++
+      historyVersion.current++
+      historyMutationPending.current = false
       setJoinBusy(false)
     }
   }
 
+  async function removeFromHistory(lecture: Lecture) {
+    if (historyMutationPending.current) return
+    historyMutationPending.current = true
+    historyVersion.current++
+    setRemovingHistoryId(lecture.id)
+    try {
+      await removeLectureFromHistory(lecture.id)
+      setLectures((items) => items.filter((item) => item.id !== lecture.id))
+      showToast('Lecture removed from your history.')
+    } catch (error) {
+      showToast(
+        error instanceof Error
+          ? error.message
+          : 'Could not remove this lecture from your history.',
+      )
+    } finally {
+      historyVersion.current++
+      historyMutationPending.current = false
+      setRemovingHistoryId(null)
+    }
+  }
+
   async function leaveLecture() {
-    if (leaveBusy) return
+    if (selectionBusy) return
     setLeaveBusy(true)
+    sessionVersion.current++
     try {
       await leaveJoinedSession()
       setJoinedSession(null)
-      setLectureId('')
-      setQuestions([])
-      setDraft('')
+      selectLecture(null)
       setJoinError('')
       window.history.replaceState(null, '', `${basePath}/join`)
       setPage('questions')
@@ -192,17 +302,19 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
           : 'Could not leave this lecture.',
       )
     } finally {
+      sessionVersion.current++
       setLeaveBusy(false)
     }
   }
 
   function navigate(nextPage: Page) {
-    const path =
-      nextPage === 'questions'
-        ? basePath
-        : `${basePath}/${nextPage === 'pastLectures' ? 'past-lectures' : nextPage}`
+    if (nextPage === 'questions') {
+      void returnToCurrentLecture()
+      return
+    }
+    const path = `${basePath}/${nextPage === 'pastLectures' ? 'past-lectures' : nextPage}`
     if (window.location.pathname !== path) {
-      window.history.pushState(null, '', `${path}${window.location.search}`)
+      window.history.pushState(null, '', path)
     }
     setPage(nextPage)
     setFocused(false)
@@ -212,6 +324,8 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
   useEffect(() => {
     function syncPage() {
       setPage(currentPage())
+      setSessionChecking(true)
+      setLocationVersion((version) => version + 1)
       setFocused(false)
       window.scrollTo(0, 0)
     }
@@ -230,28 +344,57 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
   }, [questionsPaused])
 
   useEffect(() => {
-    return watchLectures(
+    return watchLectureHistory(
       (items) => {
+        if (historyMutationPending.current) return
         setLectures(items)
+        setHistoryLoading(false)
+        setHistoryError('')
       },
-      (error) =>
-        showToast(
-          error instanceof Error ? error.message : 'Could not load lectures.',
-        ),
+      (error) => {
+        setHistoryLoading(false)
+        setHistoryError(
+          error instanceof Error
+            ? error.message
+            : 'Could not load your lecture history.',
+        )
+      },
+      () => historyVersion.current,
     )
-  }, [])
+  }, [user.id])
 
   useEffect(() => {
     let active = true
-    const code = new URLSearchParams(window.location.search).get('code')
-    const sessionRequest = code ? joinSession(code) : getJoinedSession()
-    sessionRequest
-      .then((session) => {
+    const params = new URLSearchParams(window.location.search)
+    const linkedCode =
+      currentPage() === 'questions'
+        ? params.get('code') || params.get('lecture')
+        : null
+    async function loadSession() {
+      const session = await getJoinedSession()
+      if (!active) return
+      setJoinedSession(session)
+      if (linkedCode) {
+        const id = parseJoinCode(linkedCode)
+        if (!id) throw new Error('Enter a valid numeric lecture ID.')
+        const lecture = await visitLecture(id)
         if (!active) return
-        setJoinedSession(session)
-        setLectureId(session?.id || '')
-        if (code && session) window.history.replaceState(null, '', basePath)
-      })
+        rememberVisit(lecture)
+        if (lecture.startedAt && !lecture.endedAt) {
+          const joined = await joinSession(id)
+          if (!active) return
+          setJoinedSession(joined)
+        }
+        selectLecture(lecture)
+        rememberLecture(lecture.id)
+      } else if (session) {
+        const lecture = await getLecture(session.id)
+        if (active) selectLecture(lecture)
+      } else if (currentPage() === 'questions') {
+        selectLecture(null)
+      }
+    }
+    void loadSession()
       .catch((error: unknown) => {
         if (active)
           setJoinError(
@@ -266,31 +409,16 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
     return () => {
       active = false
     }
-  }, [user.id])
+  }, [user.id, locationVersion])
 
   useEffect(() => {
-    if (!joinedSessionId) return
     let active = true
     const timer = window.setInterval(() => {
+      const version = sessionVersion.current
       getJoinedSession()
         .then((session) => {
-          if (!active) return
-          if (session?.id === joinedSessionId) {
-            setJoinedSession(session)
-          } else if (session) {
-            setJoinedSession(session)
-            setLectureId(session.id)
-            setQuestions([])
-            window.history.replaceState(null, '', basePath)
-          } else {
-            setJoinedSession(null)
-            setLectureId('')
-            setQuestions([])
-            setJoinError(
-              'This lecture has ended or was left on another device. Enter a code to join.',
-            )
-            window.history.replaceState(null, '', `${basePath}/join`)
-          }
+          if (!active || version !== sessionVersion.current) return
+          setJoinedSession(session)
         })
         .catch(() => {
           // Keep the current screen during a transient network failure.
@@ -300,14 +428,18 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
       active = false
       window.clearInterval(timer)
     }
-  }, [joinedSessionId])
+  }, [user.id])
 
   useEffect(() => {
     if (!lectureId) return
-    rememberLecture(lectureId)
     let active = true
     const load = () => {
       const version = mutationVersion.current
+      void getLecture(lectureId)
+        .then((lecture) => {
+          if (active) setViewedLecture(lecture)
+        })
+        .catch(() => {})
       return listQuestions(lectureId)
         .then((items) => {
           if (
@@ -428,7 +560,8 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
   }
 
   async function handleVote(question: Question) {
-    if (question.mine || pendingVotes.current.has(question.id)) return
+    if (readOnly || question.mine || pendingVotes.current.has(question.id))
+      return
     pendingVotes.current.add(question.id)
     setVotePendingCount(pendingVotes.current.size)
     mutationVersion.current++
@@ -459,6 +592,7 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
 
   async function handleDelete(question: Question) {
     if (
+      readOnly ||
       !question.mine ||
       question.id.startsWith('pending-') ||
       pendingDeletes.current.has(question.id)
@@ -530,8 +664,10 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
       )
         return
       const version = mutationVersion.current
+      const requestedLectureId = lectureId
       const refreshed = await listQuestions(lectureId)
       if (
+        selectedIdRef.current !== requestedLectureId ||
         version !== mutationVersion.current ||
         pendingSend.current ||
         pendingVotes.current.size ||
@@ -547,7 +683,7 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
   }
 
   async function confirmReport() {
-    if (!reportTarget) return
+    if (readOnly || !reportTarget) return
     const target = reportTarget
     setReportTarget(null)
     try {
@@ -584,6 +720,7 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
             onReport={setReportTarget}
             onDelete={(question) => void handleDelete(question)}
             deleting={deletingIds.has(question.id)}
+            readOnly={readOnly}
           />
         ))}
       </div>
@@ -599,7 +736,7 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
         onNavigate={navigate}
         launcherClassName="side-panel-launcher--student"
       />
-      {page === 'questions' && !joinedSession ? (
+      {page === 'questions' && !lectureId ? (
         <StudentJoinPage
           busy={joinBusy}
           checking={sessionChecking}
@@ -616,115 +753,149 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
               <div className="student-session-bar">
                 <div className="student-session-summary">
                   <span className="student-session-kicker">
-                    Current lecture
+                    {selectedLecture?.endedAt
+                      ? 'Past lecture'
+                      : readOnly
+                        ? 'Lecture review'
+                        : 'Current lecture'}
                   </span>
                   <span className="student-session-course">
-                    {joinedSession?.course ||
+                    {selectedLecture?.course ||
                       selectedLecture?.title ||
                       'Lecture'}
                   </span>
-                  <span className="student-session-code">
-                    Code {joinedSession?.code}
-                  </span>
+                  <span className="student-session-code">Code {lectureId}</span>
                 </div>
-                <button
-                  type="button"
-                  className="student-session-leave"
-                  onClick={() => void leaveLecture()}
-                  disabled={leaveBusy}
-                >
-                  <svg
-                    aria-hidden="true"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.8"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
+                {!readOnly ? (
+                  <button
+                    type="button"
+                    className="student-session-leave"
+                    onClick={() => void leaveLecture()}
+                    disabled={leaveBusy}
                   >
-                    <path d="M10 17l5-5-5-5M15 12H3M12 3h6a3 3 0 0 1 3 3v12a3 3 0 0 1-3 3h-6" />
-                  </svg>
-                  {leaveBusy ? 'Leaving…' : 'Leave lecture'}
-                </button>
+                    <svg
+                      aria-hidden="true"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="M10 17l5-5-5-5M15 12H3M12 3h6a3 3 0 0 1 3 3v12a3 3 0 0 1-3 3h-6" />
+                    </svg>
+                    {leaveBusy ? 'Leaving…' : 'Leave lecture'}
+                  </button>
+                ) : (
+                  <div className="student-review-actions">
+                    <button
+                      type="button"
+                      className="student-session-leave"
+                      onClick={() => navigate('pastLectures')}
+                    >
+                      Back to past lectures
+                    </button>
+                    <button
+                      type="button"
+                      className="student-session-leave"
+                      disabled={selectionBusy}
+                      onClick={() => void returnToCurrentLecture()}
+                    >
+                      {joinedSession && joinedSession.id !== lectureId
+                        ? 'Return to current lecture'
+                        : 'Join another lecture'}
+                    </button>
+                  </div>
+                )}
               </div>
               <h1 ref={heroHeadingRef} tabIndex={-1}>
                 {selectedLecture?.endedAt
                   ? 'This lecture has ended'
-                  : questionsPaused
-                    ? 'Questions are paused'
-                    : "What's your question?"}
+                  : readOnly
+                    ? selectedLecture?.startedAt
+                      ? 'Lecture question pool'
+                      : 'This lecture has not started'
+                    : questionsPaused
+                      ? 'Questions are paused'
+                      : "What's your question?"}
               </h1>
-              <div
-                className={`composer ${focused ? 'composer--focused' : ''} ${questionsPaused ? 'composer--paused' : ''}`}
-              >
-                <label className="sr-only" htmlFor="question-input">
-                  Your anonymous question
-                </label>
-                <textarea
-                  id="question-input"
-                  ref={textareaRef}
-                  rows={1}
-                  maxLength={200}
-                  value={draft}
-                  placeholder={
-                    questionsPaused
-                      ? 'Question submissions are closed'
-                      : placeholder
-                  }
-                  disabled={questionsPaused}
-                  aria-describedby={`question-input-status${moderationWarning === null ? '' : ' question-moderation-warning'}`}
-                  onFocus={() => setFocused(true)}
-                  onBlur={() => setFocused(false)}
-                  onChange={(event) => {
-                    const next = event.target.value.slice(0, 200)
-                    event.target.value = next
-                    setDraft(next)
-                    setModerationWarning(null)
-                    growTextarea(event.target)
-                  }}
-                  onKeyDown={(event) => {
-                    if (
-                      event.key === 'Enter' &&
-                      (event.metaKey || event.ctrlKey)
-                    ) {
-                      event.preventDefault()
-                      void handleSend()
+              {readOnly ? (
+                <p className="student-review-note">
+                  You can review the questions and answers from this lecture.
+                </p>
+              ) : (
+                <div
+                  className={`composer ${focused ? 'composer--focused' : ''} ${questionsPaused ? 'composer--paused' : ''}`}
+                >
+                  <label className="sr-only" htmlFor="question-input">
+                    Your anonymous question
+                  </label>
+                  <textarea
+                    id="question-input"
+                    ref={textareaRef}
+                    rows={1}
+                    maxLength={200}
+                    value={draft}
+                    placeholder={
+                      questionsPaused
+                        ? 'Question submissions are closed'
+                        : placeholder
                     }
-                  }}
-                />
-                <div className="composer__bottom">
-                  <span
-                    id="question-input-status"
-                    className="anonymous-note"
-                    aria-live="polite"
-                  >
-                    {questionsPaused
-                      ? 'Submissions are closed right now.'
-                      : "Your name isn't shown on cards."}
-                  </span>
-                  <div className="composer__send">
-                    {draft.length > 160 && (
-                      <span className="character-counter">
-                        {draft.length}/200
-                      </span>
-                    )}
-                    <button
-                      type="button"
-                      className="send-button"
-                      aria-label="Send question"
-                      disabled={
-                        !draft.trim() ||
-                        sending ||
-                        !lectureId ||
-                        questionsPaused
+                    disabled={questionsPaused}
+                    aria-describedby={`question-input-status${moderationWarning === null ? '' : ' question-moderation-warning'}`}
+                    onFocus={() => setFocused(true)}
+                    onBlur={() => setFocused(false)}
+                    onChange={(event) => {
+                      const next = event.target.value.slice(0, 200)
+                      event.target.value = next
+                      setDraft(next)
+                      setModerationWarning(null)
+                      growTextarea(event.target)
+                    }}
+                    onKeyDown={(event) => {
+                      if (
+                        event.key === 'Enter' &&
+                        (event.metaKey || event.ctrlKey)
+                      ) {
+                        event.preventDefault()
+                        void handleSend()
                       }
-                      onClick={() => void handleSend()}
+                    }}
+                  />
+                  <div className="composer__bottom">
+                    <span
+                      id="question-input-status"
+                      className="anonymous-note"
+                      aria-live="polite"
                     >
-                      <SendIcon width="23" height="23" />
-                    </button>
+                      {questionsPaused
+                        ? 'Submissions are closed right now.'
+                        : "Your name isn't shown on cards."}
+                    </span>
+                    <div className="composer__send">
+                      {draft.length > 160 && (
+                        <span className="character-counter">
+                          {draft.length}/200
+                        </span>
+                      )}
+                      <button
+                        type="button"
+                        className="send-button"
+                        aria-label="Send question"
+                        disabled={
+                          !draft.trim() ||
+                          sending ||
+                          !lectureId ||
+                          questionsPaused
+                        }
+                        onClick={() => void handleSend()}
+                      >
+                        <SendIcon width="23" height="23" />
+                      </button>
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
               {moderationWarning !== null && (
                 <div
                   id="question-moderation-warning"
@@ -747,7 +918,7 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
                   </span>
                 </div>
               )}
-              {!tutorialCompleted && !tutorialDismissed && (
+              {!readOnly && !tutorialCompleted && !tutorialDismissed && (
                 <div className="student-tutorial-invite">
                   <div className="student-tutorial-invite__prompt">
                     <svg
@@ -866,28 +1037,45 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
                     ? 'Choose a saved lecture to review its question pool.'
                     : 'Your profile will appear here.'}
                 </p>
+                {page === 'pastLectures' && historyLoading && (
+                  <p role="status">Loading your lecture history…</p>
+                )}
+                {page === 'pastLectures' && historyError && (
+                  <p role="alert">{historyError}</p>
+                )}
+                {page === 'pastLectures' &&
+                  !historyLoading &&
+                  !historyError &&
+                  lectures.length === 0 && (
+                    <p>
+                      You haven’t visited any lectures yet. Join a lecture to
+                      save it here.
+                    </p>
+                  )}
                 {page === 'pastLectures' &&
                   lectures.map((lecture) => (
-                    <p key={lecture.id}>
+                    <div key={lecture.id} className="student-history-item">
                       <button
                         type="button"
                         className="text-blue-700 underline"
-                        disabled={
-                          sending ||
-                          votePendingCount > 0 ||
-                          deletingIds.size > 0
-                        }
-                        onClick={() => {
-                          setQuestions([])
-                          setLectureId(lecture.id)
-                          rememberLecture(lecture.id)
-                          navigate('questions')
-                        }}
+                        disabled={selectionBusy || removingHistoryId !== null}
+                        onClick={() => void joinLecture(lecture.id)}
                       >
                         {lecture.title} —{' '}
                         {new Date(lecture.lectureTime).toLocaleString()}
                       </button>
-                    </p>
+                      <button
+                        type="button"
+                        className="student-history-remove"
+                        aria-label={`Remove ${lecture.title} from history`}
+                        disabled={removingHistoryId !== null || joinBusy}
+                        onClick={() => void removeFromHistory(lecture)}
+                      >
+                        {removingHistoryId === lecture.id
+                          ? 'Removing…'
+                          : 'Remove from history'}
+                      </button>
+                    </div>
                   ))}
               </div>
             )}

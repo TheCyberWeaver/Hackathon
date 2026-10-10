@@ -46,7 +46,7 @@ tasks.named('test') {
 
 tasks.register('localRun', JavaExec) {
 	group = 'application'
-	description = 'Run Java with persistent local PostgreSQL and testing permissions; no Docker or VM.'
+	description = 'Run Java with persistent local PostgreSQL; no Docker or VM.'
 	dependsOn classes, localClasses
 	classpath = sourceSets.local.runtimeClasspath
 	mainClass = 'com.example.backend.dev.LocalApplication'

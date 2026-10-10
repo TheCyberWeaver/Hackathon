@@ -256,7 +256,7 @@ export default function ProfessorDashboard({
           setApiError('')
           setLectureId(
             (id) =>
-              id ||
+              (managed.some((lecture) => lecture.id === id) ? id : '') ||
               managed.find((lecture) => lecture.startedAt && !lecture.endedAt)
                 ?.id ||
               managed[0]?.id ||
@@ -273,7 +273,7 @@ export default function ProfessorDashboard({
   )
 
   useEffect(() => {
-    if (!lectureId) return
+    if (!lectureId || !selectedLecture?.canManage) return
     rememberLecture(lectureId)
     let active = true
     const load = async () => {
@@ -311,7 +311,7 @@ export default function ProfessorDashboard({
       active = false
       window.clearInterval(timer)
     }
-  }, [lectureId])
+  }, [lectureId, selectedLecture?.canManage])
 
   useEffect(() => {
     if (page !== 'pastLectures' && page !== 'profile') return
@@ -321,7 +321,7 @@ export default function ProfessorDashboard({
         if (page === 'pastLectures') {
           const items = await listArchive()
           if (active) {
-            setArchive(items)
+            setArchive(items.filter((item) => item.lecture.canManage))
             setApiError('')
           }
         } else {

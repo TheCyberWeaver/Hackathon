@@ -1005,3 +1005,43 @@ html:has(.student-settings-card) {
   z-index: 10;
   position: relative;
 }
+.student-history-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 0;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.student-history-item > button:first-child {
+  text-align: left;
+}
+
+.student-history-remove {
+  flex-shrink: 0;
+  color: #6b7280;
+  text-decoration: underline;
+  font-size: 0.875rem;
+}
+
+.student-review-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.student-review-note {
+  margin: 1rem 0 2rem;
+  color: #57534e;
+  line-height: 1.6;
+}
+
+@media (max-width: 600px) {
+  .student-history-item {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0.65rem;
+  }
+}

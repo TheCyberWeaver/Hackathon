@@ -1,7 +1,6 @@
 package com.example.backend.pool;
 
 import java.util.List;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import static com.example.backend.pool.ApiModels.*;
@@ -13,13 +12,10 @@ public class PoolService {
     private final PoolRepository repository;
     private final QuestionModeration moderation;
     private final QuestionModerator moderator;
-    private final boolean testingPermissions;
-    public PoolService(PoolRepository repository, QuestionModeration moderation, QuestionModerator moderator,
-                       @Value("${app.testing-permissions:false}") boolean testingPermissions) {
+    public PoolService(PoolRepository repository, QuestionModeration moderation, QuestionModerator moderator) {
         this.repository = repository;
         this.moderation = moderation;
         this.moderator = moderator;
-        this.testingPermissions = testingPermissions;
     }
     public User identify(String identity) {
         if (identity == null || identity.isBlank()) throw new ApiException(UNAUTHORIZED, "Missing signed-in identity.");
@@ -27,16 +23,13 @@ public class PoolService {
         return repository.user(identity.trim());
     }
     public List<Lecture> lectures(User user) {
-        return repository.lectures(user).stream().map(lecture -> testingPermissions
-            ? new Lecture(lecture.id(), lecture.title(), lecture.lectureTime(), true, lecture.course(), lecture.startedAt(), lecture.endedAt(), lecture.questionsPaused()) : lecture).toList();
+        return repository.lectures(user);
     }
     public Lecture lecture(User user, long id) {
-        return lectures(user).stream().filter(lecture -> lecture.id().equals(Long.toString(id)))
-            .findFirst().orElseThrow(() -> new ApiException(NOT_FOUND, "Lecture not found."));
+        return repository.lecture(user, id);
     }
     @Transactional
     public Lecture createLecture(User user, NewLecture request) {
-        requireProfessor(user);
         if (request == null || request.lectureTime() == null) throw new ApiException(BAD_REQUEST, "Lecture time is required.");
         var title = text(request.title(), 200, "Lecture title");
         var course = request.course() == null || request.course().isBlank() ? "" : text(request.course(), 200, "Course");
@@ -45,8 +38,6 @@ public class PoolService {
     }
     @Transactional
     public SharedSession join(User user, JoinRequest request) {
-        if (!testingPermissions && !user.role().equals("student"))
-            throw new ApiException(FORBIDDEN, "Only students may join lectures.");
         var code = request == null ? null : request.code();
         if (code == null || !code.matches("[1-9][0-9]{0,18}"))
             throw new ApiException(BAD_REQUEST, "Enter a valid numeric lecture ID.");
@@ -57,6 +48,7 @@ public class PoolService {
         if (access.session().startedAt() == null || access.session().endedAt() != null)
             throw new ApiException(NOT_FOUND, "This lecture ID is invalid or the lecture has ended.");
         repository.joinSession(user.id(), id);
+        repository.recordVisit(user.id(), id);
         return repository.joinedSession(user.id());
     }
     public JoinedSession joined(User user) {
@@ -65,6 +57,19 @@ public class PoolService {
     @Transactional
     public void leave(User user) {
         repository.leaveSession(user.id());
+    }
+    public List<Lecture> history(User user) {
+        return repository.history(user);
+    }
+    @Transactional
+    public Lecture visit(User user, long id) {
+        var lecture = repository.lecture(user, id);
+        repository.recordVisit(user.id(), id);
+        return lecture;
+    }
+    @Transactional
+    public void forget(User user, long id) {
+        repository.forgetVisit(user.id(), id);
     }
     public List<Question> questions(User user, long lecture) {
         repository.lecture(lecture);
@@ -76,7 +81,6 @@ public class PoolService {
     }
     @Transactional(noRollbackFor = ModerationRejectedException.class)
     public Question submit(User user, long lecture, NewQuestion request) {
-        if (!testingPermissions && !user.role().equals("student")) throw new ApiException(FORBIDDEN, "Only students may submit questions.");
         LectureSession.requireOpen(repository.lockLecture(lecture).session());
         var text = text(request == null ? null : request.text(), 200, "Question");
         boolean blacklisted = moderation.blocks(text);
@@ -87,21 +91,23 @@ public class PoolService {
                 repository.recordModerationWarning(lecture, user.id(), reason));
         }
         var id = repository.createQuestion(lecture, user.id(), text);
+        repository.recordVisit(user.id(), lecture);
         return repository.question(lecture, id, user.id());
     }
     @Transactional
     public Question vote(User user, long id, Vote request) {
-        if (!testingPermissions && !user.role().equals("student")) throw new ApiException(FORBIDDEN, "Only students may vote.");
         if (request == null || request.voted() == null) throw new ApiException(BAD_REQUEST, "Expected a voted boolean.");
         var question = repository.lockQuestion(id);
         if (question.authorId() == user.id()) throw new ApiException(FORBIDDEN, "You are not allowed to upvote your own question");
         repository.vote(id, user.id(), request.voted());
+        repository.recordVisit(user.id(), question.lectureId());
         return repository.question(question.lectureId(), id, user.id());
     }
     @Transactional
     public void report(User user, long id) {
-        repository.lockQuestion(id);
+        var question = repository.lockQuestion(id);
         repository.report(id, user.id());
+        repository.recordVisit(user.id(), question.lectureId());
     }
     public List<ProfessorQuestion> professorQuestions(User user, long lecture) {
         requireManage(user, lecture);
@@ -109,7 +115,6 @@ public class PoolService {
     }
     @Transactional
     public ProfessorQuestion status(User user, long id, Status request) {
-        requireProfessor(user);
         if (request == null || request.status() == null || !List.of("open", "selected", "answered").contains(request.status()))
             throw new ApiException(BAD_REQUEST, "Status must be open, selected, or answered.");
         var question = repository.lockQuestion(id);
@@ -125,7 +130,6 @@ public class PoolService {
     }
     @Transactional
     public Lecture session(User user, long id, SessionAction request) {
-        requireProfessor(user);
         var access = repository.lockLecture(id);
         requireManage(user, id);
         var next = LectureSession.transition(access.session(), request == null ? null : request.action(), java.time.OffsetDateTime.now(java.time.ZoneOffset.UTC));
@@ -134,12 +138,10 @@ public class PoolService {
         return lecture(user, id);
     }
     public Summary summary(User user) {
-        requireProfessor(user);
-        return repository.summary(user, testingPermissions || user.role().equals("admin"));
+        return repository.summary(user);
     }
     @Transactional(readOnly = true)
     public List<ArchivedLecture> archive(User user) {
-        requireProfessor(user);
         return lectures(user).stream().filter(l -> l.canManage() && l.endedAt() != null)
             .map(l -> new ArchivedLecture(l, repository.professorQuestions(Long.parseLong(l.id()), user.id()))).toList();
     }
@@ -153,13 +155,9 @@ public class PoolService {
         return new ClearedQuestions(repository.clearOpen(lecture, request.questionIds().stream().distinct().sorted().toList()));
     }
     private void requireManage(User user, long lecture) {
-        requireProfessor(user);
         var access = repository.lecture(lecture);
-        if (!testingPermissions && !user.role().equals("admin") && !Long.valueOf(user.id()).equals(access.ownerId()))
+        if (!Long.valueOf(user.id()).equals(access.ownerId()))
             throw new ApiException(FORBIDDEN, "You do not manage this lecture.");
-    }
-    private void requireProfessor(User user) {
-        if (!testingPermissions && !List.of("professor", "admin").contains(user.role())) throw new ApiException(FORBIDDEN, "Professor permission is required.");
     }
     private static String text(String value, int max, String label) {
         if (value == null || value.isBlank() || value.trim().length() > max)

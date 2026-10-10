@@ -51,7 +51,6 @@ services:
       DATABASE_USER: postgres
       DATABASE_PASSWORD: $candidate_password
       DATABASE_BASELINE: "false"
-      APP_TESTING_PERMISSIONS: "true"
     depends_on:
       candidate-db:
         condition: service_healthy
