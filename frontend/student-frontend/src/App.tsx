@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type MouseEvent } from 'react'
 import { flushSync } from 'react-dom'
 import { QuestionCard } from './components/QuestionCard'
-import { PanelIcon, ProfileIcon, SendIcon } from './components/Icons'
+import { GearIcon, PanelIcon, ProfileIcon, SendIcon } from './components/Icons'
 import { ViewSwitchButton } from './components/ViewSwitchButton'
 import { animateScrollTo, prefersReducedMotion } from './lib/motion'
 import {
@@ -20,17 +20,13 @@ const examples = [
   'Where does this step in the proof come from?',
 ]
 
-type Page = 'questions' | 'profile' | 'settings'
-
-const navigation: { page: Page; label: string; href: string }[] = [
-  { page: 'questions', label: 'Questions', href: '/' },
-  { page: 'profile', label: 'Profile', href: '/profile' },
-  { page: 'settings', label: 'Settings', href: '/settings' },
-]
+type Page = 'questions' | 'settings'
 
 function currentPage(): Page {
-  if (window.location.pathname === '/profile') return 'profile'
   if (window.location.pathname === '/settings') return 'settings'
+  if (window.location.pathname === '/profile') {
+    window.history.replaceState(null, '', '/')
+  }
   return 'questions'
 }
 
@@ -71,6 +67,10 @@ export default function App() {
     window.clearTimeout(toastTimer.current)
     setToast(message)
     toastTimer.current = window.setTimeout(() => setToast(''), 3500)
+  }
+
+  function handleLogout() {
+    // TODO(auth): Replace this no-op with the real logout flow when authentication is added.
   }
 
   function navigate(nextPage: Page) {
@@ -121,7 +121,7 @@ export default function App() {
   }, [sidebarOpen])
 
   useEffect(() => {
-    document.title = `AskPool — ${page === 'questions' ? 'Student demo' : page === 'profile' ? 'Profile' : 'Settings'}`
+    document.title = `AskPool — ${page === 'questions' ? 'Student demo' : 'Settings'}`
   }, [page])
 
   useEffect(() => {
@@ -342,16 +342,20 @@ export default function App() {
     <>
       <button
         type="button"
-        className="sidebar-trigger"
-        aria-label={sidebarOpen ? 'Close sidebar' : 'Open sidebar'}
+        className="sidebar-trigger sidebar-trigger--site"
+        aria-label="Open sidebar"
         aria-expanded={sidebarOpen}
-        onClick={() => setSidebarOpen((open) => !open)}
+        aria-hidden={sidebarOpen}
+        tabIndex={sidebarOpen ? -1 : 0}
+        onClick={() => setSidebarOpen(true)}
       >
         <PanelIcon width="22" height="22" />
       </button>
       <a
-        className="brand-mark"
+        className="brand-mark brand-mark--site"
         href="/"
+        aria-hidden={sidebarOpen}
+        tabIndex={sidebarOpen ? -1 : 0}
         onClick={(event) => handleNavigation(event, 'questions')}
       >
         ASKPOOL
@@ -365,26 +369,59 @@ export default function App() {
         className={`sidebar ${sidebarOpen ? 'sidebar--open' : ''}`}
         aria-hidden={!sidebarOpen}
       >
-        <div className="sidebar__identity">
-          <span className="sidebar__avatar">
-            <ProfileIcon width="25" height="25" />
-          </span>
-          <span className="sidebar__name">Student</span>
+        <div className="sidebar__header">
+          <button
+            type="button"
+            className="sidebar-trigger sidebar-trigger--inside"
+            aria-label="Close sidebar"
+            aria-expanded={sidebarOpen}
+            onClick={() => setSidebarOpen(false)}
+          >
+            <PanelIcon width="22" height="22" />
+          </button>
+          <a
+            className="brand-mark brand-mark--inside"
+            href="/"
+            onClick={(event) => handleNavigation(event, 'questions')}
+          >
+            ASKPOOL
+          </a>
         </div>
-        <div className="sidebar__divider" />
         <nav className="sidebar__nav" aria-label="Main navigation">
-          {navigation.map((item) => (
-            <a
-              key={item.page}
-              href={item.href}
-              className={`sidebar__link ${page === item.page ? 'sidebar__link--active' : ''}`}
-              aria-current={page === item.page ? 'page' : undefined}
-              onClick={(event) => handleNavigation(event, item.page)}
-            >
-              {item.label}
-            </a>
-          ))}
+          <a
+            href="/"
+            className={`sidebar__link ${page === 'questions' ? 'sidebar__link--active' : ''}`}
+            aria-current={page === 'questions' ? 'page' : undefined}
+            onClick={(event) => handleNavigation(event, 'questions')}
+          >
+            Current Lecture
+          </a>
         </nav>
+        <div className="sidebar__account">
+          <div className="sidebar__divider" />
+          <div className="sidebar__profile">
+            <span className="sidebar__avatar">
+              <ProfileIcon width="23" height="23" />
+            </span>
+            <span className="sidebar__name">Student</span>
+            <a
+              className={`sidebar__settings ${page === 'settings' ? 'sidebar__settings--active' : ''}`}
+              href="/settings"
+              aria-label="Settings"
+              aria-current={page === 'settings' ? 'page' : undefined}
+              onClick={(event) => handleNavigation(event, 'settings')}
+            >
+              <GearIcon width="23" height="23" />
+            </a>
+          </div>
+          <button
+            type="button"
+            className="sidebar__logout"
+            onClick={handleLogout}
+          >
+            Log out
+          </button>
+        </div>
       </aside>
 
       {page === 'questions' ? (
@@ -489,16 +526,10 @@ export default function App() {
       ) : (
         <main className="placeholder-page">
           <section className="placeholder-page__content page-column">
-            <h1>{page === 'profile' ? 'Profile' : 'Settings'}</h1>
+            <h1>Settings</h1>
             <div className="placeholder-page__card">
-              <h2>
-                {page === 'profile' ? 'Profile settings' : 'Settings page'}
-              </h2>
-              <p>
-                {page === 'profile'
-                  ? 'This is a placeholder for your profile settings.'
-                  : 'This is a placeholder for your settings.'}
-              </p>
+              <h2>Settings page</h2>
+              <p>This is a placeholder for your settings.</p>
             </div>
           </section>
         </main>

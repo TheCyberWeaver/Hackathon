@@ -24,7 +24,7 @@ The API is isolated in `src/lib/studentApi.ts` for later replacement. This demo 
 
 ## Pages and sidebar
 
-The sidebar is shared by the questions page (`/`), profile placeholder (`/profile`), and settings placeholder (`/settings`). Use the Questions, Profile, and Settings links to move between them; the ASKPOOL wordmark also returns to Questions. Browser Back and Forward work with these routes. The Student profile row and both secondary pages are visual placeholders for now.
+The sidebar is shared by the Current Lecture page (`/`) and the Settings placeholder (`/settings`). Its Current Lecture link and ASKPOOL wordmark return to the questions page; the gear in the bottom Student card opens Settings. Browser Back and Forward work with these routes. The profile page has been removed; old `/profile` links return to `/`. The header controls are duplicated so the drawer's own button and wordmark stay attached to it as it opens. The Log out button currently does nothing; `handleLogout` in `src/App.tsx` is the insertion point for authentication later.
 
 ## Send interaction
 
