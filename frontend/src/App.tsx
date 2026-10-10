@@ -12,7 +12,6 @@ export type IdentityState =
 
 export default function App() {
   const [identity, setIdentity] = useState<IdentityState>({ status: 'loading' })
-  const [attempt, setAttempt] = useState(0)
 
   useEffect(() => {
     const controller = new AbortController()
@@ -28,11 +27,29 @@ export default function App() {
         })
       })
     return () => controller.abort()
-  }, [attempt])
+  }, [])
 
-  function retry() {
+  async function enterSpace(space: 'student' | 'professor') {
+    if (identity.status === 'signed-out') {
+      window.location.assign(`https://08.hackathon.ethz.ch/${space}`)
+      return
+    }
+    if (identity.status === 'ready') {
+      window.location.assign(`/${space}`)
+      return
+    }
     setIdentity({ status: 'loading' })
-    setAttempt((value) => value + 1)
+    try {
+      const user = await getCurrentUser()
+      setIdentity({ status: 'ready', user })
+      window.location.assign(`/${space}`)
+    } catch (error) {
+      if (error instanceof IdentityError && error.status === 401) {
+        window.location.assign(`https://08.hackathon.ethz.ch/${space}`)
+      } else {
+        setIdentity({ status: 'error' })
+      }
+    }
   }
 
   const path = window.location.pathname.replace(/\/+$/, '') || '/'
@@ -41,5 +58,5 @@ export default function App() {
     path === '/student' ? 'student' : path === '/professor' ? 'professor' : null
   if (space && identity.status === 'ready')
     return <DashboardEntry space={space} user={identity.user} />
-  return <EntryPage identity={identity} onRetry={retry} />
+  return <EntryPage identity={identity} onEnter={enterSpace} />
 }

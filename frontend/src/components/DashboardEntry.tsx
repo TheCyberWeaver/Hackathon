@@ -11,7 +11,7 @@ export default function DashboardEntry({
   user: CurrentUser
 }) {
   return (
-    <div className="entry-page">
+    <div className="handoff-page">
       <header className="site-header page-width">
         <Brand />
         <a className="back-link" href="/">

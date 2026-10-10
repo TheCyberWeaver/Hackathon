@@ -1,6 +1,7 @@
 # AskPool entry page integration
 
-The entry page is `/`. It reads the signed-in user's identity from `GET /api/me`
+The entry page is `/`. Its visible UI is only the AskPool name and two buttons:
+Student and Professor. It reads the signed-in user's identity from `GET /api/me`
 and provides two navigation destinations: `/student` and `/professor`.
 
 ## Dashboard handoff
@@ -27,8 +28,11 @@ Successful responses have `Cache-Control: no-store` and this shape:
 {"id":"alex@ethz.ch","name":"Alex Morgan"}
 ```
 
-The frontend handles loading, missing identity, request failure with retry,
-and authenticated states. React receives identity from `/api/me`; it does not
+The frontend disables entry buttons while checking identity. Without an identity,
+either button opens the matching path through the managed login portal. After a
+connection failure, an entry button retries the profile request before navigating.
+Status updates are provided to screen readers without adding visible UI.
+React receives identity from `/api/me`; it does not
 create or send the proxy identity headers. Keep production behind the managed
 address with login enabled and the Java backend port unpublished.
 
@@ -40,7 +44,7 @@ in separate terminals. Use JDK 21 with a valid `JAVA_HOME`.
 
 The Vite development proxy supplies `alex@ethz.ch` / `Alex Morgan` by default.
 This simulation is development-only; it is absent from production builds and
-`vite preview`. The entry page marks development as `Local demo`.
+`vite preview`. The profile appears on the dashboard handoff pages.
 
 To change the preview identity, put these variables in `frontend/.env.local`
 and restart Vite:

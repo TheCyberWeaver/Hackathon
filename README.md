@@ -64,7 +64,7 @@ Dev: start both
 
 This starts the frontend and backend in separate terminals. Wait for Java to finish starting; the first run downloads Gradle and dependencies.
 
-Open **http://localhost:5173** to see the AskPool entry page. Local development uses a sample identity (Alex Morgan) through the Vite proxy. Choose **I'm a student** or **I'm a professor** to open the dashboard handoff page.
+Open **http://localhost:5173** to see the AskPool name and **Student** / **Professor** entry buttons. Local development uses a sample identity (Alex Morgan) through the Vite proxy. Choose either button to open its dashboard handoff page.
 
 Production uses the managed proxy's `X-User-Id` and `X-User-Name` headers via `GET /api/me`. Dashboard integration and local identity settings are documented in [docs/Entry_Page.md](docs/Entry_Page.md).
 
