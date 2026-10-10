@@ -1,8 +1,6 @@
 package com.example.backend.pool;
 
 import java.util.List;
-import java.util.Locale;
-import java.security.SecureRandom;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -12,8 +10,6 @@ import static org.springframework.http.HttpStatus.*;
 
 @Service
 public class PoolService {
-    private static final String CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-    private static final SecureRandom CODE_RANDOM = new SecureRandom();
     private final PoolRepository repository;
     private final boolean testingPermissions;
     public PoolService(PoolRepository repository,
@@ -40,38 +36,8 @@ public class PoolService {
         if (request == null || request.lectureTime() == null) throw new ApiException(BAD_REQUEST, "Lecture time is required.");
         var title = text(request.title(), 200, "Lecture title");
         var course = request.course() == null || request.course().isBlank() ? "" : text(request.course(), 200, "Course");
-        var id = repository.createLecture(title, request.lectureTime(), user.id(), course, newJoinCode());
+        var id = repository.createLecture(title, request.lectureTime(), user.id(), course);
         return lecture(user, id);
-    }
-    public SharedSession invite(User user, long lecture) {
-        requireManage(user, lecture);
-        var session = repository.activeSession(lecture);
-        if (session == null) throw new ApiException(CONFLICT, "Start this lecture before sharing its code.");
-        return session;
-    }
-    @Transactional
-    public SharedSession join(User user, JoinRequest request) {
-        if (!testingPermissions && !user.role().equals("student"))
-            throw new ApiException(FORBIDDEN, "Only students may join lectures.");
-        var code = request == null || request.code() == null ? "" :
-            request.code().toUpperCase(Locale.ROOT).replaceAll("[\\s-]", "");
-        if (!code.matches("[A-Z0-9]{8,32}")) throw new ApiException(BAD_REQUEST, "Enter a valid lecture code.");
-        var session = repository.activeSessionByCode(code);
-        if (session == null) throw new ApiException(NOT_FOUND, "This code is invalid or the lecture has ended.");
-        repository.joinSession(user.id(), Long.parseLong(session.id()));
-        return session;
-    }
-    public JoinedSession joined(User user) {
-        return new JoinedSession(repository.joinedSession(user.id()));
-    }
-    @Transactional
-    public void leave(User user) {
-        repository.leaveSession(user.id());
-    }
-    private static String newJoinCode() {
-        var code = new StringBuilder(8);
-        for (int i = 0; i < 8; i++) code.append(CODE_ALPHABET.charAt(CODE_RANDOM.nextInt(CODE_ALPHABET.length())));
-        return code.toString();
     }
     public List<Question> questions(User user, long lecture) {
         repository.lecture(lecture);

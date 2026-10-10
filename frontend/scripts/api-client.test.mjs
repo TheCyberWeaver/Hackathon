@@ -42,54 +42,114 @@ async function clients(baseUrl = '') {
   }
 }
 
-test('QR join clients use the Java API and accept typed or linked codes', async (t) => {
+test('QR join uses active Java lecture IDs and remembers the selection in this browser', async (t) => {
   const api = await clients()
   const requests = []
+  const saved = new Map()
+  const storageDescriptor = Object.getOwnPropertyDescriptor(
+    globalThis,
+    'localStorage',
+  )
+  Object.defineProperty(globalThis, 'localStorage', {
+    configurable: true,
+    value: {
+      getItem: (key) => saved.get(key) ?? null,
+      setItem: (key, value) => saved.set(key, value),
+      removeItem: (key) => saved.delete(key),
+    },
+  })
+  t.after(() => {
+    if (storageDescriptor)
+      Object.defineProperty(globalThis, 'localStorage', storageDescriptor)
+    else delete globalThis.localStorage
+  })
   t.mock.method(globalThis, 'fetch', async (url, init) => {
     requests.push([init.method ?? 'GET', url, init.body ?? null, init])
-    if (init.method === 'DELETE') return new Response(null, { status: 204 })
-    if (url === '/api/sessions/mine')
-      return new Response(JSON.stringify({ session: null }), { status: 200 })
+    const lecture = {
+      id: '42',
+      title: 'Algorithms',
+      course: 'Algorithms',
+      startedAt: '2026-10-10T10:00:00Z',
+      endedAt: null,
+      canManage: true,
+    }
     return new Response(
-      JSON.stringify({
-        id: '42',
-        code: 'ABCD-2345',
-        course: 'Algorithms',
-        startedAt: '2026-10-10T10:00:00Z',
-      }),
+      JSON.stringify(url === '/api/lectures' ? [lecture] : lecture),
       { status: 200 },
     )
   })
-  assert.equal(api.sessions.parseJoinCode('abcd2345'), 'ABCD-2345')
+  assert.equal(api.sessions.parseJoinCode('42'), '42')
   assert.equal(
-    api.sessions.parseJoinCode(
-      'https://example.org/student/join?code=ABCD-2345',
-    ),
-    'ABCD-2345',
+    api.sessions.parseJoinCode('https://example.org/student/join?code=42'),
+    '42',
   )
   assert.equal(
-    api.sessions.parseJoinCode('https://example.org/other?code=ABCD-2345'),
+    api.sessions.parseJoinCode('https://example.org/other?code=42'),
     null,
   )
   assert.equal(api.sessions.parseJoinCode('ABC!-2345'), null)
-  assert.equal((await api.sessions.getSessionInvite('42')).code, 'ABCD-2345')
-  assert.equal(await api.sessions.getJoinedSession(), null)
-  assert.equal((await api.sessions.joinSession('ABCD-2345')).id, '42')
-  await api.sessions.leaveJoinedSession()
+  assert.equal((await api.sessions.getSessionInvite('42')).code, '42')
+  assert.equal(await api.sessions.getJoinedSession('student-1'), null)
+  assert.equal((await api.sessions.joinSession('42', 'student-1')).id, '42')
+  assert.equal((await api.sessions.getJoinedSession('student-1')).id, '42')
+  api.sessions.leaveJoinedSession('student-1')
+  assert.equal(await api.sessions.getJoinedSession('student-1'), null)
+  assert.equal(saved.size, 0)
   assert.deepEqual(
     requests.map(([method, url]) => [method, url]),
     [
-      ['GET', '/api/lectures/42/invite'],
-      ['GET', '/api/sessions/mine'],
-      ['POST', '/api/sessions/join'],
-      ['DELETE', '/api/sessions/mine'],
+      ['GET', '/api/lectures/42'],
+      ['GET', '/api/lectures'],
+      ['GET', '/api/lectures'],
     ],
   )
-  assert.deepEqual(JSON.parse(requests[2][2]), { code: 'ABCD-2345' })
   for (const [, , , init] of requests) {
     assert.equal(init.credentials, 'same-origin')
     assert.equal(new Headers(init.headers).has('X-User-Id'), false)
   }
+})
+
+test('ended lectures cannot be joined and clear a previously selected lecture', async (t) => {
+  const api = await clients()
+  const saved = new Map([['askpool:joined-lecture:student-1', '42']])
+  const storageDescriptor = Object.getOwnPropertyDescriptor(
+    globalThis,
+    'localStorage',
+  )
+  Object.defineProperty(globalThis, 'localStorage', {
+    configurable: true,
+    value: {
+      getItem: (key) => saved.get(key) ?? null,
+      setItem: (key, value) => saved.set(key, value),
+      removeItem: (key) => saved.delete(key),
+    },
+  })
+  t.after(() => {
+    if (storageDescriptor)
+      Object.defineProperty(globalThis, 'localStorage', storageDescriptor)
+    else delete globalThis.localStorage
+  })
+  t.mock.method(
+    globalThis,
+    'fetch',
+    async () =>
+      new Response(
+        JSON.stringify([
+          {
+            id: '42',
+            title: 'Algorithms',
+            course: 'Algorithms',
+            startedAt: '2026-10-10T10:00:00Z',
+            endedAt: '2026-10-10T11:00:00Z',
+          },
+        ]),
+        { status: 200 },
+      ),
+  )
+  assert.equal(await api.sessions.getJoinedSession('student-1'), null)
+  assert.equal(saved.size, 0)
+  await assert.rejects(api.sessions.joinSession('42', 'student-1'), /ended/)
+  assert.equal(api.sessions.parseJoinCode('042'), null)
 })
 
 test('Java API clients use lecture routes and proxy identity without browser identity', async (t) => {

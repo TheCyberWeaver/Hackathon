@@ -140,7 +140,7 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
     setJoinBusy(true)
     setJoinError('')
     try {
-      const session = await joinSession(code)
+      const session = await joinSession(code, user.id)
       setJoinedSession(session)
       setLectureId(session.id)
       setQuestions([])
@@ -159,7 +159,7 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
     if (leaveBusy) return
     setLeaveBusy(true)
     try {
-      await leaveJoinedSession()
+      leaveJoinedSession(user.id)
       setJoinedSession(null)
       setLectureId('')
       setQuestions([])
@@ -226,7 +226,9 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
   useEffect(() => {
     let active = true
     const code = new URLSearchParams(window.location.search).get('code')
-    const sessionRequest = code ? joinSession(code) : getJoinedSession()
+    const sessionRequest = code
+      ? joinSession(code, user.id)
+      : getJoinedSession(user.id)
     sessionRequest
       .then((session) => {
         if (!active) return
@@ -254,7 +256,7 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
     if (!joinedSessionId) return
     let active = true
     const timer = window.setInterval(() => {
-      getJoinedSession()
+      getJoinedSession(user.id)
         .then((session) => {
           if (!active) return
           if (session?.id === joinedSessionId) {
@@ -275,7 +277,7 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
       active = false
       window.clearInterval(timer)
     }
-  }, [joinedSessionId])
+  }, [joinedSessionId, user.id])
 
   useEffect(() => {
     if (!lectureId) return

@@ -1,10 +1,12 @@
 # Java + PostgreSQL deployment
 
-Caddy serves the frontend and proxies all `/api/*` to Java, including lecture join codes and memberships. Java joins the external `askpool_shared` network. The managed address https://08.hackathon.ethz.ch provides TLS/login. Java and PostgreSQL must have no public ports. The Node demo API is no longer deployed; its old data volume is neither migrated nor removed.
+Caddy serves the frontend and proxies all `/api/*` to Java. The QR/code UI uses existing lecture IDs and stores the student's selection in the browser; Java has no join-code or membership endpoints. Java joins the external `askpool_shared` network. The managed address https://08.hackathon.ethz.ch provides TLS/login. Java and PostgreSQL must have no public ports. The Node demo API is no longer deployed; its old data volume is neither migrated nor removed.
 
 ## Adopt the supplied VM schema
 
-Back up the database. V1 matches the supplied schema; later migrations add ownership, moderation, lecture sessions, and QR join codes/memberships. Do not run V1 again on the existing database.
+Back up the database. V1 matches the supplied schema; later migrations add ownership, moderation, and lecture sessions. Do not run V1 again on the existing database.
+
+If the previous merge's V6 join-code migration was already applied to a database, this restored backend will not validate that migration history. Check Flyway history before deploying this branch and plan a database-specific repair; do not blindly remove applied schema changes.
 
 Verify the three tables match V1 and are owned by `askpool_app`. Changing the database owner does not transfer existing table ownership. If initial SQL ran as postgres, run this from the database Compose directory:
 
@@ -61,7 +63,7 @@ WHERE id = 123;
 
 ## Verification and rollout
 
-Java tests start an isolated PostgreSQL instance and test empty databases, V1 adoption, permissions, privacy, voting, lecture join/leave, submission races, and moderation without contacting the VM. Verify `/api/hello`, unauthenticated 401 for `/api/lectures`, managed login, professor creation, student joining/submission, voting/reports, and answer synchronization.
+Java tests start an isolated PostgreSQL instance and test empty databases, V1 adoption, permissions, privacy, voting, lecture lifecycle, submission races, and moderation without contacting the VM. Verify `/api/hello`, unauthenticated 401 for `/api/lectures`, managed login, professor creation, student lecture selection/submission, voting/reports, and answer synchronization.
 
 The ignored local `deploy-local.ps1` builds/lints the frontend, runs `test:api`,
 tests/builds Java, and packages only Java and frontend assets. It prepares the

@@ -64,31 +64,6 @@ class LectureFeaturesTests extends PostgresTestSupport {
         send("GET", "/professor/lectures/archive", student, null, 403);
     }
 
-    @Test void joinCodesConnectStudentsAndExpireWhenLectureEnds() throws Exception {
-        String lecture = create(owner);
-        String invitePath = "/lectures/" + lecture + "/invite";
-        send("GET", invitePath, owner, null, 409);
-        send("GET", invitePath, other, null, 403);
-        session(lecture, owner, "start", 200);
-        var invite = tree(send("GET", invitePath, owner, null, 200));
-        String code = invite.get("code").asText();
-        assertEquals(lecture, invite.get("id").asText());
-        assertTrue(code.matches("[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}"));
-        send("POST", "/sessions/join", null, "{\"code\":\"" + code + "\"}", 401);
-        send("POST", "/sessions/join", student, "{\"code\":\"ZZZZ-9999\"}", 404);
-        var joined = tree(send("POST", "/sessions/join", student,
-            "{\"code\":\"" + code.toLowerCase().replace("-", "") + "\"}", 200));
-        assertEquals(lecture, joined.get("id").asText());
-        assertEquals(code, tree(send("GET", "/sessions/mine", student, null, 200)).get("session").get("code").asText());
-        send("DELETE", "/sessions/mine", student, null, 204);
-        assertTrue(tree(send("GET", "/sessions/mine", student, null, 200)).get("session").isNull());
-        send("POST", "/sessions/join", student, "{\"code\":\"" + code + "\"}", 200);
-        session(lecture, owner, "end", 200);
-        assertTrue(tree(send("GET", "/sessions/mine", student, null, 200)).get("session").isNull());
-        send("POST", "/sessions/join", student, "{\"code\":\"" + code + "\"}", 404);
-        send("GET", invitePath, owner, null, 409);
-    }
-
     @Test void writtenAnswersAndProfileCountsUseSavedNonDeletedQuestions() throws Exception {
         String lecture = create(owner);
         session(lecture, owner, "start", 200);

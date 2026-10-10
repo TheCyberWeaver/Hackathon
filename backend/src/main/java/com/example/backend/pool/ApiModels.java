@@ -9,9 +9,6 @@ public final class ApiModels {
                           String course, OffsetDateTime startedAt, OffsetDateTime endedAt, boolean questionsPaused) {}
     public record NewLecture(String title, OffsetDateTime lectureTime, String course) {}
     public record SessionAction(String action) {}
-    public record JoinRequest(String code) {}
-    public record SharedSession(String id, String code, String course, OffsetDateTime startedAt) {}
-    public record JoinedSession(SharedSession session) {}
     public record Summary(long lectureCount, long unansweredCount, long answeredCount) {}
     public record ArchivedLecture(Lecture lecture, java.util.List<ProfessorQuestion> questions) {}
     public record NewQuestion(String text) {}

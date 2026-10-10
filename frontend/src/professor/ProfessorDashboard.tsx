@@ -14,12 +14,12 @@ import {
 } from './professorApi'
 import {
   changeLectureSession,
+  createLecture,
   initialLectureId,
   rememberLecture,
   watchLectures,
   type Lecture,
 } from '../lib/poolApi'
-import LecturePicker from '../components/LecturePicker'
 import type { CurrentUser } from '../lib/api'
 import { ThumbsUpIcon } from '../components/Icons'
 import JoinQrCode from '../components/JoinQrCode'
@@ -41,6 +41,8 @@ const professorRoutes: Record<ProfessorPage, string> = {
 }
 const courseSelectionRoute = '/professor/start'
 const sessionShareRoute = '/professor/session'
+const otherCourseOption = '__other__'
+const demoCourses = ['Applied Statistics', 'Machine Learning Foundations']
 
 function pageFromPath(pathname: string): ProfessorPage {
   const path = pathname.replace(/\/$/, '')
@@ -139,6 +141,110 @@ function QuestionStatusSummary({
   )
 }
 
+function CourseChooser({
+  courses,
+  busy,
+  error,
+  onChoose,
+  onCancel,
+}: {
+  courses: string[]
+  busy: boolean
+  error: string
+  onChoose: (course: string) => void
+  onCancel: () => void
+}) {
+  const [selectedCourse, setSelectedCourse] = useState('')
+  const [otherCourse, setOtherCourse] = useState('')
+  const course =
+    selectedCourse === otherCourseOption ? otherCourse.trim() : selectedCourse
+
+  return (
+    <form
+      className="mt-6 text-left"
+      onSubmit={(event) => {
+        event.preventDefault()
+        if (course && !busy) onChoose(course)
+      }}
+    >
+      <label
+        htmlFor="lecture-course"
+        className="block text-sm font-semibold text-slate-800"
+      >
+        Course
+      </label>
+      <p
+        id="lecture-course-help"
+        className="mt-1 text-xs leading-5 text-slate-500"
+      >
+        Choose a course or enter a different course name.
+      </p>
+      <select
+        id="lecture-course"
+        aria-describedby="lecture-course-help"
+        autoFocus
+        required
+        disabled={busy}
+        value={selectedCourse}
+        onChange={(event) => setSelectedCourse(event.target.value)}
+        className="mt-3 w-full cursor-pointer rounded-lg border border-slate-300 bg-white px-3 py-3 text-sm text-slate-900 shadow-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+      >
+        <option value="">Select a course</option>
+        {courses.map((option) => (
+          <option key={option} value={option}>
+            {option}
+          </option>
+        ))}
+        <option value={otherCourseOption}>Another course…</option>
+      </select>
+      {selectedCourse === otherCourseOption && (
+        <div className="mt-4">
+          <label
+            htmlFor="other-course"
+            className="block text-sm font-semibold text-slate-800"
+          >
+            Course name
+          </label>
+          <input
+            id="other-course"
+            type="text"
+            autoFocus
+            required
+            disabled={busy}
+            maxLength={80}
+            value={otherCourse}
+            onChange={(event) => setOtherCourse(event.target.value)}
+            placeholder="e.g. Linear Algebra"
+            className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-3 text-sm text-slate-900 shadow-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+          />
+        </div>
+      )}
+      {error && (
+        <p role="alert" className="mt-4 text-sm font-medium text-red-700">
+          {error}
+        </p>
+      )}
+      <div className="mt-6 flex flex-wrap justify-end gap-3">
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={busy}
+          className="min-h-11 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+        >
+          Cancel
+        </button>
+        <button
+          type="submit"
+          disabled={!course || busy}
+          className="min-h-11 rounded-lg bg-emerald-600 px-5 py-2 text-sm font-semibold text-white hover:bg-emerald-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-600"
+        >
+          {busy ? 'Please wait…' : 'Start session'}
+        </button>
+      </div>
+    </form>
+  )
+}
+
 export default function ProfessorDashboard({ user }: { user: CurrentUser }) {
   const [lectures, setLectures] = useState<Lecture[]>([])
   const [lectureId, setLectureId] = useState(initialLectureId)
@@ -153,6 +259,12 @@ export default function ProfessorDashboard({ user }: { user: CurrentUser }) {
   const [busyId, setBusyId] = useState<string | null>(null)
   const [answerDrafts, setAnswerDrafts] = useState<Record<string, string>>({})
   const selectedLecture = lectures.find((lecture) => lecture.id === lectureId)
+  const courseOptions = [
+    ...new Set([
+      ...demoCourses,
+      ...lectures.map((lecture) => lecture.course).filter(Boolean),
+    ]),
+  ]
   const lectureStartedAt =
     selectedLecture?.startedAt && !selectedLecture.endedAt
       ? selectedLecture.startedAt
@@ -176,6 +288,7 @@ export default function ProfessorDashboard({ user }: { user: CurrentUser }) {
     () => window.location.pathname === sessionShareRoute,
   )
   const [invite, setInvite] = useState<SharedSession | null>(null)
+  const [sessionError, setSessionError] = useState('')
   const [sortMode, setSortMode] = useState<SortMode>('votes')
   const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set())
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null)
@@ -246,11 +359,14 @@ export default function ProfessorDashboard({ user }: { user: CurrentUser }) {
     let active = true
     getSessionInvite(lectureId)
       .then((session) => {
-        if (active) setInvite(session)
+        if (active) {
+          setInvite(session)
+          setSessionError('')
+        }
       })
       .catch((error: unknown) => {
         if (active)
-          setApiError(
+          setSessionError(
             error instanceof Error
               ? error.message
               : 'Could not load the join code.',
@@ -407,6 +523,7 @@ export default function ProfessorDashboard({ user }: { user: CurrentUser }) {
   }
 
   function openCourseSelectionPage() {
+    setSessionError('')
     window.history.pushState(null, '', courseSelectionRoute)
     setCourseSelectionPage(true)
     setSessionSharePage(false)
@@ -415,6 +532,7 @@ export default function ProfessorDashboard({ user }: { user: CurrentUser }) {
 
   function openSessionSharePage() {
     setInvite(null)
+    setSessionError('')
     window.history.pushState(null, '', sessionShareRoute)
     setCourseSelectionPage(false)
     setSessionSharePage(true)
@@ -422,6 +540,7 @@ export default function ProfessorDashboard({ user }: { user: CurrentUser }) {
   }
 
   function goToQuestions() {
+    setSessionError('')
     window.history.pushState(null, '', professorRoutes.questions)
     setCourseSelectionPage(false)
     setSessionSharePage(false)
@@ -476,12 +595,45 @@ export default function ProfessorDashboard({ user }: { user: CurrentUser }) {
     )
   }
 
-  async function startLecture() {
-    const started = await updateSession(
-      'start',
-      'Lecture started. Students can now submit questions.',
-    )
-    if (started) openSessionSharePage()
+  async function chooseCourse(course: string) {
+    if (mutationPending.current) return
+    mutationPending.current = true
+    mutationVersion.current++
+    setBusyId('session')
+    setSessionError('')
+    try {
+      const created = await createLecture(
+        course,
+        new Date().toISOString(),
+        course,
+      )
+      const started = await changeLectureSession(created.id, 'start')
+      setLectures((items) => [started, ...items])
+      setLectureId(started.id)
+      setQuestions([])
+      setExpandedIds(new Set())
+      setAnswerDrafts({})
+      openSessionSharePage()
+    } catch (error) {
+      setSessionError(
+        error instanceof Error
+          ? error.message
+          : 'Could not start this lecture.',
+      )
+    } finally {
+      mutationPending.current = false
+      mutationVersion.current++
+      setBusyId(null)
+    }
+  }
+
+  async function copyJoinDetail(value: string, label: string) {
+    try {
+      await navigator.clipboard.writeText(value)
+      setNotice(`${label} copied.`)
+    } catch {
+      setNotice('Could not copy automatically. Select the text and copy it.')
+    }
   }
 
   async function toggleQuestionIntake() {
@@ -643,62 +795,38 @@ export default function ProfessorDashboard({ user }: { user: CurrentUser }) {
             <button
               type="button"
               onClick={goToQuestions}
-              className="inline-flex min-h-10 items-center gap-2 rounded-lg px-2 text-sm font-semibold text-slate-600 hover:bg-white hover:text-slate-900"
+              disabled={busyId === 'session'}
+              className="inline-flex min-h-10 items-center gap-2 rounded-lg px-2 text-sm font-semibold text-slate-600 hover:bg-white hover:text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
             >
-              <span aria-hidden="true">←</span> go back
+              <span aria-hidden="true">←</span>
+              go back
             </button>
             <p className="mt-10 text-xs font-bold uppercase tracking-[0.14em] text-blue-700">
               New lecture session
             </p>
-            <h1 className="mt-3 text-3xl font-semibold tracking-tight text-slate-900">
+            <h1
+              ref={mainHeadingRef}
+              tabIndex={-1}
+              className="mt-3 text-3xl font-semibold tracking-tight text-slate-900 outline-none sm:text-4xl"
+            >
               Choose a course
             </h1>
-            <p className="mt-3 text-slate-600">
-              Select an existing lecture or create one, then start its question
-              pool.
+            <p className="mt-3 max-w-lg text-base leading-7 text-slate-600">
+              Choose which course this session belongs to. The question pool
+              opens after you start the session.
             </p>
-            <div className="mt-8 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-              <LecturePicker
-                lectures={lectures}
-                lectureId={lectureId}
-                disabled={busyId !== null}
-                onSelect={(id) => {
-                  setLectureId(id)
-                  setQuestions([])
-                  setExpandedIds(new Set())
-                  setAnswerDrafts({})
-                }}
-                onCreated={(lecture) => {
-                  setLectures((items) => [lecture, ...items])
-                  setLectureId(lecture.id)
-                  setQuestions([])
-                  setExpandedIds(new Set())
-                  setAnswerDrafts({})
-                }}
+            <section
+              aria-label="Course for new session"
+              className="mt-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_12px_32px_rgba(15,23,42,0.06)] sm:p-8"
+            >
+              <CourseChooser
+                courses={courseOptions}
+                busy={busyId === 'session'}
+                error={sessionError}
+                onChoose={chooseCourse}
+                onCancel={goToQuestions}
               />
-              <button
-                type="button"
-                onClick={() => void startLecture()}
-                disabled={
-                  !selectedLecture ||
-                  !!selectedLecture.startedAt ||
-                  busyId !== null
-                }
-                className="mt-5 min-h-12 rounded-xl bg-emerald-600 px-6 py-3 text-sm font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {busyId === 'session' ? 'Starting…' : 'Start selected lecture'}
-              </button>
-              {selectedLecture?.endedAt && (
-                <p className="mt-3 text-sm text-amber-800">
-                  This lecture has ended. Choose or create another.
-                </p>
-              )}
-              {selectedLecture?.startedAt && !selectedLecture.endedAt && (
-                <p className="mt-3 text-sm text-amber-800">
-                  This lecture is already running. Go back to its questions.
-                </p>
-              )}
-            </div>
+            </section>
           </div>
         </main>
       )}
@@ -707,55 +835,80 @@ export default function ProfessorDashboard({ user }: { user: CurrentUser }) {
         sessionSharePage &&
         lectureStartedAt !== null && (
           <main className="professor-page-enter min-h-[calc(100dvh-5rem)] bg-[#f7f8fc] px-5 pb-20 pt-10 sm:px-6 sm:pt-14">
-            <div className="mx-auto max-w-[640px] text-center">
+            <div className="mx-auto max-w-[760px]">
               <p className="text-xs font-bold uppercase tracking-[0.14em] text-blue-700">
-                Lecture ready
+                Session ready
               </p>
-              <h1 className="mt-3 text-3xl font-semibold tracking-tight text-slate-900">
-                Invite students
+              <h1
+                ref={mainHeadingRef}
+                tabIndex={-1}
+                className="mt-3 text-3xl font-semibold tracking-tight text-slate-900 outline-none sm:text-4xl"
+              >
+                Invite students to{' '}
+                {selectedLecture?.course || selectedLecture?.title}
               </h1>
-              <p className="mt-3 text-slate-600">
-                Share the code or QR link for{' '}
-                {selectedLecture?.course ||
-                  selectedLecture?.title ||
-                  'this lecture'}
-                .
+              <p className="mt-3 max-w-xl text-sm leading-6 text-slate-600">
+                Students can scan the QR code or enter the code after choosing
+                Student on the home page.
               </p>
-              <div className="mt-8 flex flex-col items-center rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+              <section className="mt-8 grid gap-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_12px_32px_rgba(15,23,42,0.06)] sm:grid-cols-[256px_1fr] sm:items-center sm:p-8">
                 {invite?.id === lectureId ? (
                   <>
-                    <JoinQrCode url={joinUrl(invite.code)} />
-                    <p className="mt-5 text-xs font-bold uppercase tracking-widest text-slate-500">
-                      Lecture code
-                    </p>
-                    <p className="mt-1 font-mono text-3xl font-bold tracking-[0.18em] text-slate-900">
-                      {invite.code}
-                    </p>
-                    <a
-                      className="mt-5 break-all text-sm text-blue-700 underline"
-                      href={joinUrl(invite.code)}
-                    >
-                      {joinUrl(invite.code)}
-                    </a>
+                    <div className="mx-auto w-full max-w-64 rounded-xl border border-slate-200 bg-white p-3">
+                      <JoinQrCode url={joinUrl(invite.code)} />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                        Join code
+                      </p>
+                      <code className="mt-2 block text-3xl font-bold tracking-[0.12em] text-slate-900 sm:text-4xl">
+                        {invite.code}
+                      </code>
+                      <button
+                        type="button"
+                        onClick={() => void copyJoinDetail(invite.code, 'Code')}
+                        className="mt-4 min-h-10 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+                      >
+                        Copy code
+                      </button>
+                      <p className="mt-7 text-xs font-bold uppercase tracking-wide text-slate-500">
+                        Join link
+                      </p>
+                      <p className="mt-2 break-all text-sm text-slate-700">
+                        {joinUrl(invite.code)}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          void copyJoinDetail(joinUrl(invite.code), 'Link')
+                        }
+                        className="mt-3 min-h-10 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+                      >
+                        Copy link
+                      </button>
+                    </div>
                   </>
                 ) : (
-                  <p role="status" className="py-20 text-slate-600">
-                    Loading the join code…
+                  <p
+                    role={sessionError ? 'alert' : 'status'}
+                    className="py-20 text-slate-600 sm:col-span-2"
+                  >
+                    {sessionError || 'Loading the join code…'}
                   </p>
                 )}
-              </div>
+              </section>
               {(window.location.hostname === 'localhost' ||
                 window.location.hostname === '127.0.0.1') && (
                 <p className="mt-4 text-sm text-amber-800">
-                  This local address only works on this computer. Open AskPool
-                  at a shared network or public address before showing the QR
-                  code to students on other devices.
+                  This local address only works on this computer. For students
+                  on other devices, open AskPool at a shared network or public
+                  address before showing the QR code.
                 </p>
               )}
               <button
                 type="button"
                 onClick={goToQuestions}
-                className="mt-8 min-h-12 rounded-xl bg-emerald-600 px-6 py-3 text-sm font-semibold text-white hover:bg-emerald-700"
+                className="mt-8 min-h-12 rounded-xl bg-emerald-600 px-6 py-3 text-sm font-semibold text-white hover:bg-emerald-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-700"
               >
                 Go to questions →
               </button>

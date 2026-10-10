@@ -109,7 +109,7 @@ export default function StudentJoinPage({
   function submit(value: string) {
     const parsed = parseJoinCode(value)
     if (!parsed) {
-      setLocalError('Enter the lecture code shown by your professor.')
+      setLocalError('Enter the numeric lecture ID shown by your professor.')
       return
     }
     setLocalError('')
@@ -139,22 +139,21 @@ export default function StudentJoinPage({
             <input
               id="student-join-code"
               type="text"
-              inputMode="text"
-              autoCapitalize="characters"
+              inputMode="numeric"
               autoComplete="off"
               spellCheck={false}
               maxLength={256}
               value={code}
               onChange={(event) => {
-                setCode(event.target.value.toUpperCase())
+                setCode(event.target.value)
                 setLocalError('')
               }}
-              placeholder="ABCD-2345"
+              placeholder="e.g. 42"
               disabled={checking || busy}
               aria-describedby="student-join-help"
             />
             <p id="student-join-help" className="student-join-help">
-              The dash is optional. Codes are not case-sensitive.
+              Enter the numeric lecture ID shown by your professor.
             </p>
             {(localError || error) && (
               <p role="alert" className="student-join-error">
