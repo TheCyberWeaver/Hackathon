@@ -1,6 +1,6 @@
 # Professor dashboard handoff
 
-The professor demo lives at `/professor`. This checkout uses Vite, React, TypeScript, and Tailwind CSS v4; it is not currently a Next.js app. `frontend/src/main.tsx` selects the professor page for that path and leaves the existing root page in place. Vite serves `/professor` directly during development and preview through its SPA fallback.
+The professor demo lives at `/professor`, with profile and settings views at `/professor/profile` and `/professor/settings`. This checkout uses Vite, React, TypeScript, and Tailwind CSS v4; it is not currently a Next.js app. `frontend/src/main.tsx` selects the professor area for those paths and leaves the existing root page in place. Vite serves them directly during development and preview through its SPA fallback.
 
 ## Files and data
 
@@ -13,7 +13,7 @@ The component copies the mock array on first render. Status changes and deletion
 
 Open and Answered are derived from current state, then sorted by votes descending, submission time ascending, and ID ascending. The selected tab stays selected after a status change. A question can be expanded independently to show its fictional author ID and a locally formatted submission time. Vote counts are display only.
 
-Deletion uses a native modal dialog. Cancel, Escape, or backdrop click preserves the question and returns focus to its Delete button. Confirmation removes the question and focuses the selected tab. The ASKPOOL button in the header opens a left navigation drawer with the Professor profile and inert Profile and Settings placeholders. The drawer closes with its button, Escape, or a backdrop click, then returns focus to the header button.
+Deletion uses a native modal dialog. Cancel, Escape, or backdrop click preserves the question and returns focus to its Delete button. Confirmation removes the question and focuses the selected tab. The ASKPOOL button in the header opens a left navigation drawer. Current Lecture is the top navigation item; the profile card and adjacent gear at the bottom open Profile and Settings. The drawer closes with its button, Escape, or a backdrop click, then returns focus to the header button. Profile shows the fictional demo name Alex Morgan. Settings shows a clearly labeled terms placeholder. Log out sits beneath the profile card and returns to the root starter page; there is no authentication or server session to end yet.
 
 ## Local checks
 

@@ -4,12 +4,11 @@ import './index.css'
 import App from './App.tsx'
 import ProfessorDashboard from './professor/ProfessorDashboard.tsx'
 
-const page =
-  window.location.pathname.replace(/\/$/, '') === '/professor' ? (
-    <ProfessorDashboard />
-  ) : (
-    <App />
-  )
+const page = /^\/professor(?:\/|$)/.test(window.location.pathname) ? (
+  <ProfessorDashboard />
+) : (
+  <App />
+)
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>{page}</StrictMode>,
