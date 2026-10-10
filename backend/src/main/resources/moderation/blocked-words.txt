@@ -1,17 +1,64 @@
-# One complete word per line. Keep this list narrow to avoid blocking lecture terminology.
-# The matching rule is case-insensitive and catches simple punctuation/character substitutions.
+# One complete word per line. This is a curated set of clear insults and slurs,
+# not a bulk import: broad anatomical and academic terms would block lecture questions.
+# Reviewed against these public references (English MIT, German CC BY 4.0):
+# https://github.com/dsojevic/profanity-list
+# https://github.com/LDNOOBW/List-of-Dirty-Naughty-Obscene-and-Otherwise-Bad-Words
+# Matching is case-insensitive and catches simple separators and substitutions.
 fuck
 fucked
 fucking
 fucker
+fuckers
+fuckhead
+fuckwit
 motherfucker
+motherfuckers
 shit
 shitty
+bullshit
+shithead
 bitch
+bitches
 cunt
+cunts
 asshole
+assholes
 dickhead
+dickheads
+dumbass
+douchebag
+bastard
+bastards
+twat
+wanker
+wankers
+slut
+sluts
+whore
+whores
+faggot
+faggots
+nigger
+niggers
+nigga
+niggas
+kike
+kikes
+tranny
 arschloch
+ficken
+ficker
+fotze
+fotzen
+kanake
+neger
+nutte
+nutten
+pisser
+schlampe
+schlampen
 scheisse
 scheiße
+schwuchtel
+wichser
 hurensohn

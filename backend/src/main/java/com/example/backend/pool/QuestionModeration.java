@@ -12,7 +12,10 @@ import org.springframework.stereotype.Component;
 
 @Component
 public class QuestionModeration {
+    // Apply spaced-letter matching to words of at least four letters to reduce
+    // collisions with short variables and abbreviations in lecture questions.
     private static final String BETWEEN_LETTERS = "[\\p{P}\\p{S}\\p{Cf}]*";
+    private static final String BETWEEN_SPACED_LETTERS = "[\\p{P}\\p{S}\\p{Cf}\\p{Z}\\s]*";
     private static final Pattern COMBINING_MARKS = Pattern.compile("\\p{M}+");
     private final List<Pattern> blockedWords;
 
@@ -37,9 +40,10 @@ public class QuestionModeration {
 
     private static Pattern wordPattern(String word) {
         String normalized = normalize(word);
+        String separator = normalized.length() >= 4 ? BETWEEN_SPACED_LETTERS : BETWEEN_LETTERS;
         var expression = new StringBuilder("(?<![\\p{L}\\p{N}])");
         for (int index = 0; index < normalized.length(); index++) {
-            if (index > 0) expression.append(BETWEEN_LETTERS);
+            if (index > 0) expression.append(separator);
             expression.append(switch (normalized.charAt(index)) {
                 case 'a' -> "[a4@]";
                 case 'e' -> "[e3]";

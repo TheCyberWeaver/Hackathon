@@ -83,7 +83,9 @@ class PoolApiTests extends PostgresTestSupport {
         String path = "/lectures/" + lecture + "/questions";
 
         for (int count = 1; count <= 2; count++) {
-            var rejected = send("POST", path, student, "{\"text\":\"What the f.u.c.k?\"}");
+            var rejected = send("POST", path, student, count == 1
+                ? "{\"text\":\"What the f.u.c.k?\"}"
+                : "{\"text\":\"What the f u c k?\"}");
             assertEquals(422, rejected.statusCode());
             assertEquals("QUESTION_BLOCKED", tree(rejected).get("code").asText());
             assertEquals(count, tree(rejected).get("warningCount").asInt());
