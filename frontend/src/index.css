@@ -167,6 +167,9 @@ button:focus-visible {
   .professor-drawer[open][data-closing='true']::backdrop,
   .professor-page-enter {
     animation: none;
+  }
+}
+
 /* Small dashboard handoffs, replaced when the dashboard branches merge. */
 .handoff-page {
   min-height: 100svh;
