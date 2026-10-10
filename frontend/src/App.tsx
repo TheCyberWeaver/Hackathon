@@ -2,9 +2,55 @@ import { lazy, Suspense, useEffect, useState } from 'react'
 import EntryPage from './components/EntryPage'
 import { getCurrentUser, IdentityError } from './lib/api'
 import type { CurrentUser } from './lib/api'
+import {
+  readProfessorProfile,
+  resetProfessorProfile,
+} from './professor/professorProfile'
 
 const StudentDashboard = lazy(() => import('./student/StudentDashboard'))
 const ProfessorDashboard = lazy(() => import('./professor/ProfessorDashboard'))
+const ProfessorOnboarding = lazy(
+  () => import('./professor/ProfessorOnboarding'),
+)
+
+function ProfessorSpace({
+  user,
+  onContinue,
+}: {
+  user: CurrentUser
+  onContinue: () => void
+}) {
+  const [courses, setCourses] = useState(
+    () => readProfessorProfile(user.id)?.courses ?? null,
+  )
+
+  if (courses)
+    return (
+      <ProfessorDashboard
+        user={user}
+        courses={courses}
+        onResetOnboarding={
+          import.meta.env.DEV
+            ? () => {
+                if (!resetProfessorProfile(user.id)) return false
+                setCourses(null)
+                onContinue()
+                return true
+              }
+            : undefined
+        }
+      />
+    )
+  return (
+    <ProfessorOnboarding
+      user={user}
+      onContinue={(savedCourses) => {
+        setCourses(savedCourses)
+        onContinue()
+      }}
+    />
+  )
+}
 
 export type IdentityState =
   | { status: 'loading' }
@@ -106,7 +152,11 @@ export default function App() {
             </main>
           }
         >
-          <ProfessorDashboard user={identity.user} />
+          <ProfessorSpace
+            key={identity.user.id}
+            user={identity.user}
+            onContinue={() => navigate('/professor')}
+          />
         </Suspense>
       )
     }

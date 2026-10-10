@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "professorId": "alex@ethz.ch",
+  "onboardingCompleted": true,
+  "courses": [
+    {
+      "id": "c84e7a21-7354-4ab3-81b4-69baabfbf067",
+      "title": "HS26 Linear Algebra"
+    },
+    {
+      "id": "7399d478-c060-448b-bf55-c2e9fd56eb06",
+      "title": "HS26 Discrete Mathematics"
+    }
+  ]
+}

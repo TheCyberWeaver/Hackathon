@@ -125,6 +125,70 @@ test('QR join uses lecture IDs and saves the selected course through Java', asyn
   }
 })
 
+test('onboarding course creates a backend lecture and uses its numeric ID for the QR invite', async (t) => {
+  const api = await clients()
+  const calls = []
+  let lecture
+  t.mock.method(globalThis, 'fetch', async (url, init) => {
+    calls.push([init.method ?? 'GET', url, init.body])
+    if (url === '/api/lectures') {
+      lecture = {
+        ...JSON.parse(init.body),
+        id: '51',
+        canManage: true,
+        startedAt: null,
+        endedAt: null,
+        questionsPaused: false,
+      }
+      return new Response(JSON.stringify(lecture), { status: 201 })
+    }
+    if (url === '/api/lectures/51/session')
+      lecture = { ...lecture, startedAt: '2026-10-10T10:00:00Z' }
+    return new Response(JSON.stringify(lecture), { status: 200 })
+  })
+  const selected = {
+    id: 'onboarding-course-uuid',
+    title: 'HS26 Linear Algebra',
+  }
+  const started = await api.professor.startCourseSession(selected)
+  const invite = await api.sessions.getSessionInvite(started.id)
+  assert.deepEqual(invite, {
+    id: '51',
+    code: '51',
+    course: selected.title,
+    startedAt: '2026-10-10T10:00:00Z',
+  })
+  assert.deepEqual(
+    calls.map(([method, url]) => [method, url]),
+    [
+      ['POST', '/api/lectures'],
+      ['PATCH', '/api/lectures/51/session'],
+      ['GET', '/api/lectures/51'],
+    ],
+  )
+  const created = JSON.parse(calls[0][2])
+  assert.equal(created.title, selected.title)
+  assert.equal(created.course, selected.title)
+  assert.ok(Number.isFinite(Date.parse(created.lectureTime)))
+  assert.deepEqual(JSON.parse(calls[1][2]), { action: 'start' })
+})
+
+test('failed course creation does not attempt to start a session', async (t) => {
+  const api = await clients()
+  const calls = []
+  t.mock.method(globalThis, 'fetch', async (url) => {
+    calls.push(url)
+    return new Response(JSON.stringify({ error: 'Could not save lecture.' }), {
+      status: 503,
+    })
+  })
+  await assert.rejects(
+    api.professor.startCourseSession({ id: 'course-id', title: 'Algorithms' }),
+    /Could not save lecture/,
+  )
+  assert.deepEqual(calls, ['/api/lectures'])
+})
+
 test('ended lectures are rejected by the backend without changing the selected lecture', async (t) => {
   const api = await clients()
   t.mock.method(

@@ -8,19 +8,21 @@ import {
   listProfessorQuestions,
   permanentlyDeleteQuestion,
   restoreQuestion as restoreSavedQuestion,
+  startCourseSession,
   type ArchivedLecture,
   type Question,
   type Summary,
 } from './professorApi'
 import {
   changeLectureSession,
-  createLecture,
   initialLectureId,
   rememberLecture,
   watchLectures,
   type Lecture,
 } from '../lib/poolApi'
 import type { CurrentUser } from '../lib/api'
+import type { ProfessorCourse } from './professorProfile'
+import CourseChooser from './CourseChooser'
 import { ThumbsUpIcon } from '../components/Icons'
 import JoinQrCode from '../components/JoinQrCode'
 import { getSessionInvite, joinUrl, type SharedSession } from '../lib/sessions'
@@ -41,8 +43,6 @@ const professorRoutes: Record<ProfessorPage, string> = {
 }
 const courseSelectionRoute = '/professor/start'
 const sessionShareRoute = '/professor/session'
-const otherCourseOption = '__other__'
-const demoCourses = ['Applied Statistics', 'Machine Learning Foundations']
 
 function pageFromPath(pathname: string): ProfessorPage {
   const path = pathname.replace(/\/$/, '')
@@ -141,111 +141,16 @@ function QuestionStatusSummary({
   )
 }
 
-function CourseChooser({
+export default function ProfessorDashboard({
+  user,
   courses,
-  busy,
-  error,
-  onChoose,
-  onCancel,
+  onResetOnboarding,
 }: {
-  courses: string[]
-  busy: boolean
-  error: string
-  onChoose: (course: string) => void
-  onCancel: () => void
+  user: CurrentUser
+  courses: ProfessorCourse[]
+  onResetOnboarding?: () => boolean
 }) {
-  const [selectedCourse, setSelectedCourse] = useState('')
-  const [otherCourse, setOtherCourse] = useState('')
-  const course =
-    selectedCourse === otherCourseOption ? otherCourse.trim() : selectedCourse
-
-  return (
-    <form
-      className="mt-6 text-left"
-      onSubmit={(event) => {
-        event.preventDefault()
-        if (course && !busy) onChoose(course)
-      }}
-    >
-      <label
-        htmlFor="lecture-course"
-        className="block text-sm font-semibold text-slate-800"
-      >
-        Course
-      </label>
-      <p
-        id="lecture-course-help"
-        className="mt-1 text-xs leading-5 text-slate-500"
-      >
-        Choose a course or enter a different course name.
-      </p>
-      <select
-        id="lecture-course"
-        aria-describedby="lecture-course-help"
-        autoFocus
-        required
-        disabled={busy}
-        value={selectedCourse}
-        onChange={(event) => setSelectedCourse(event.target.value)}
-        className="mt-3 w-full cursor-pointer rounded-lg border border-slate-300 bg-white px-3 py-3 text-sm text-slate-900 shadow-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
-      >
-        <option value="">Select a course</option>
-        {courses.map((option) => (
-          <option key={option} value={option}>
-            {option}
-          </option>
-        ))}
-        <option value={otherCourseOption}>Another course…</option>
-      </select>
-      {selectedCourse === otherCourseOption && (
-        <div className="mt-4">
-          <label
-            htmlFor="other-course"
-            className="block text-sm font-semibold text-slate-800"
-          >
-            Course name
-          </label>
-          <input
-            id="other-course"
-            type="text"
-            autoFocus
-            required
-            disabled={busy}
-            maxLength={80}
-            value={otherCourse}
-            onChange={(event) => setOtherCourse(event.target.value)}
-            placeholder="e.g. Linear Algebra"
-            className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-3 text-sm text-slate-900 shadow-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
-          />
-        </div>
-      )}
-      {error && (
-        <p role="alert" className="mt-4 text-sm font-medium text-red-700">
-          {error}
-        </p>
-      )}
-      <div className="mt-6 flex flex-wrap justify-end gap-3">
-        <button
-          type="button"
-          onClick={onCancel}
-          disabled={busy}
-          className="min-h-11 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
-        >
-          Cancel
-        </button>
-        <button
-          type="submit"
-          disabled={!course || busy}
-          className="min-h-11 rounded-lg bg-emerald-600 px-5 py-2 text-sm font-semibold text-white hover:bg-emerald-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-600"
-        >
-          {busy ? 'Please wait…' : 'Start session'}
-        </button>
-      </div>
-    </form>
-  )
-}
-
-export default function ProfessorDashboard({ user }: { user: CurrentUser }) {
+  const [resetError, setResetError] = useState('')
   const [lectures, setLectures] = useState<Lecture[]>([])
   const [lectureId, setLectureId] = useState(initialLectureId)
   const [questions, setQuestions] = useState<Question[]>([])
@@ -259,12 +164,6 @@ export default function ProfessorDashboard({ user }: { user: CurrentUser }) {
   const [busyId, setBusyId] = useState<string | null>(null)
   const [answerDrafts, setAnswerDrafts] = useState<Record<string, string>>({})
   const selectedLecture = lectures.find((lecture) => lecture.id === lectureId)
-  const courseOptions = [
-    ...new Set([
-      ...demoCourses,
-      ...lectures.map((lecture) => lecture.course).filter(Boolean),
-    ]),
-  ]
   const lectureStartedAt =
     selectedLecture?.startedAt && !selectedLecture.endedAt
       ? selectedLecture.startedAt
@@ -595,19 +494,14 @@ export default function ProfessorDashboard({ user }: { user: CurrentUser }) {
     )
   }
 
-  async function chooseCourse(course: string) {
+  async function chooseCourse(course: ProfessorCourse) {
     if (mutationPending.current) return
     mutationPending.current = true
     mutationVersion.current++
     setBusyId('session')
     setSessionError('')
     try {
-      const created = await createLecture(
-        course,
-        new Date().toISOString(),
-        course,
-      )
-      const started = await changeLectureSession(created.id, 'start')
+      const started = await startCourseSession(course)
       setLectures((items) => [started, ...items])
       setLectureId(started.id)
       setQuestions([])
@@ -820,7 +714,7 @@ export default function ProfessorDashboard({ user }: { user: CurrentUser }) {
               className="mt-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_12px_32px_rgba(15,23,42,0.06)] sm:p-8"
             >
               <CourseChooser
-                courses={courseOptions}
+                courses={courses}
                 busy={busyId === 'session'}
                 error={sessionError}
                 onChoose={chooseCourse}
@@ -1577,6 +1471,31 @@ export default function ProfessorDashboard({ user }: { user: CurrentUser }) {
             </p>
           </section>
         </main>
+      )}
+
+      {import.meta.env.DEV && page === 'settings' && onResetOnboarding && (
+        <div className="fixed bottom-4 right-4 z-10 max-w-[calc(100%-2rem)] text-right">
+          <button
+            type="button"
+            className="min-h-11 rounded-lg border border-slate-300 bg-white px-4 py-2 text-xs font-medium text-slate-600 shadow-sm hover:border-slate-400 hover:text-slate-900"
+            onClick={() => {
+              if (!onResetOnboarding())
+                setResetError(
+                  'Could not reset the saved courses in this browser. Try again.',
+                )
+            }}
+          >
+            Reset onboarding (dev)
+          </button>
+          <p className="mt-1 text-xs text-slate-500">
+            Clears saved courses and starts again.
+          </p>
+          {resetError && (
+            <p role="alert" className="mt-2 max-w-xs text-xs text-red-700">
+              {resetError}
+            </p>
+          )}
+        </div>
       )}
 
       <div
