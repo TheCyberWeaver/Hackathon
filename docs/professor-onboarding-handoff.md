@@ -58,6 +58,8 @@ The built-in browser control failed to initialize with “failed to write kernel
 
 **Phone edge follow-up:** The iPhone 15 Pro Max / Galaxy S24 Ultra report prompted the mobile gutter override above. Before it, desktop-backed previews at 430 × 932 and 412 × 915 reserved 15 px on each side; afterwards the onboarding surface fills the viewport. Checks also cover 384 × 824, dark preference, phone landscape and the normal desktop gutter. The black coloring itself was not reproduced in isolated Chrome, so confirmation in the affected built-in preview/physical browser remains necessary. On very short desktop-backed mobile previews with classic scrollbars, a normal single scrollbar may appear while scrolling; actual mobile overlay scrollbars do not reserve layout space.
 
+**Codex preview follow-up (2026-10-10):** A user screenshot of a 386 px-wide Codex phone preview shows the page image occupying roughly 350 px and aligned to the frame's left edge, leaving about 35 px on the right. In the built-in browser, the onboarding surface spans the full layout and visual viewport; the setup center differs from the visual viewport center by less than 0.001 px at 430 × 932, 412 × 916, and both landscape orientations. The preview's viewport override also maps requested pixel dimensions through a 1.1 device scale factor. Adjusting the override changed the page width but did not remove the visible frame offset, which points to the Codex preview's scaling or framing outside the web page. No further onboarding CSS change was made, so the desktop design and actual phone layout remain untouched. Physical iPhone and Samsung browsers have not been checked.
+
 ## Files to start from
 
 | File | Responsibility |
