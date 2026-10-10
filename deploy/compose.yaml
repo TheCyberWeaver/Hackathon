@@ -10,6 +10,11 @@ services:
       DATABASE_URL: ${DATABASE_URL:-jdbc:postgresql://postgres:5432/askpool}
       DATABASE_USER: askpool_app
       DATABASE_BASELINE: ${DATABASE_BASELINE:-false}
+      MODERATION_URL: http://moderation:8090
+      MODERATION_TIMEOUT_MS: "800"
+    depends_on:
+      moderation:
+        condition: service_healthy
     secrets:
       - app_password
     networks:
@@ -17,6 +22,15 @@ services:
       - askpool_shared
     volumes:
       - ./artifacts/backend.jar:/app/backend.jar:ro
+    restart: unless-stopped
+
+  moderation:
+    image: askpool-moderation:${MODERATION_IMAGE_TAG:-local}
+    build: ./moderation
+    environment:
+      MODERATION_THRESHOLD: ${MODERATION_THRESHOLD:-0.95}
+    cpus: 1.0
+    mem_limit: 768m
     restart: unless-stopped
 
   frontend:

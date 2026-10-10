@@ -81,6 +81,15 @@ Lecture response:
 
 Question creation body: `{ "text": "Why does this invariant hold?" }`. Text is trimmed, 1-200 characters. Students may submit multiple questions per lecture, including after deleting a question.
 
+When `MODERATION_URL` is configured, Java checks abusive language before saving
+the question. It sends only `{ "question": "..." }` to
+the separate service's `POST /moderate`. General and off-topic questions are
+accepted. The service returns only
+`{ "decision": "accept" }` or `{ "decision": "reject" }`. An explicit rejection
+returns HTTP 422 with `{ "error": "Please avoid abusive language." }`
+and saves nothing. Service errors, invalid responses, and timeouts allow the
+submission. This check also applies with testing permissions enabled.
+
 Student question response (contains no authors or reports):
 
 ```json

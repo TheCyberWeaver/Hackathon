@@ -76,6 +76,30 @@ class PoolApiTests extends PostgresTestSupport {
     }
 
     @Test
+    void blockedQuestionsNeverEnterThePoolAndWarningsAccumulateWithoutSavingText() throws Exception {
+        promote(professor);
+        String lecture = tree(send("POST", "/lectures", professor, "{\"title\":\"Moderation\",\"lectureTime\":\"2026-10-10T11:00:00Z\"}")).get("id").asText();
+        start(lecture);
+        String path = "/lectures/" + lecture + "/questions";
+
+        for (int count = 1; count <= 2; count++) {
+            var rejected = send("POST", path, student, count == 1
+                ? "{\"text\":\"What the f.u.c.k?\"}"
+                : "{\"text\":\"What the f u c k?\"}");
+            assertEquals(422, rejected.statusCode());
+            assertEquals("QUESTION_BLOCKED", tree(rejected).get("code").asText());
+            assertEquals(count, tree(rejected).get("warningCount").asInt());
+            assertEquals(0, tree(send("GET", path, peer, null)).size());
+        }
+        assertEquals(0L, jdbc.queryForObject("SELECT count(*) FROM questions WHERE lecture_id = ?", Long.class, Long.parseLong(lecture)));
+        assertEquals(2L, jdbc.queryForObject("SELECT count(*) FROM question_moderation_warnings WHERE lecture_id = ?", Long.class, Long.parseLong(lecture)));
+        var peerWarning = send("POST", path, peer, "{\"text\":\"This is sh!t\"}");
+        assertEquals(422, peerWarning.statusCode());
+        assertEquals(1, tree(peerWarning).get("warningCount").asInt());
+        assertEquals(201, send("POST", path, student, "{\"text\":\"Could you explain the base case?\"}").statusCode());
+    }
+
+    @Test
     void ranksVotesFirstAndEarlierQuestionsFirstOnTies() throws Exception {
         promote(professor);
         String lecture = tree(send("POST", "/lectures", professor, "{\"title\":\"Ranking\",\"lectureTime\":\"2026-10-10T11:00:00Z\"}")).get("id").asText();
