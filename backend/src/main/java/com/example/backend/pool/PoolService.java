@@ -11,11 +11,13 @@ import static org.springframework.http.HttpStatus.*;
 @Service
 public class PoolService {
     private final PoolRepository repository;
+    private final QuestionModeration moderation;
     private final QuestionModerator moderator;
     private final boolean testingPermissions;
-    public PoolService(PoolRepository repository, QuestionModerator moderator,
+    public PoolService(PoolRepository repository, QuestionModeration moderation, QuestionModerator moderator,
                        @Value("${app.testing-permissions:false}") boolean testingPermissions) {
         this.repository = repository;
+        this.moderation = moderation;
         this.moderator = moderator;
         this.testingPermissions = testingPermissions;
     }
@@ -49,13 +51,17 @@ public class PoolService {
         repository.lecture(lecture);
         return repository.question(lecture, id, user.id());
     }
-    @Transactional
+    @Transactional(noRollbackFor = ModerationRejectedException.class)
     public Question submit(User user, long lecture, NewQuestion request) {
         if (!testingPermissions && !user.role().equals("student")) throw new ApiException(FORBIDDEN, "Only students may submit questions.");
         LectureSession.requireOpen(repository.lockLecture(lecture).session());
         var text = text(request == null ? null : request.text(), 200, "Question");
-        if (!moderator.accepts(text)) {
-            throw new ApiException(UNPROCESSABLE_CONTENT, "Please avoid abusive language.");
+        boolean blacklisted = moderation.blocks(text);
+        boolean rejectedByService = !blacklisted && !moderator.accepts(text);
+        if (blacklisted || rejectedByService) {
+            var reason = blacklisted ? "blacklisted_word" : "moderation_service";
+            throw new ModerationRejectedException(
+                repository.recordModerationWarning(lecture, user.id(), reason));
         }
         var id = repository.createQuestion(lecture, user.id(), text);
         return repository.question(lecture, id, user.id());

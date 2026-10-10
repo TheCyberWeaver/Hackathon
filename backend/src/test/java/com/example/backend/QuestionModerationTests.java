@@ -38,8 +38,11 @@ class QuestionModerationTests extends PostgresTestSupport {
         when(moderator.accepts("How does BFS work?")).thenReturn(false);
         var response = submit(lecture);
         assertEquals(422, response.statusCode());
-        assertTrue(response.body().contains("avoid abusive language"));
+        assertTrue(response.body().contains("wording that is not allowed"));
+        assertTrue(response.body().contains("\"warningCount\":1"));
         assertEquals(0L, jdbc.queryForObject("SELECT count(*) FROM questions WHERE lecture_id = ?", Long.class, lecture));
+        assertEquals("moderation_service", jdbc.queryForObject(
+            "SELECT reason FROM question_moderation_warnings WHERE lecture_id = ?", String.class, lecture));
     }
     @Test void acceptanceSendsOnlyTrimmedQuestion() throws Exception {
         long lecture = lecture("Algorithms");

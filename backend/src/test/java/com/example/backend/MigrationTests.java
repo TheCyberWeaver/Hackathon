@@ -25,7 +25,7 @@ class MigrationTests extends PostgresTestSupport {
             db.update("INSERT INTO questions (lecture_id, author_id, text) SELECT l.id, u.id, 'Existing question' FROM lectures l CROSS JOIN users u");
             assertThrows(Exception.class, () -> Flyway.configure().dataSource(source).schemas(schema).load().migrate());
             var result = Flyway.configure().dataSource(source).schemas(schema).baselineOnMigrate(true).baselineVersion("1").load().migrate();
-            assertEquals(4, result.migrationsExecuted);
+            assertEquals(5, result.migrationsExecuted);
             assertEquals("Existing question", db.queryForObject("SELECT text FROM questions", String.class));
             assertEquals(false, db.queryForObject("SELECT selected FROM questions", Boolean.class));
             assertTrue(db.queryForObject("SELECT started_at = lecture_time FROM lectures", Boolean.class));
@@ -33,6 +33,7 @@ class MigrationTests extends PostgresTestSupport {
             assertThrows(org.springframework.dao.DataIntegrityViolationException.class,
                 () -> db.update("UPDATE questions SET answer = 'An unanswered question cannot have a written answer'"));
             assertEquals(0L, db.queryForObject("SELECT count(*) FROM question_votes", Long.class));
+            assertEquals(0L, db.queryForObject("SELECT count(*) FROM question_moderation_warnings", Long.class));
             assertEquals(0, Flyway.configure().dataSource(source).schemas(schema).load().migrate().migrationsExecuted);
         } finally { admin.execute("DROP SCHEMA " + schema + " CASCADE"); }
     }

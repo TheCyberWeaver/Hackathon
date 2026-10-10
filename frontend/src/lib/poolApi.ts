@@ -1,5 +1,24 @@
 const baseUrl = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/[/]$/, '')
 
+export class ApiRequestError extends Error {
+  readonly status: number
+  readonly code?: string
+  readonly warningCount?: number
+
+  constructor(
+    message: string,
+    status: number,
+    code?: string,
+    warningCount?: number,
+  ) {
+    super(message)
+    this.name = 'ApiRequestError'
+    this.status = status
+    this.code = code
+    this.warningCount = warningCount
+  }
+}
+
 // Keep transport and contract changes here, away from dashboard rendering.
 export async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${baseUrl}/api${path}`, {
@@ -13,7 +32,12 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
   })
   if (!response.ok) {
     const body = await response.json().catch(() => null)
-    throw new Error(body?.error || `Request failed (${response.status}).`)
+    throw new ApiRequestError(
+      body?.error || `Request failed (${response.status}).`,
+      response.status,
+      body?.code,
+      typeof body?.warningCount === 'number' ? body.warningCount : undefined,
+    )
   }
   return response.status === 204 ? (undefined as T) : response.json()
 }

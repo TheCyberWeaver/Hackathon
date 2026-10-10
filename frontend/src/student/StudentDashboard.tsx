@@ -8,11 +8,14 @@ import StudentTutorial from './components/StudentTutorial'
 import { animateScrollTo, prefersReducedMotion } from './lib/motion'
 import {
   readTutorialCompleted,
+  readTutorialDismissed,
   saveTutorialCompleted,
+  saveTutorialDismissed,
 } from './lib/tutorialProgress'
 import type { CurrentUser } from '../lib/api'
 import LecturePicker from '../components/LecturePicker'
 import {
+  ApiRequestError,
   initialLectureId,
   watchLectures,
   rememberLecture,
@@ -78,10 +81,16 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
   const [mobileView, setMobileView] = useState<'other' | 'mine'>('other')
   const [reportTarget, setReportTarget] = useState<Question | null>(null)
   const [toast, setToast] = useState('')
+  const [moderationWarning, setModerationWarning] = useState<number | null>(
+    null,
+  )
   const [newQuestionId, setNewQuestionId] = useState<string | null>(null)
   const [tutorialOpen, setTutorialOpen] = useState(false)
   const [tutorialCompleted, setTutorialCompleted] = useState(() =>
     readTutorialCompleted(user.id),
+  )
+  const [tutorialDismissed, setTutorialDismissed] = useState(() =>
+    readTutorialDismissed(user.id),
   )
   const [placeholder] = useState(
     () => examples[Math.floor(Math.random() * examples.length)],
@@ -120,6 +129,11 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
         : heroHeadingRef.current
       target?.focus()
     })
+  }
+
+  function dismissTutorialInvite() {
+    setTutorialDismissed(true)
+    saveTutorialDismissed(user.id)
   }
 
   function showToast(message: string) {
@@ -260,55 +274,48 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
     mutationVersion.current++
     textareaRef.current?.blur()
     setFocused(false)
-    const optimisticId = `pending-${Date.now()}-${Math.random().toString(36).slice(2)}`
-    const optimisticQuestion: Question = {
-      id: optimisticId,
-      text,
-      votes: 0,
-      createdAt: new Date().toISOString(),
-      status: 'open',
-      mine: true,
-      votedByMe: false,
-    }
-
-    // Show the expected result immediately. The server response is checked
-    // after the send animation so network timing cannot delay the reveal.
-    flushSync(() => {
-      setQuestions((items) => [...items, optimisticQuestion])
-      setNewQuestionId(optimisticId)
-      setDraft('')
-      setMobileView('other')
-    })
-    if (textareaRef.current) growTextarea(textareaRef.current)
-
-    const result = submitQuestion(lectureId, text).then(
-      (created) => ({ created, error: null }),
-      (error: unknown) => ({ created: null, error }),
-    )
-    await sleep(prefersReducedMotion() ? 20 : 200)
-    await animateScrollTo(
-      document.documentElement.scrollHeight - window.innerHeight,
-      1000,
-    )
-    const { created, error } = await result
-    if (created) {
-      setQuestions((items) =>
-        items.map((item) => (item.id === optimisticId ? created : item)),
+    try {
+      // Only render questions after the server accepts them. Rejected text
+      // must never briefly appear in the pool as an optimistic card.
+      const created = await submitQuestion(lectureId, text)
+      flushSync(() => {
+        setQuestions((items) =>
+          items.some((item) => item.id === created.id)
+            ? items
+            : [...items, created],
+        )
+        setNewQuestionId(created.id)
+        setDraft('')
+        setModerationWarning(null)
+        setMobileView('other')
+      })
+      if (textareaRef.current) growTextarea(textareaRef.current)
+      await sleep(prefersReducedMotion() ? 20 : 200)
+      await animateScrollTo(
+        document.documentElement.scrollHeight - window.innerHeight,
+        1000,
       )
-      setNewQuestionId(created.id)
-    } else {
-      setQuestions((items) => items.filter((item) => item.id !== optimisticId))
-      showToast(
-        error instanceof Error
-          ? error.message
-          : 'Could not send your question.',
-      )
+    } catch (error) {
+      if (
+        error instanceof ApiRequestError &&
+        error.code === 'QUESTION_BLOCKED'
+      ) {
+        setModerationWarning(error.warningCount ?? 1)
+        window.requestAnimationFrame(() => textareaRef.current?.focus())
+      } else {
+        showToast(
+          error instanceof Error
+            ? error.message
+            : 'Could not send your question.',
+        )
+      }
       setDraft(text)
+    } finally {
+      setSending(false)
+      pendingSend.current = false
+      mutationVersion.current++
+      window.setTimeout(() => setNewQuestionId(null), 2200)
     }
-    setSending(false)
-    pendingSend.current = false
-    mutationVersion.current++
-    window.setTimeout(() => setNewQuestionId(null), 2200)
   }
 
   async function handleVote(question: Question) {
@@ -446,7 +453,6 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
     .filter((question) => question.mine)
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
   const others = questions
-  const counterOpacity = Math.max(0, Math.min(1, (draft.length - 160) / 40))
 
   function cards(items: Question[], isMine: boolean) {
     if (isMine && items.length === 0) {
@@ -504,6 +510,7 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
                   setQuestions([])
                   setLectureId(id)
                   setReportTarget(null)
+                  setModerationWarning(null)
                 }}
               />
               <div
@@ -524,13 +531,14 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
                       : placeholder
                   }
                   disabled={questionsPaused}
-                  aria-describedby="question-input-status"
+                  aria-describedby={`question-input-status${moderationWarning === null ? '' : ' question-moderation-warning'}`}
                   onFocus={() => setFocused(true)}
                   onBlur={() => setFocused(false)}
                   onChange={(event) => {
                     const next = event.target.value.slice(0, 200)
                     event.target.value = next
                     setDraft(next)
+                    setModerationWarning(null)
                     growTextarea(event.target)
                   }}
                   onKeyDown={(event) => {
@@ -550,10 +558,15 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
                     aria-live="polite"
                   >
                     {questionsPaused
-                      ? 'Submissions are unavailable until the professor opens this lecture.'
-                      : 'Your name is not shown on question cards.'}
+                      ? 'Submissions are closed right now.'
+                      : "Your name isn't shown on cards."}
                   </span>
                   <div className="composer__send">
+                    {draft.length > 160 && (
+                      <span className="character-counter">
+                        {draft.length}/200
+                      </span>
+                    )}
                     <button
                       type="button"
                       className="send-button"
@@ -568,34 +581,71 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
                     >
                       <SendIcon width="23" height="23" />
                     </button>
-                    <span
-                      className="character-counter"
-                      style={{ opacity: counterOpacity }}
-                      aria-hidden={counterOpacity === 0}
-                    >
-                      {draft.length}/200
-                    </span>
                   </div>
                 </div>
               </div>
-              {!tutorialCompleted && (
+              {moderationWarning !== null && (
+                <div
+                  id="question-moderation-warning"
+                  className="question-moderation-warning"
+                  role="alert"
+                >
+                  <strong>
+                    {moderationWarning < 10
+                      ? `Question not sent · Warning ${moderationWarning}`
+                      : moderationWarning === 10
+                        ? 'Warning 10 · Nice try, still not posting'
+                        : 'Question not sent · Try a different wording'}
+                  </strong>
+                  <span>
+                    {moderationWarning < 10
+                      ? 'This wording isn’t allowed. Edit your question and try again.'
+                      : moderationWarning === 10
+                        ? 'Seriously, this wording won’t make it into the pool. Rephrase your lecture question and send it again.'
+                        : 'Focus on the lecture point you want explained, and leave out the blocked wording. You can edit and send it again.'}
+                  </span>
+                </div>
+              )}
+              {!tutorialCompleted && !tutorialDismissed && (
                 <div className="student-tutorial-invite">
-                  <svg aria-hidden="true" viewBox="0 0 72 38" fill="none">
-                    <path
-                      d="M3 3c18 0 20 27 52 27m-9-9 10 9-11 6"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
+                  <div className="student-tutorial-invite__prompt">
+                    <svg
+                      className="student-tutorial-arrow"
+                      aria-hidden="true"
+                      viewBox="0 0 72 38"
+                      fill="none"
+                    >
+                      <path
+                        d="M3 3c18 0 20 27 52 27m-9-9 10 9-11 6"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                    <button
+                      type="button"
+                      className="student-tutorial-trigger"
+                      aria-haspopup="dialog"
+                      onClick={openTutorial}
+                    >
+                      Need a quick tutorial?
+                    </button>
+                  </div>
                   <button
                     type="button"
-                    className="student-tutorial-trigger"
-                    aria-haspopup="dialog"
-                    onClick={openTutorial}
+                    className="student-tutorial-dismiss"
+                    aria-label="Dismiss tutorial suggestion"
+                    onClick={dismissTutorialInvite}
                   >
-                    New here? Need a quick tutorial?
+                    <svg aria-hidden="true" viewBox="0 0 20 20" fill="none">
+                      <path
+                        d="M5 5l10 10M15 5L5 15"
+                        stroke="currentColor"
+                        strokeWidth="1.8"
+                        strokeLinecap="round"
+                      />
+                    </svg>
                   </button>
                 </div>
               )}

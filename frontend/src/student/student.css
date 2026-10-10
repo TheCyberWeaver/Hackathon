@@ -69,15 +69,24 @@
 }
 
 .student-tutorial-invite {
+  position: relative;
+  left: clamp(0px, 3vw, 24px);
   display: flex;
-  align-items: flex-end;
-  justify-content: flex-end;
-  gap: 2px;
+  align-items: center;
+  width: max-content;
+  max-width: calc(100% - 48px);
   margin-top: 5px;
+  margin-inline: auto;
   color: var(--color-accent);
 }
 
-.student-tutorial-invite svg {
+.student-tutorial-invite__prompt {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.student-tutorial-arrow {
   flex: 0 0 58px;
   width: 58px;
   height: 34px;
@@ -85,8 +94,7 @@
 }
 
 .student-tutorial-trigger {
-  align-self: flex-end;
-  padding: 8px 0 3px;
+  padding: 8px 0;
   border: 0;
   background: transparent;
   color: inherit;
@@ -107,6 +115,52 @@
   outline: 2px solid var(--color-accent);
   outline-offset: 4px;
   border-radius: 2px;
+}
+
+.student-tutorial-dismiss {
+  position: absolute;
+  top: 50%;
+  left: 100%;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-secondary);
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-8px, -50%);
+  transition:
+    opacity 180ms var(--ease-out-quad),
+    transform 180ms var(--ease-out-quad);
+}
+
+.student-tutorial-dismiss svg {
+  width: 15px;
+  height: 15px;
+}
+
+.student-tutorial-invite:is(:hover, :focus-within) .student-tutorial-dismiss {
+  opacity: 0.55;
+  pointer-events: auto;
+  transform: translate(0, -50%);
+}
+
+.student-tutorial-invite:is(:hover, :focus-within)
+  .student-tutorial-dismiss:is(:hover, :focus, :active) {
+  outline: none;
+  color: var(--color-ink);
+  opacity: 0.9;
+}
+
+@media (hover: none) {
+  .student-tutorial-dismiss {
+    opacity: 0.55;
+    pointer-events: auto;
+    transform: translate(0, -50%);
+  }
 }
 
 .student-settings-card {
@@ -209,8 +263,8 @@ html:has(.student-settings-card) {
 }
 .composer {
   width: 100%;
-  min-height: 112px;
-  padding: 12px 17px 6px;
+  min-height: 102px;
+  padding: 12px 17px 10px;
   border: 1px solid var(--color-border);
   border-radius: 20px;
   background: var(--color-surface);
@@ -237,6 +291,7 @@ html:has(.student-settings-card) {
   height: 36px;
   min-height: 36px;
   max-height: 42vh;
+  margin-top: 6px;
   padding: 0;
   border: 0;
   outline: 0;
@@ -267,23 +322,21 @@ html:has(.student-settings-card) {
 }
 .composer__bottom {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 10px;
   margin-top: 0;
 }
 .anonymous-note {
-  display: flex;
-  align-items: center;
-  min-height: 44px;
   color: var(--color-secondary);
   font-size: 12px;
+  line-height: 1.35;
 }
 .composer__send {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
-  gap: 0;
+  gap: 10px;
   min-width: 44px;
 }
 .send-button {
@@ -308,11 +361,26 @@ html:has(.student-settings-card) {
   color: var(--color-placeholder);
 }
 .character-counter {
-  min-height: 14px;
   color: var(--color-secondary);
   font-size: 11px;
-  line-height: 14px;
-  transition: opacity 170ms linear;
+  white-space: nowrap;
+}
+.question-moderation-warning {
+  display: grid;
+  gap: 4px;
+  margin-top: 12px;
+  padding: 12px 16px;
+  border: 1px solid #f1c8ac;
+  border-radius: 14px;
+  background: #fff7ed;
+  color: #7c2d12;
+  font-size: 13px;
+  line-height: 1.45;
+  box-shadow: 0 6px 18px rgb(124 45 18 / 7%);
+}
+.question-moderation-warning strong {
+  font-size: 13px;
+  font-weight: 700;
 }
 
 .section-heading {
@@ -648,8 +716,8 @@ html:has(.student-settings-card) {
     font-size: clamp(42px, 3.2vw, 58px);
   }
   .composer {
-    min-height: 120px;
-    padding: 14px 22px 8px;
+    min-height: 106px;
+    padding: 14px 22px 10px;
   }
   .composer textarea {
     font-size: 18px;
