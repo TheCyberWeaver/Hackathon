@@ -98,8 +98,8 @@ export default function App() {
   }, [])
 
   function growTextarea(element: HTMLTextAreaElement) {
-    element.style.height = '48px'
-    element.style.height = `${Math.max(48, element.scrollHeight)}px`
+    element.style.height = '36px'
+    element.style.height = `${Math.max(36, element.scrollHeight)}px`
   }
 
   async function handleSend() {

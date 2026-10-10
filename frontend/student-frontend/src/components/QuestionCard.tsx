@@ -19,7 +19,7 @@ export function QuestionCard({
 
   return (
     <article
-      className={`question-card ${highlighted ? 'question-card--new' : ''}`}
+      className={`question-card ${highlighted ? 'question-card--new' : ''} ${menuOpen ? 'question-card--menu-open' : ''}`}
       style={{
         viewTransitionName: `question-${question.id.replace(/[^a-zA-Z0-9]/g, '-')}`,
       }}

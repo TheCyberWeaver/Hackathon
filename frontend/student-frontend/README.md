@@ -21,3 +21,10 @@ npm run lint
 ```
 
 The API is isolated in `src/lib/studentApi.ts` for later replacement. This demo does not use the Java backend.
+
+## Edit demo content
+
+- **Preset questions:** Edit, add, or remove entries in `server/seed.json`. Then run `npm run reset-data` and refresh the page. Resetting also clears submitted questions, votes, and reports.
+- **Current saved questions:** Edit `server/data/state.json` and refresh the page. Remove a question's full object from the `questions` array to delete only that question. This file is created on first run, is Git-ignored, and is overwritten by `npm run reset-data`. Keep the JSON valid. There is no student-facing delete control in this demo.
+- **Visible interface text:** Edit `src/App.tsx` for headings, example placeholders, the anonymity note, empty state, dialog, and toasts; `src/components/QuestionCard.tsx` for status and report labels; and `src/components/ViewSwitchButton.tsx` for switch labels. Server error messages live in `server/index.mjs`.
+- **Appearance and spacing:** Edit `src/styles.css`; the color tokens are at the top of that file.
