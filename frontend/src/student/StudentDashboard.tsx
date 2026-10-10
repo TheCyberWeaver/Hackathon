@@ -584,11 +584,18 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
                   role="alert"
                 >
                   <strong>
-                    Question not sent · Warning {moderationWarning}
+                    {moderationWarning < 10
+                      ? `Question not sent · Warning ${moderationWarning}`
+                      : moderationWarning === 10
+                        ? 'Warning 10 · Nice try, still not posting'
+                        : 'Question not sent · Try a different wording'}
                   </strong>
                   <span>
-                    This wording isn’t allowed. Edit your question and try
-                    again.
+                    {moderationWarning < 10
+                      ? 'This wording isn’t allowed. Edit your question and try again.'
+                      : moderationWarning === 10
+                        ? 'Seriously, this wording won’t make it into the pool. Rephrase your lecture question and send it again.'
+                        : 'Focus on the lecture point you want explained, and leave out the blocked wording. You can edit and send it again.'}
                   </span>
                 </div>
               )}
