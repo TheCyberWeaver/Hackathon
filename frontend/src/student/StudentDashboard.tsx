@@ -746,7 +746,7 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
                       fill="none"
                     >
                       <path
-                        d="M3 3c18 0 20 27 52 27m-9-9 10 9-11 6"
+                        d="M6 7C7 17 20 19 57 20m-8-7 8 7-8 7"
                         stroke="currentColor"
                         strokeWidth="2"
                         strokeLinecap="round"
