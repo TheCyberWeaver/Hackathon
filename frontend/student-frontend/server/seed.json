@@ -1,0 +1,86 @@
+[
+  {
+    "id": "q-base-case",
+    "text": "Could you go through the base case of the induction proof again?",
+    "votes": 42,
+    "status": "open",
+    "ageMinutes": 40
+  },
+  {
+    "id": "q-exam",
+    "text": "Is this going to be on the exam, or just the idea behind it?",
+    "votes": 37,
+    "status": "selected",
+    "ageMinutes": 37
+  },
+  {
+    "id": "q-relation",
+    "text": "What is the difference between a relation and a function here?",
+    "votes": 29,
+    "status": "open",
+    "ageMinutes": 34
+  },
+  {
+    "id": "q-pumping",
+    "text": "Why does the pumping lemma not apply to this language?",
+    "votes": 24,
+    "status": "open",
+    "ageMinutes": 31
+  },
+  {
+    "id": "q-greedy",
+    "text": "Can we see one more worked example of the greedy argument?",
+    "votes": 19,
+    "status": "open",
+    "ageMinutes": 28
+  },
+  {
+    "id": "q-invariant",
+    "text": "How do I choose the invariant for the loop?",
+    "votes": 15,
+    "status": "open",
+    "ageMinutes": 25
+  },
+  {
+    "id": "q-quantifiers",
+    "text": "Does the order of the quantifiers really change the meaning?",
+    "votes": 12,
+    "status": "answered",
+    "ageMinutes": 22
+  },
+  {
+    "id": "q-slides",
+    "text": "Could the slides be uploaded before the lecture?",
+    "votes": 9,
+    "status": "open",
+    "ageMinutes": 19
+  },
+  {
+    "id": "q-master",
+    "text": "What is the intuition behind the master theorem cases?",
+    "votes": 7,
+    "status": "open",
+    "ageMinutes": 16
+  },
+  {
+    "id": "q-recursion",
+    "text": "Is the recursion tree method rigorous enough for the exercises?",
+    "votes": 4,
+    "status": "open",
+    "ageMinutes": 13
+  },
+  {
+    "id": "q-amortized",
+    "text": "Sorry if this is basic, but what does \"amortized\" mean again?",
+    "votes": 3,
+    "status": "open",
+    "ageMinutes": 9
+  },
+  {
+    "id": "q-recording",
+    "text": "Will the recording be available after the session?",
+    "votes": 2,
+    "status": "answered",
+    "ageMinutes": 5
+  }
+]
