@@ -15,6 +15,7 @@ const { outputText } = ts.transpileModule(source, {
 })
 const {
   readProfessorProfile,
+  prepareProfessorCourses,
   resetProfessorProfile,
   saveProfessorProfile,
   serializeProfessorProfile,
@@ -147,6 +148,62 @@ test('professor profile persistence contract', async (t) => {
     },
   )
 
+  await t.test(
+    'Done includes a typed first course without requiring Add',
+    () => {
+      const prepared = prepareProfessorCourses([], '  HS26 Algorithms  ')
+      assert.equal(prepared.ok, true)
+      assert.equal(prepared.courses.length, 1)
+      assert.equal(prepared.courses[0].title, 'HS26 Algorithms')
+      assert.ok(prepared.courses[0].id)
+      assert.equal(
+        saveProfessorProfile('done-with-draft', prepared.courses),
+        true,
+      )
+      assert.deepEqual(
+        readProfessorProfile('done-with-draft').courses,
+        prepared.courses,
+      )
+    },
+  )
+
+  await t.test(
+    'Done includes the pending course after existing courses without mutating their IDs or order',
+    () => {
+      const existing = [{ id: 'first', title: 'Algebra' }]
+      const prepared = prepareProfessorCourses(existing, 'Algorithms')
+      assert.equal(prepared.ok, true)
+      assert.deepEqual(prepared.courses[0], existing[0])
+      assert.equal(prepared.courses[1].title, 'Algorithms')
+      assert.notEqual(prepared.courses[1].id, existing[0].id)
+      assert.deepEqual(existing, [{ id: 'first', title: 'Algebra' }])
+      assert.deepEqual(prepareProfessorCourses(existing, '  '), {
+        ok: true,
+        courses: existing,
+      })
+    },
+  )
+
+  await t.test(
+    'Done validates blank, duplicate and oversized course drafts before saving',
+    () => {
+      const existing = [{ id: 'first', title: 'Algebra' }]
+      assert.deepEqual(prepareProfessorCourses([], '   '), {
+        ok: false,
+        error: 'Enter a course title first.',
+      })
+      assert.deepEqual(prepareProfessorCourses(existing, '  ALGEBRA  '), {
+        ok: false,
+        error: 'This course is already on your list.',
+      })
+      assert.deepEqual(prepareProfessorCourses(existing, 'X'.repeat(121)), {
+        ok: false,
+        error: 'Course titles must be 120 characters or fewer.',
+      })
+      assert.deepEqual(existing, [{ id: 'first', title: 'Algebra' }])
+    },
+  )
+
   await t.test('unavailable storage fails safely', () => {
     t.mock.method(window.localStorage, 'getItem', () => {
       throw new Error('blocked')
@@ -160,5 +217,11 @@ test('professor profile persistence contract', async (t) => {
     assert.equal(readProfessorProfile('professor-a'), null)
     assert.equal(saveProfessorProfile('professor-a', courses), false)
     assert.equal(resetProfessorProfile('professor-a'), false)
+    const draft = 'Unsubmitted course'
+    const prepared = prepareProfessorCourses(courses, draft)
+    assert.equal(prepared.ok, true)
+    assert.equal(saveProfessorProfile('professor-a', prepared.courses), false)
+    assert.equal(draft, 'Unsubmitted course')
+    assert.equal(courses.length, 2)
   })
 })

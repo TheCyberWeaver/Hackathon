@@ -2,10 +2,7 @@ import { lazy, Suspense, useEffect, useState } from 'react'
 import EntryPage from './components/EntryPage'
 import { getCurrentUser, IdentityError } from './lib/api'
 import type { CurrentUser } from './lib/api'
-import {
-  readProfessorProfile,
-  resetProfessorProfile,
-} from './professor/professorProfile'
+import { readProfessorProfile } from './professor/professorProfile'
 
 const StudentDashboard = lazy(() => import('./student/StudentDashboard'))
 const ProfessorDashboard = lazy(() => import('./professor/ProfessorDashboard'))
@@ -24,23 +21,7 @@ function ProfessorSpace({
     () => readProfessorProfile(user.id)?.courses ?? null,
   )
 
-  if (courses)
-    return (
-      <ProfessorDashboard
-        user={user}
-        courses={courses}
-        onResetOnboarding={
-          import.meta.env.DEV
-            ? () => {
-                if (!resetProfessorProfile(user.id)) return false
-                setCourses(null)
-                onContinue()
-                return true
-              }
-            : undefined
-        }
-      />
-    )
+  if (courses) return <ProfessorDashboard user={user} courses={courses} />
   return (
     <ProfessorOnboarding
       user={user}

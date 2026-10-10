@@ -9,6 +9,12 @@ chooser and QR flow. `ProfessorSpace` passes the signed-in professor's completed
 as option values and course titles as labels. Demo courses, historical lecture
 names and the ad-hoc "Another course" option no longer populate this dropdown.
 
+**Done** also includes any course title still typed in **Add new course**, so
+pressing `+` or Enter first is optional. The same trimming, duplicate and length
+validation applies to both actions. Invalid input shows an error; a failed save
+keeps the current list and draft intact for retry. Done remains disabled when
+there are no courses or nonblank draft, and while renaming or dragging a course.
+
 Selecting a course and pressing **Start session** creates and starts a lecture
 through the existing Java API. The selected title is stored in PostgreSQL as the
 lecture's title/course, and the QR page still uses the numeric **lecture ID** as
@@ -17,7 +23,8 @@ their questions are unchanged by onboarding, renaming or resetting courses.
 
 The profile/course catalog still uses `temp`'s identity-scoped browser storage;
 this merge does not add an account-backed profile API or the pending Settings
-course editor. The selected lecture and student membership remain server-backed.
+course editor. Settings no longer exposes the development onboarding-reset
+control. The selected lecture and student membership remain server-backed.
 The historical prototype notes below describe the source branch before this
 integration. `npm run test:professor-profile` also verifies the course dropdown;
 `npm run test:api` covers creating a session from an onboarding course and its QR
@@ -143,9 +150,11 @@ The server integration will be asynchronous: replace `ProfessorSpace`'s synchron
 
 Run the current local stack as described in `docs/Local_Development.md`, then visit `/professor` with an identity that has not completed setup.
 
-During development, open Professor Settings and use **Reset onboarding (dev)** at the very bottom-right. It calls `resetProfessorProfile(user.id)` to remove that professor's saved courses and completion flag, switches the `ProfessorSpace` gate back to incomplete, and navigates to `/professor` for a fresh welcome and empty form. It does not save a replacement course list. A failed storage removal leaves the dashboard open with an error. Only this professor's onboarding storage key is removed; other accounts, browser preferences, and backend lecture/question data remain intact. Both the control and callback are gated with `import.meta.env.DEV`; the control is excluded from production JavaScript. When merging the real Settings page, retain this as a dev-only control rather than exposing replay to professors.
-
-Alternatively, remove only the current identity's key in the console, for example `localStorage.removeItem('askpool:professor-onboarding:v1:alex%40ethz.ch')`, and reload.
+The development reset control has been removed from Settings. To test onboarding
+without changing a saved profile, use a fresh browser profile. For an intentional
+developer reset, remove only the current identity's key in the console, for
+example `localStorage.removeItem('askpool:professor-onboarding:v1:alex%40ethz.ch')`,
+and reload. This leaves other accounts and backend lecture/question data intact.
 
 Run `npm run build`, `npm run lint`, `npm run test:professor-profile`, and `npm run format:check` in `frontend/` after changing this code. The `professor-onboarding` branch's pre-merge professor dashboard did not compile; the merge from `origin/main` supplied the current working professor flow.
 

@@ -17,6 +17,34 @@ export function normalizedCourseTitle(title: string) {
   return title.trim().toLowerCase()
 }
 
+// Resolve the unsubmitted input before saving, without changing the existing list.
+export function prepareProfessorCourses(
+  courses: ProfessorCourse[],
+  draft: string,
+): { ok: true; courses: ProfessorCourse[] } | { ok: false; error: string } {
+  const title = draft.trim()
+  if (!title)
+    return courses.length > 0
+      ? { ok: true, courses }
+      : { ok: false, error: 'Enter a course title first.' }
+  if (title.length > 120)
+    return {
+      ok: false,
+      error: 'Course titles must be 120 characters or fewer.',
+    }
+  if (
+    courses.some(
+      (course) =>
+        normalizedCourseTitle(course.title) === normalizedCourseTitle(title),
+    )
+  )
+    return { ok: false, error: 'This course is already on your list.' }
+  return {
+    ok: true,
+    courses: [...courses, { id: crypto.randomUUID(), title }],
+  }
+}
+
 export function resetProfessorProfile(professorId: string): boolean {
   if (!professorId.trim()) return false
   try {

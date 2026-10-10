@@ -4,6 +4,7 @@ import type { CSSProperties, FormEvent, PointerEvent } from 'react'
 import type { CurrentUser } from '../lib/api'
 import {
   normalizedCourseTitle,
+  prepareProfessorCourses,
   saveProfessorProfile,
   type ProfessorCourse,
 } from './professorProfile'
@@ -200,16 +201,12 @@ export default function ProfessorOnboarding({
       setAddError('Enter a course title first.')
       return
     }
-    if (
-      courses.some(
-        (course) =>
-          normalizedCourseTitle(course.title) === normalizedCourseTitle(title),
-      )
-    ) {
-      setAddError('This course is already on your list.')
+    const prepared = prepareProfessorCourses(courses, title)
+    if (prepared.ok === false) {
+      setAddError(prepared.error)
       return
     }
-    setCourses((current) => [...current, { id: crypto.randomUUID(), title }])
+    setCourses(prepared.courses)
     // Keep the highest reached position, including after courses are removed.
     setCourseRise((current) =>
       Math.max(current, Math.min(courses.length + 1, 5) / 5),
@@ -350,18 +347,20 @@ export default function ProfessorOnboarding({
   }
 
   function finishSetup() {
-    if (
-      stage !== 'courses' ||
-      courseDrag ||
-      editingId ||
-      draft.trim() ||
-      courses.length === 0
-    )
+    if (stage !== 'courses' || courseDrag || editingId) return
+    const prepared = prepareProfessorCourses(courses, draft)
+    if (prepared.ok === false) {
+      setAddError(prepared.error)
+      addInputRef.current?.focus({ preventScroll: true })
       return
-    if (!saveProfessorProfile(user.id, courses)) {
+    }
+    if (!saveProfessorProfile(user.id, prepared.courses)) {
       setSaveError('We could not save your courses in this browser. Try again.')
       return
     }
+    setCourses(prepared.courses)
+    setDraft('')
+    setAddError('')
     setSaveError('')
     setStage(
       window.matchMedia('(prefers-reduced-motion: reduce)').matches
@@ -371,7 +370,7 @@ export default function ProfessorOnboarding({
   }
 
   const canFinish =
-    courses.length > 0 && !editingId && !draft.trim() && !courseDrag
+    (courses.length > 0 || Boolean(draft.trim())) && !editingId && !courseDrag
 
   return (
     <div className={`professor-onboarding professor-onboarding--${stage}`}>
