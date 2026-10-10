@@ -28,9 +28,9 @@ const navigation: { page: Page; label: string; href: string }[] = [
   { page: 'settings', label: 'Settings', href: '/settings' },
 ]
 
-function currentPage(): Page {
-  if (window.location.pathname === '/profile') return 'profile'
-  if (window.location.pathname === '/settings') return 'settings'
+function currentPage(basePath: string): Page {
+  if (window.location.pathname === `${basePath}/profile`) return 'profile'
+  if (window.location.pathname === `${basePath}/settings`) return 'settings'
   return 'questions'
 }
 
@@ -47,8 +47,14 @@ function sleep(ms: number) {
   return new Promise((resolve) => window.setTimeout(resolve, ms))
 }
 
-export default function App() {
-  const [page, setPage] = useState<Page>(currentPage)
+export default function App({
+  basePath = '',
+  user,
+}: {
+  basePath?: string
+  user?: { id: string; name: string }
+} = {}) {
+  const [page, setPage] = useState<Page>(() => currentPage(basePath))
   const [questions, setQuestions] = useState<Question[]>([])
   const [draft, setDraft] = useState('')
   const [focused, setFocused] = useState(false)
@@ -74,7 +80,8 @@ export default function App() {
   }
 
   function navigate(nextPage: Page) {
-    const path = nextPage === 'questions' ? '/' : `/${nextPage}`
+    const path =
+      nextPage === 'questions' ? basePath || '/' : `${basePath}/${nextPage}`
     if (window.location.pathname !== path) {
       window.history.pushState(null, '', path)
     }
@@ -102,14 +109,14 @@ export default function App() {
 
   useEffect(() => {
     function syncPage() {
-      setPage(currentPage())
+      setPage(currentPage(basePath))
       setSidebarOpen(false)
       setFocused(false)
       window.scrollTo(0, 0)
     }
     window.addEventListener('popstate', syncPage)
     return () => window.removeEventListener('popstate', syncPage)
-  }, [])
+  }, [basePath])
 
   useEffect(() => {
     if (!sidebarOpen) return
@@ -351,7 +358,7 @@ export default function App() {
       </button>
       <a
         className="brand-mark"
-        href="/"
+        href={basePath || '/'}
         onClick={(event) => handleNavigation(event, 'questions')}
       >
         ASKPOOL
@@ -369,14 +376,18 @@ export default function App() {
           <span className="sidebar__avatar">
             <ProfileIcon width="25" height="25" />
           </span>
-          <span className="sidebar__name">Student</span>
+          <span className="sidebar__name">{user?.name || 'Student'}</span>
         </div>
         <div className="sidebar__divider" />
         <nav className="sidebar__nav" aria-label="Main navigation">
           {navigation.map((item) => (
             <a
               key={item.page}
-              href={item.href}
+              href={
+                item.page === 'questions'
+                  ? basePath || '/'
+                  : `${basePath}${item.href}`
+              }
               className={`sidebar__link ${page === item.page ? 'sidebar__link--active' : ''}`}
               aria-current={page === item.page ? 'page' : undefined}
               onClick={(event) => handleNavigation(event, item.page)}
@@ -384,6 +395,11 @@ export default function App() {
               {item.label}
             </a>
           ))}
+          {user && (
+            <a className="sidebar__link" href="/">
+              Switch space
+            </a>
+          )}
         </nav>
       </aside>
 

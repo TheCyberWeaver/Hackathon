@@ -10,6 +10,19 @@ services:
       - ./artifacts/backend.jar:/app/backend.jar:ro
     restart: unless-stopped
 
+  student-api:
+    image: node:24-alpine
+    working_dir: /app
+    command: ["node", "index.mjs"]
+    environment:
+      PORT: "3001"
+      ASKPOOL_REQUIRE_USER_ID: "true"
+      ASKPOOL_DATA_DIR: /data
+    volumes:
+      - ./artifacts/student-api:/app:ro
+      - student-data:/data
+    restart: unless-stopped
+
   frontend:
     image: caddy:2-alpine
     ports:
@@ -19,4 +32,8 @@ services:
       - ./artifacts/frontend:/srv:ro
     depends_on:
       - backend
+      - student-api
     restart: unless-stopped
+
+volumes:
+  student-data:

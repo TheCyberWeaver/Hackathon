@@ -2,7 +2,7 @@ import { createServer } from 'node:http'
 import { randomUUID } from 'node:crypto'
 import { readState, saveState } from './store.mjs'
 
-const port = 3001
+const port = Number(process.env.PORT || 3001)
 
 function send(response, status, body) {
   response.writeHead(status, {
@@ -54,9 +54,14 @@ async function jsonBody(request) {
 createServer(async (request, response) => {
   try {
     const path = new URL(request.url, 'http://localhost').pathname
-    const studentId = request.headers['x-student-id']
+    // Integrated app: identity comes from the managed proxy, not the browser.
+    // Standalone demo retains its per-browser identity for independent development.
+    const studentId =
+      process.env.ASKPOOL_REQUIRE_USER_ID === 'true'
+        ? request.headers['x-user-id']
+        : request.headers['x-user-id'] || request.headers['x-student-id']
     if (typeof studentId !== 'string' || !studentId.trim()) {
-      send(response, 400, { error: 'Missing student identity' })
+      send(response, 401, { error: 'Missing student identity' })
       return
     }
 

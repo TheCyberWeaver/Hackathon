@@ -4,14 +4,27 @@ The entry page is `/`. Its visible UI is only the AskPool name and two buttons:
 Student and Professor. It reads the signed-in user's identity from `GET /api/me`
 and provides two navigation destinations: `/student` and `/professor`.
 
-## Dashboard handoff
+## Connected dashboards
 
-`frontend/src/App.tsx` loads the profile and selects a destination based on the
-pathname. Replace `DashboardEntry` with the independently developed dashboard
-components at those two integration points. The profile is passed as a `user`
-prop with `{ id: string, name: string }`. The default destination components are
-small coming-soon pages, not dashboard implementations. Links work on reload
-because Vite and the deployment's Caddy configuration use an SPA fallback.
+`frontend/src/App.tsx` loads the profile before opening either dashboard. The
+Student button opens the existing student app at `/student`; its profile and
+settings pages are `/student/profile` and `/student/settings`. The Professor
+button opens the restored PR #2 dashboard at `/professor`. Both receive the
+signed-in user as `{ id: string, name: string }` and offer **Switch space** in
+their navigation drawers. Dashboard CSS loads with its own component so the
+minimal entry page retains its appearance. Reloads use Vite/Caddy's SPA fallback.
+
+The student app can still run independently on port 5174. The shared frontend's
+`npm run dev` starts Vite on 5173 and the student's demo API on 3001; Java still
+runs separately on 8080. `/api/me` goes to Java, while `/api/questions` and its
+subpaths go to the demo API. The integrated demo API requires `X-User-Id` for
+question ownership and voting; it ignores client-supplied `X-Student-Id` values.
+Standalone mode retains its original per-browser demo identity. Run only one
+copy of the student demo API on port 3001 at a time.
+
+Professor question data remains the existing in-memory mock demo. Student
+questions use the existing Node demo store. This connection does not combine
+the two question data models or implement a production question backend.
 
 Choosing student/professor is a demo navigation choice, not an authorization
 grant. Both options are available to every authenticated user. Dashboard teams
@@ -44,7 +57,7 @@ in separate terminals. Use JDK 21 with a valid `JAVA_HOME`.
 
 The Vite development proxy supplies `alex@ethz.ch` / `Alex Morgan` by default.
 This simulation is development-only; it is absent from production builds and
-`vite preview`. The profile appears on the dashboard handoff pages.
+`vite preview`. The profile appears in the dashboard navigation drawers.
 
 To change the preview identity, put these variables in `frontend/.env.local`
 and restart Vite:

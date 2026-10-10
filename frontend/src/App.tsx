@@ -1,8 +1,10 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import EntryPage from './components/EntryPage'
-import DashboardEntry from './components/DashboardEntry'
 import { getCurrentUser, IdentityError } from './lib/api'
 import type { CurrentUser } from './lib/api'
+
+const StudentDashboard = lazy(() => import('./student/StudentDashboard'))
+const ProfessorDashboard = lazy(() => import('./professor/ProfessorDashboard'))
 
 export type IdentityState =
   | { status: 'loading' }
@@ -53,10 +55,33 @@ export default function App() {
   }
 
   const path = window.location.pathname.replace(/\/+$/, '') || '/'
-  // Integration points for the independently developed dashboards.
-  const space =
-    path === '/student' ? 'student' : path === '/professor' ? 'professor' : null
-  if (space && identity.status === 'ready')
-    return <DashboardEntry space={space} user={identity.user} />
+  if (identity.status === 'ready') {
+    if (path === '/student' || path.startsWith('/student/')) {
+      return (
+        <Suspense
+          fallback={
+            <main className="entry-page" role="status">
+              Loading your dashboard…
+            </main>
+          }
+        >
+          <StudentDashboard user={identity.user} />
+        </Suspense>
+      )
+    }
+    if (path === '/professor') {
+      return (
+        <Suspense
+          fallback={
+            <main className="entry-page" role="status">
+              Loading your dashboard…
+            </main>
+          }
+        >
+          <ProfessorDashboard user={identity.user} />
+        </Suspense>
+      )
+    }
+  }
   return <EntryPage identity={identity} onEnter={enterSpace} />
 }
