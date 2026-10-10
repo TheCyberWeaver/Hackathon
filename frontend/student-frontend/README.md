@@ -2,6 +2,12 @@
 
 This is the separate student-facing clickable demo. Its small Node server stores preset questions, submitted questions, votes, and reports locally. It is independent of the shared frontend starter and the real backend.
 
+The shared entry app also mounts this UI at `/student`, with profile/settings
+under `/student/profile` and `/student/settings`. Run `npm run dev` from the
+parent `frontend/` folder and start Java separately for that integrated flow.
+It uses the proxy user identity, while the standalone demo below keeps its
+per-browser identity. Run only one demo API on port 3001 at a time.
+
 ## Run
 
 ```bash
