@@ -9,29 +9,95 @@
 }
 .professor-question-toolbar__layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-areas: 'tabs tabs' 'clear sort';
   align-items: end;
   gap: 12px;
 }
 .professor-question-tabs {
+  grid-area: tabs;
   border-bottom: 1px solid #e2e8f0;
 }
 .professor-question-sort {
-  justify-self: center;
+  grid-area: sort;
+  justify-self: end;
+  min-width: 0;
+  width: min(100%, 164px);
+}
+.professor-question-sort select {
+  padding-inline: 8px;
+  font-size: 12px;
+}
+.professor-question-clear {
+  grid-area: clear;
+  justify-self: start;
+  min-width: 0;
+}
+.professor-question-clear button {
+  padding-inline: 8px;
+  font-size: 12px;
 }
 @container (min-width: 580px) {
   .professor-question-toolbar__layout {
     grid-template-columns: minmax(0, 1fr) 204px;
+    grid-template-areas: 'tabs sort' 'clear clear';
     gap: 16px;
-    border-bottom: 1px solid #e2e8f0;
-  }
-  .professor-question-tabs {
-    border-bottom: 0;
   }
   .professor-question-sort {
-    justify-self: end;
     margin-bottom: 6px;
   }
+  .professor-question-sort select,
+  .professor-question-clear button {
+    font-size: 14px;
+  }
+  .professor-question-clear button {
+    padding-inline: 16px;
+  }
+}
+.professor-question-card {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+}
+.professor-question-card[data-expanded]:not([data-top-ranked]) {
+  border-color: #93c5fd;
+}
+.professor-question-card[data-top-ranked] {
+  border-left-color: #1d4ed8;
+}
+.professor-question-rank {
+  color: #1d4ed8;
+}
+.professor-question-votes {
+  background: #dbeafe;
+  color: #1e40af;
+}
+.professor-answer-button {
+  min-height: 44px;
+  border-color: #1d4ed8;
+  background: #1d4ed8;
+  color: white;
+}
+.professor-answer-button:hover {
+  border-color: #1e40af;
+  background: #1e40af;
+}
+.professor-answer-button[data-answered='true'] {
+  border-color: #93c5fd;
+  background: #dbeafe;
+  color: #1e40af;
+}
+.professor-answer-button:focus-visible {
+  outline-color: #1d4ed8;
+}
+.professor-delete-button {
+  border-color: #93c5fd;
+  background: white;
+  color: #1d4ed8;
+}
+.professor-delete-button:hover {
+  border-color: #fecaca;
+  background: #fef2f2;
+  color: #b91c1c;
 }
 @keyframes professor-toast-in {
   from {

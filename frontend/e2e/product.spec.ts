@@ -178,8 +178,11 @@ for (const mobile of [false, true]) {
       await expect(own).toHaveClass(/question-card--new/)
       if (mobile)
         await expect(
-          student.page.locator('#mobile-questions-heading'),
-        ).toHaveText('Your questions')
+          student.page.getByRole('tab', {
+            name: 'Your questions',
+            exact: true,
+          }),
+        ).toHaveAttribute('aria-selected', 'true')
       else
         await expect(
           student.page.locator('.desktop-other .question-card'),
@@ -209,7 +212,7 @@ for (const mobile of [false, true]) {
       ).id
       if (mobile)
         await peer.page
-          .getByRole('button', { name: 'Show other questions', exact: true })
+          .getByRole('tab', { name: 'Other questions', exact: true })
           .click()
       const peerCard = peer.page
         .locator('.question-card:visible')
@@ -364,6 +367,19 @@ for (const mobile of [false, true]) {
         path: info.outputPath('history.png'),
         fullPage: true,
       })
+      await nav(student.page, 'Past Lectures')
+      const studentHistory = student.page
+        .locator('.student-history-entry')
+        .filter({ hasText: course })
+        .first()
+      await expect(studentHistory).toContainText('3 questions')
+      await studentHistory.locator('.student-history-summary').click()
+      await expect(
+        student.page.locator('.student-history-question'),
+      ).toHaveCount(3)
+      await expect(
+        student.page.locator('.student-history-status.is-answered'),
+      ).toHaveCount(3)
       await device.page.reload()
       await expect(
         device.page.getByText('No courses yet. Add your first course above.'),

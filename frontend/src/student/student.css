@@ -715,38 +715,44 @@ html:has(.student-settings-card) {
   display: none;
 }
 .mobile-questions {
-  min-height: calc(100dvh + 96px);
   padding-top: 14px;
   padding-bottom: 80px;
   overflow-anchor: none;
 }
-.mobile-section-heading {
+.mobile-question-tabs {
   display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 12px;
+  align-items: stretch;
+  gap: clamp(16px, 4vw, 32px);
+  margin-bottom: 21px;
 }
-.view-switch {
-  display: grid;
-  place-items: center;
-  flex: 0 0 44px;
-  width: 44px;
-  height: 44px;
-  margin-top: -4px;
-  border: 1px solid var(--color-border);
-  border-radius: 50%;
-  background: var(--color-surface);
+.mobile-question-tabs [role='tab'] {
+  min-height: 44px;
+  padding: 6px 0 8px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
   color: var(--color-secondary);
-  box-shadow: 0 2px 10px rgb(15 23 42 / 4%);
+  font: inherit;
+  font-size: clamp(16px, 4.5vw, 21px);
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
   transition:
-    color 180ms,
-    border-color 180ms,
-    transform 180ms var(--ease-out-quad);
+    color 160ms,
+    border-color 160ms;
 }
-.view-switch:hover {
+.mobile-question-tabs [aria-selected='true'] {
   color: var(--color-accent);
-  border-color: var(--color-accent-ring);
-  transform: rotate(12deg);
+  border-bottom-color: var(--color-accent);
+}
+.mobile-question-tabs [role='tab']:hover {
+  color: var(--color-accent);
+}
+.mobile-questions [role='tabpanel']:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 5px;
+  border-radius: 12px;
 }
 .question-list {
   display: flex;
@@ -1116,24 +1122,261 @@ html:has(.student-settings-card) {
   z-index: 10;
   position: relative;
 }
-.student-history-item {
+.student-history-page {
+  min-height: 100dvh;
+  padding-top: clamp(110px, 15dvh, 156px);
+  padding-bottom: 80px;
+  animation: student-page-enter 220ms var(--ease-drawer) both;
+}
+.student-history-page .page-column {
+  width: min(calc(100% - 40px), 900px);
+}
+.student-app .student-history-page h1 {
+  margin-bottom: 24px;
+  text-align: left;
+  font-size: clamp(29px, 4vw, 42px);
+}
+.student-history-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+.student-history-rule {
+  flex: 1;
+  height: 1px;
+  background: var(--color-border);
+}
+.student-history-sort {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--color-secondary);
+}
+.student-history-sort svg {
+  width: 18px;
+  height: 18px;
+  pointer-events: none;
+}
+.student-history-sort select {
+  min-height: 44px;
+  padding: 8px 4px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-ink);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.student-history-sort select:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 3px;
+}
+.student-history-list {
+  display: grid;
+  gap: 10px;
+  overflow-anchor: none;
+}
+.student-history-entry {
+  min-width: 0;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: var(--color-surface);
+}
+.student-history-row {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+.student-history-row h2 {
+  flex: 1;
+  min-width: 0;
+}
+.student-history-entry h2 {
+  margin: 0;
+  font-size: inherit;
+}
+.student-history-remove {
+  flex-shrink: 0;
+  min-height: 44px;
+  margin-right: 8px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-secondary);
+  font: inherit;
+  font-size: 12px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.student-history-remove:hover {
+  color: var(--color-accent);
+}
+.student-history-summary {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 1rem;
-  padding: 1rem 0;
-  border-bottom: 1px solid #e5e7eb;
-}
-
-.student-history-item > button:first-child {
+  gap: 24px;
+  width: 100%;
+  min-height: 64px;
+  padding: 14px 18px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
   text-align: left;
+  transition: background 160ms;
+}
+.student-history-summary:hover {
+  background: #f8fafc;
+}
+.student-history-title {
+  flex: 1;
+  min-width: 0;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.student-history-meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: baseline;
+  column-gap: 10px;
+  row-gap: 2px;
+  max-width: 55%;
+  color: var(--color-secondary);
+  font-size: 12px;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.6;
+  text-align: right;
+}
+.student-history-meta time span,
+.student-history-count {
+  white-space: nowrap;
+}
+.student-history-question {
+  padding: 10px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 7px;
+  background: var(--color-surface);
+}
+.student-history-question + .student-history-question {
+  margin-top: 8px;
+}
+.student-history-question p {
+  margin: 0 0 5px;
+  font-size: 14px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.student-history-status {
+  color: var(--color-secondary);
+  font-size: 11px;
+  font-weight: 500;
+}
+.student-history-status.is-answered {
+  color: #047857;
+}
+.student-history-message {
+  margin: 0;
+  padding: 12px 4px;
+  color: var(--color-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.student-history-feedback {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  color: var(--color-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.student-history-feedback button {
+  flex-shrink: 0;
+  min-height: 44px;
+  padding: 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-accent);
+  font: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+@media (max-width: 480px) {
+  .student-history-row {
+    flex-wrap: wrap;
+  }
+  .student-history-row h2 {
+    flex-basis: 100%;
+  }
+  .student-history-remove {
+    margin: -6px 8px 2px auto;
+  }
+  .student-history-summary {
+    gap: 14px;
+    padding: 12px;
+  }
+  .student-history-title {
+    font-size: 14px;
+  }
+  .student-history-meta {
+    flex: 0 1 43%;
+    max-width: 43%;
+    font-size: 11px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .student-history-page {
+    animation: none;
+  }
 }
 
-.student-history-remove {
-  flex-shrink: 0;
-  color: #6b7280;
+/* Retain scrolling room when a shorter mobile list is selected. */
+.mobile-questions #questions-panel-other {
+  padding-bottom: 100svh;
+}
+.student-history-summary {
+  text-decoration: none;
+}
+.student-history-summary:focus-visible,
+.student-lecture-back:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 3px;
+}
+.student-lecture-back {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  margin-bottom: 16px;
+  color: var(--color-accent);
+  font-size: 14px;
+  text-decoration: none;
+}
+.student-lecture-back:hover {
   text-decoration: underline;
-  font-size: 0.875rem;
+}
+.student-lecture-meta {
+  margin: -8px 0 24px;
+  color: var(--color-secondary);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.student-lecture-page h1 {
+  overflow-wrap: anywhere;
 }
 
 .student-review-actions {
@@ -1147,12 +1390,4 @@ html:has(.student-settings-card) {
   margin: 1rem 0 2rem;
   color: #57534e;
   line-height: 1.6;
-}
-
-@media (max-width: 600px) {
-  .student-history-item {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 0.65rem;
-  }
 }

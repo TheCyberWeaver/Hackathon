@@ -9,7 +9,7 @@ export type SidePanelPage =
 type SidePanelProps = {
   user: CurrentUser
   role: 'student' | 'professor'
-  page: SidePanelPage
+  page: SidePanelPage | null
   onNavigate: (page: SidePanelPage) => void
   launcherClassName?: string
 }
