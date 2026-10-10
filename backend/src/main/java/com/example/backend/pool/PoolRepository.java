@@ -57,8 +57,8 @@ public class PoolRepository {
         return jdbc.queryForObject("INSERT INTO questions (lecture_id, author_id, text) VALUES (?, ?, ?) RETURNING id",
             Long.class, lecture, author, text);
     }
-    public long recordModerationWarning(long lecture, long user) {
-        jdbc.update("INSERT INTO question_moderation_warnings (lecture_id, user_id, reason) VALUES (?, ?, 'blacklisted_word')", lecture, user);
+    public long recordModerationWarning(long lecture, long user, String reason) {
+        jdbc.update("INSERT INTO question_moderation_warnings (lecture_id, user_id, reason) VALUES (?, ?, ?)", lecture, user, reason);
         return jdbc.queryForObject("SELECT count(*) FROM question_moderation_warnings WHERE lecture_id = ? AND user_id = ?", Long.class, lecture, user);
     }
     private static final String QUESTION_QUERY = """
