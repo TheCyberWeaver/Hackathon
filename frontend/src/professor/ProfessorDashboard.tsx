@@ -54,7 +54,13 @@ function ThumbsUpIcon() {
   )
 }
 
-export default function ProfessorDashboard({ user }: { user: CurrentUser }) {
+export default function ProfessorDashboard({
+  user,
+  onSwitchSpace,
+}: {
+  user: CurrentUser
+  onSwitchSpace: () => void
+}) {
   const [questions, setQuestions] = useState<Question[]>(() => [
     ...mockQuestions,
   ])
@@ -251,7 +257,10 @@ export default function ProfessorDashboard({ user }: { user: CurrentUser }) {
                 <path strokeLinecap="round" d="M5.5 20a6.5 6.5 0 0 1 13 0" />
               </svg>
             </span>
-            <span className="text-sm font-semibold">{user.name}</span>
+            <div className="min-w-0 break-words">
+              <p className="text-sm font-semibold">{user.name}</p>
+              <p className="mt-1 text-xs text-slate-500">{user.id}</p>
+            </div>
           </div>
           <nav
             aria-label="Professor options"
@@ -259,6 +268,18 @@ export default function ProfessorDashboard({ user }: { user: CurrentUser }) {
           >
             <a
               href="/"
+              onClick={(event) => {
+                if (
+                  event.button !== 0 ||
+                  event.metaKey ||
+                  event.ctrlKey ||
+                  event.shiftKey ||
+                  event.altKey
+                )
+                  return
+                event.preventDefault()
+                onSwitchSpace()
+              }}
               className="rounded-lg px-3 py-3 text-left text-sm font-medium text-slate-700 hover:bg-white focus-visible:outline-2 focus-visible:outline-blue-600"
             >
               Switch space

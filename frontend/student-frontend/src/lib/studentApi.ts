@@ -30,11 +30,18 @@ function studentId(): string {
   return id
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+async function request<T>(
+  path: string,
+  init?: RequestInit,
+  proxyIdentity = false,
+): Promise<T> {
   const response = await fetch(`/api${path}`, {
     ...init,
+    credentials: 'same-origin',
     headers: {
-      'X-Student-Id': studentId(),
+      // In the integrated app the proxy supplies identity on the server side.
+      // Never generate a second identity or send trusted user headers from JS.
+      ...(!proxyIdentity ? { 'X-Student-Id': studentId() } : {}),
       ...(init?.body ? { 'Content-Type': 'application/json' } : {}),
       ...init?.headers,
     },
@@ -48,26 +55,48 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     : ((await response.json()) as T)
 }
 
-export function listQuestions(): Promise<Question[]> {
-  return request<Question[]>('/questions')
+export function listQuestions(proxyIdentity = false): Promise<Question[]> {
+  return request<Question[]>('/questions', undefined, proxyIdentity)
 }
 
-export function submitQuestion(text: string): Promise<Question> {
-  return request<Question>('/questions', {
-    method: 'POST',
-    body: JSON.stringify({ text }),
-  })
+export function submitQuestion(
+  text: string,
+  proxyIdentity = false,
+): Promise<Question> {
+  return request<Question>(
+    '/questions',
+    {
+      method: 'POST',
+      body: JSON.stringify({ text }),
+    },
+    proxyIdentity,
+  )
 }
 
-export function setVote(id: string, voted: boolean): Promise<Question> {
-  return request<Question>(`/questions/${encodeURIComponent(id)}/vote`, {
-    method: 'POST',
-    body: JSON.stringify({ voted }),
-  })
+export function setVote(
+  id: string,
+  voted: boolean,
+  proxyIdentity = false,
+): Promise<Question> {
+  return request<Question>(
+    `/questions/${encodeURIComponent(id)}/vote`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ voted }),
+    },
+    proxyIdentity,
+  )
 }
 
-export function reportQuestion(id: string): Promise<void> {
-  return request<void>(`/questions/${encodeURIComponent(id)}/report`, {
-    method: 'POST',
-  })
+export function reportQuestion(
+  id: string,
+  proxyIdentity = false,
+): Promise<void> {
+  return request<void>(
+    `/questions/${encodeURIComponent(id)}/report`,
+    {
+      method: 'POST',
+    },
+    proxyIdentity,
+  )
 }

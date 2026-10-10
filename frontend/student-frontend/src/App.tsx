@@ -50,10 +50,13 @@ function sleep(ms: number) {
 export default function App({
   basePath = '',
   user,
+  onSwitchSpace,
 }: {
   basePath?: string
   user?: { id: string; name: string }
+  onSwitchSpace?: () => void
 } = {}) {
+  const proxyIdentity = user !== undefined
   const [page, setPage] = useState<Page>(() => currentPage(basePath))
   const [questions, setQuestions] = useState<Question[]>([])
   const [draft, setDraft] = useState('')
@@ -133,7 +136,7 @@ export default function App({
 
   useEffect(() => {
     let active = true
-    listQuestions()
+    listQuestions(proxyIdentity)
       .then((items) => {
         if (active) setQuestions(items)
       })
@@ -145,7 +148,7 @@ export default function App({
       active = false
       window.clearTimeout(toastTimer.current)
     }
-  }, [])
+  }, [proxyIdentity])
 
   useEffect(() => {
     const viewport = window.visualViewport
@@ -205,7 +208,7 @@ export default function App({
     })
     if (textareaRef.current) growTextarea(textareaRef.current)
 
-    const result = submitQuestion(text).then(
+    const result = submitQuestion(text, proxyIdentity).then(
       (created) => ({ created, error: null }),
       (error: unknown) => ({ created: null, error }),
     )
@@ -245,7 +248,7 @@ export default function App({
       ),
     )
     try {
-      const updated = await setVote(question.id, voted)
+      const updated = await setVote(question.id, voted, proxyIdentity)
       setQuestions((items) =>
         items.map((item) => (item.id === updated.id ? updated : item)),
       )
@@ -297,7 +300,7 @@ export default function App({
     }
 
     try {
-      const refreshed = await listQuestions()
+      const refreshed = await listQuestions(proxyIdentity)
       await runTransition(() => setQuestions(refreshed))
     } catch {
       showToast(
@@ -311,7 +314,7 @@ export default function App({
     const target = reportTarget
     setReportTarget(null)
     try {
-      await reportQuestion(target.id)
+      await reportQuestion(target.id, proxyIdentity)
       showToast("Thanks, we'll take a look.")
     } catch {
       showToast('Could not send the report. Please try again.')
@@ -376,7 +379,10 @@ export default function App({
           <span className="sidebar__avatar">
             <ProfileIcon width="25" height="25" />
           </span>
-          <span className="sidebar__name">{user?.name || 'Student'}</span>
+          <div className="sidebar__account">
+            <span className="sidebar__name">{user?.name || 'Student'}</span>
+            {user && <span className="sidebar__email">{user.id}</span>}
+          </div>
         </div>
         <div className="sidebar__divider" />
         <nav className="sidebar__nav" aria-label="Main navigation">
@@ -396,7 +402,23 @@ export default function App({
             </a>
           ))}
           {user && (
-            <a className="sidebar__link" href="/">
+            <a
+              className="sidebar__link"
+              href="/"
+              onClick={(event) => {
+                if (
+                  !onSwitchSpace ||
+                  event.button !== 0 ||
+                  event.metaKey ||
+                  event.ctrlKey ||
+                  event.shiftKey ||
+                  event.altKey
+                )
+                  return
+                event.preventDefault()
+                onSwitchSpace()
+              }}
+            >
               Switch space
             </a>
           )}

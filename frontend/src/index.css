@@ -37,6 +37,7 @@ button:focus-visible {
 }
 
 .entry-page {
+  color: #203932;
   min-height: 100svh;
   display: grid;
   place-items: center;
@@ -69,6 +70,10 @@ button:focus-visible {
   transition:
     background 0.18s,
     transform 0.18s;
+}
+.entry-button:focus-visible {
+  outline: 3px solid #248e79;
+  outline-offset: 5px;
 }
 .student-button {
   color: #fff;

@@ -10,8 +10,12 @@ and provides two navigation destinations: `/student` and `/professor`.
 Student button opens the existing student app at `/student`; its profile and
 settings pages are `/student/profile` and `/student/settings`. The Professor
 button opens the restored PR #2 dashboard at `/professor`. Both receive the
-signed-in user as `{ id: string, name: string }` and offer **Switch space** in
-their navigation drawers. Dashboard CSS loads with its own component so the
+same signed-in user as `{ id: string, name: string }` and display that name and
+email in their navigation drawers. Entry buttons and **Switch space** use
+in-app navigation, retaining the profile loaded by the login page. Browser back
+and forward work across both spaces. A page reload or direct dashboard URL
+revalidates identity through `/api/me`; identity is not stored in localStorage.
+Dashboard CSS loads with its own component so the
 minimal entry page retains its appearance. Reloads use Vite/Caddy's SPA fallback.
 
 The student app can still run independently on port 5174. The shared frontend's
@@ -19,6 +23,9 @@ The student app can still run independently on port 5174. The shared frontend's
 runs separately on 8080. `/api/me` goes to Java, while `/api/questions` and its
 subpaths go to the demo API. The integrated demo API requires `X-User-Id` for
 question ownership and voting; it ignores client-supplied `X-Student-Id` values.
+When a login profile is provided, the student client makes same-origin requests
+without generating a browser ID or sending any identity headers. The managed
+proxy supplies the same `X-User-Id` used by `/api/me` on each API request.
 Standalone mode retains its original per-browser demo identity. Run only one
 copy of the student demo API on port 3001 at a time.
 
@@ -38,7 +45,7 @@ identity returns HTTP 401. Missing or malformed names fall back to the identifie
 Successful responses have `Cache-Control: no-store` and this shape:
 
 ```json
-{"id":"alex@ethz.ch","name":"Alex Morgan"}
+{ "id": "alex@ethz.ch", "name": "Alex Morgan" }
 ```
 
 The frontend disables entry buttons while checking identity. Without an identity,

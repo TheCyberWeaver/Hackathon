@@ -56,14 +56,15 @@ createServer(async (request, response) => {
     const path = new URL(request.url, 'http://localhost').pathname
     // Integrated app: identity comes from the managed proxy, not the browser.
     // Standalone demo retains its per-browser identity for independent development.
-    const studentId =
+    const userId =
       process.env.ASKPOOL_REQUIRE_USER_ID === 'true'
         ? request.headers['x-user-id']
         : request.headers['x-user-id'] || request.headers['x-student-id']
-    if (typeof studentId !== 'string' || !studentId.trim()) {
+    if (typeof userId !== 'string' || !userId.trim()) {
       send(response, 401, { error: 'Missing student identity' })
       return
     }
+    const studentId = userId.trim()
 
     const state = readState()
     if (request.method === 'GET' && path === '/api/questions') {

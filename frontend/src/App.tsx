@@ -14,6 +14,24 @@ export type IdentityState =
 
 export default function App() {
   const [identity, setIdentity] = useState<IdentityState>({ status: 'loading' })
+  const [path, setPath] = useState(() => window.location.pathname)
+
+  useEffect(() => {
+    const syncPath = () => setPath(window.location.pathname)
+    window.addEventListener('popstate', syncPath)
+    return () => window.removeEventListener('popstate', syncPath)
+  }, [])
+
+  useEffect(() => {
+    if (path === '/') document.title = 'AskPool'
+    if (path === '/professor') document.title = 'AskPool — Professor'
+  }, [path])
+
+  function navigate(nextPath: string) {
+    window.history.pushState(null, '', nextPath)
+    setPath(nextPath)
+    window.scrollTo(0, 0)
+  }
 
   useEffect(() => {
     const controller = new AbortController()
@@ -37,14 +55,14 @@ export default function App() {
       return
     }
     if (identity.status === 'ready') {
-      window.location.assign(`/${space}`)
+      navigate(`/${space}`)
       return
     }
     setIdentity({ status: 'loading' })
     try {
       const user = await getCurrentUser()
       setIdentity({ status: 'ready', user })
-      window.location.assign(`/${space}`)
+      navigate(`/${space}`)
     } catch (error) {
       if (error instanceof IdentityError && error.status === 401) {
         window.location.assign(`https://08.hackathon.ethz.ch/${space}`)
@@ -54,9 +72,12 @@ export default function App() {
     }
   }
 
-  const path = window.location.pathname.replace(/\/+$/, '') || '/'
+  const normalizedPath = path.replace(/\/+$/, '') || '/'
   if (identity.status === 'ready') {
-    if (path === '/student' || path.startsWith('/student/')) {
+    if (
+      normalizedPath === '/student' ||
+      normalizedPath.startsWith('/student/')
+    ) {
       return (
         <Suspense
           fallback={
@@ -65,11 +86,14 @@ export default function App() {
             </main>
           }
         >
-          <StudentDashboard user={identity.user} />
+          <StudentDashboard
+            user={identity.user}
+            onSwitchSpace={() => navigate('/')}
+          />
         </Suspense>
       )
     }
-    if (path === '/professor') {
+    if (normalizedPath === '/professor') {
       return (
         <Suspense
           fallback={
@@ -78,7 +102,10 @@ export default function App() {
             </main>
           }
         >
-          <ProfessorDashboard user={identity.user} />
+          <ProfessorDashboard
+            user={identity.user}
+            onSwitchSpace={() => navigate('/')}
+          />
         </Suspense>
       )
     }
