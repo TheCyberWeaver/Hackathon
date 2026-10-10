@@ -8,7 +8,12 @@ import {
   subscribeQuestionIntakePaused,
 } from '../lib/questionIntake'
 import { ViewSwitchButton } from './components/ViewSwitchButton'
+import StudentTutorial from './components/StudentTutorial'
 import { animateScrollTo, prefersReducedMotion } from './lib/motion'
+import {
+  readTutorialCompleted,
+  saveTutorialCompleted,
+} from './lib/tutorialProgress'
 import type { CurrentUser } from '../lib/api'
 import './student.css'
 import {
@@ -64,14 +69,44 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
   const [reportTarget, setReportTarget] = useState<Question | null>(null)
   const [toast, setToast] = useState('')
   const [newQuestionId, setNewQuestionId] = useState<string | null>(null)
+  const [tutorialOpen, setTutorialOpen] = useState(false)
+  const [tutorialCompleted, setTutorialCompleted] = useState(() =>
+    readTutorialCompleted(user.id),
+  )
   const [placeholder] = useState(
     () => examples[Math.floor(Math.random() * examples.length)],
   )
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const heroHeadingRef = useRef<HTMLHeadingElement>(null)
   const mobileListRef = useRef<HTMLElement>(null)
   const pendingVotes = useRef(new Set<string>())
   const switchingView = useRef(false)
   const toastTimer = useRef<number | undefined>(undefined)
+  const tutorialReturnFocus = useRef<HTMLElement | null>(null)
+
+  function openTutorial() {
+    tutorialReturnFocus.current =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null
+    textareaRef.current?.blur()
+    setFocused(false)
+    setTutorialOpen(true)
+  }
+
+  function closeTutorial(completed: boolean) {
+    if (completed) {
+      setTutorialCompleted(true)
+      saveTutorialCompleted(user.id)
+    }
+    setTutorialOpen(false)
+    window.requestAnimationFrame(() => {
+      const target = tutorialReturnFocus.current?.isConnected
+        ? tutorialReturnFocus.current
+        : heroHeadingRef.current
+      target?.focus()
+    })
+  }
 
   function showToast(message: string) {
     window.clearTimeout(toastTimer.current)
@@ -342,7 +377,6 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
         onNavigate={navigate}
         launcherClassName="side-panel-launcher--student"
       />
-
       {page === 'questions' ? (
         <main>
           <section
@@ -350,7 +384,7 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
             aria-label="Ask a question"
           >
             <div className="hero__content page-column">
-              <h1>
+              <h1 ref={heroHeadingRef} tabIndex={-1}>
                 {questionsPaused
                   ? 'Questions are paused'
                   : "What's your question?"}
@@ -422,6 +456,27 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
                   </div>
                 </div>
               </div>
+              {!tutorialCompleted && (
+                <div className="student-tutorial-invite">
+                  <svg aria-hidden="true" viewBox="0 0 72 38" fill="none">
+                    <path
+                      d="M3 3c18 0 20 27 52 27m-9-9 10 9-11 6"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                  <button
+                    type="button"
+                    className="student-tutorial-trigger"
+                    aria-haspopup="dialog"
+                    onClick={openTutorial}
+                  >
+                    New here? Need a quick tutorial?
+                  </button>
+                </div>
+              )}
             </div>
           </section>
 
@@ -472,22 +527,34 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
                   ? 'Profile'
                   : 'Settings'}
             </h1>
-            <div className="placeholder-page__card">
-              <h2>
-                {page === 'pastLectures'
-                  ? 'Past lectures'
-                  : page === 'profile'
-                    ? 'Your profile'
-                    : 'Settings page'}
-              </h2>
-              <p>
-                {page === 'pastLectures'
-                  ? 'Past lectures will appear here.'
-                  : page === 'profile'
-                    ? 'Your profile will appear here.'
-                    : 'This is a placeholder for your settings.'}
-              </p>
-            </div>
+            {page === 'settings' ? (
+              <div className="placeholder-page__card student-settings-card">
+                <div>
+                  <h2>Tutorial</h2>
+                  <p>
+                    Need a refresher? You can replay the student guide anytime.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="student-settings-open-tutorial"
+                  onClick={openTutorial}
+                >
+                  Open tutorial <span aria-hidden="true">→</span>
+                </button>
+              </div>
+            ) : (
+              <div className="placeholder-page__card">
+                <h2>
+                  {page === 'pastLectures' ? 'Past lectures' : 'Your profile'}
+                </h2>
+                <p>
+                  {page === 'pastLectures'
+                    ? 'Past lectures will appear here.'
+                    : 'Your profile will appear here.'}
+                </p>
+              </div>
+            )}
           </section>
         </main>
       )}
@@ -525,6 +592,7 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
       <div className="toast-region" role="status" aria-live="polite">
         {toast && <div className="toast">{toast}</div>}
       </div>
+      {tutorialOpen && <StudentTutorial onClose={closeTutorial} />}
     </div>
   )
 }
