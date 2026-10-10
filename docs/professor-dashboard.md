@@ -4,7 +4,7 @@ The professor demo lives at `/professor`, reached through the Professor button o
 
 ## Files and data
 
-- `frontend/src/professor/mockQuestions.ts` defines the `Question` type and 12 fixed fictional questions (9 open, 3 answered). All fields required by the UI are present. The `StudentN` values are demo identifiers, not verified identities.
+- `frontend/src/professor/mockQuestions.ts` defines the `Question` type and 12 fixed fictional questions (9 open, 3 answered). The card data contains no student identity fields.
 - `frontend/src/professor/mockPastLectures.ts` contains two fictional previous lectures with a course name, date, Zurich-time slot, and three saved question-and-answer pairs each. They are static demo records, not persisted lecture history.
 - `frontend/src/professor/ProfessorDashboard.tsx` owns rendering and in-memory state. The data module has no rendering or network logic.
 - `frontend/src/professor/lectureSession.ts` keeps the active lecture's start timestamp in browser local storage, scoped to the signed-in user ID. It is a frontend placeholder until the lecture API is available.
@@ -14,7 +14,7 @@ The component copies the mock question array on first render. Status changes and
 
 ## Behavior
 
-Open, Answered, and Deleted are derived from current state. A Sort by control applies to all three tabs: Most votes (the default, with older questions first on ties) or Time asked (newest first). ID breaks remaining ties. The flame decoration always marks the three most-voted open questions, even when sorting by time. The selected tab and sort mode stay selected after a status change. A question can be expanded independently to show its fictional author ID and a locally formatted submission time. Vote counts are display only.
+Open, Answered, and Deleted are derived from current state. A Sort by control applies to all three tabs: Most votes (the default, with older questions first on ties) or Time asked (newest first). ID breaks remaining ties. The flame decoration always marks the three most-voted open questions, even when sorting by time. The selected tab and sort mode stay selected after a status change. A question can be expanded independently to show its locally formatted submission time. Vote counts are display only.
 
 With no stored active lecture, Current Lecture shows an empty state and a green Start lecture button. Starting a lecture stores and displays the start timestamp, then reveals the existing mock question view. End lecture opens a confirmation dialog; confirming clears the browser-local timestamp and resets in-memory question changes before returning to the start screen. Live questions and durable lecture records await the backend. The browser-local timestamp survives reloads in the same browser but is not a shared or authoritative lecture record.
 
