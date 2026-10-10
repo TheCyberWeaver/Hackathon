@@ -4,14 +4,91 @@
   --font-sans: 'Segoe UI', ui-sans-serif, system-ui, sans-serif;
 }
 
+:root {
+  font-family: var(--font-sans);
+  color: #203932;
+  background: #f8f9f5;
+  font-synthesis: none;
+  -webkit-font-smoothing: antialiased;
+}
+
+* {
+  box-sizing: border-box;
+}
 body {
   margin: 0;
   min-width: 320px;
 }
+a {
+  color: inherit;
+  text-decoration: none;
+}
 button {
+  font: inherit;
   cursor: pointer;
 }
-button:disabled {
+a:focus-visible,
+button:focus-visible {
+  outline: 3px solid #248e79;
+  outline-offset: 5px;
+}
+::selection {
+  background: #c8e9dc;
+}
+
+.entry-page {
+  min-height: 100svh;
+  display: grid;
+  place-items: center;
+  padding: 32px;
+  background:
+    radial-gradient(ellipse at 50% 45%, #eaf0e4 0%, transparent 60%), #f8f9f5;
+}
+.entry-content {
+  text-align: center;
+  margin-top: -40px;
+}
+.entry-content h1 {
+  margin: 0 0 36px;
+  font-size: clamp(56px, 8vw, 80px);
+  font-weight: 650;
+  letter-spacing: -4px;
+  line-height: 1.1;
+}
+.entry-actions {
+  display: flex;
+  gap: 14px;
+}
+.entry-button {
+  min-width: 160px;
+  padding: 15px 28px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 550;
+  transition:
+    background 0.18s,
+    transform 0.18s;
+}
+.student-button {
+  color: #fff;
+  background: #176b59;
+}
+.student-button:hover:not(:disabled) {
+  background: #125b4b;
+  transform: translateY(-2px);
+}
+.professor-button {
+  color: #325a47;
+  background: #ffffff90;
+  border-color: #cbd9c4;
+}
+.professor-button:hover:not(:disabled) {
+  background: #e8eedf;
+  transform: translateY(-2px);
+}
+.entry-button:disabled {
+  opacity: 0.5;
   cursor: wait;
 }
 
@@ -51,5 +128,103 @@ button:disabled {
   .professor-drawer[open],
   .professor-drawer[open]::backdrop {
     animation: none;
+/* Small dashboard handoffs, replaced when the dashboard branches merge. */
+.handoff-page {
+  min-height: 100svh;
+}
+.page-width {
+  width: min(1160px, calc(100% - 48px));
+  margin-inline: auto;
+}
+.site-header {
+  min-height: 90px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+.brand {
+  font-size: 25px;
+  font-weight: 650;
+  letter-spacing: -1px;
+}
+.back-link {
+  font-size: 13px;
+}
+.handoff-panel {
+  width: min(560px, calc(100% - 40px));
+  margin: 70px auto;
+  padding: 40px;
+  background: #fff;
+  border-radius: 20px;
+  border: 1px solid #e2e8dc;
+}
+.panel-kicker {
+  color: #62785d;
+  font-size: 10px;
+  letter-spacing: 1.5px;
+}
+.handoff-panel h1 {
+  font-size: 36px;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -1px;
+  overflow-wrap: anywhere;
+}
+.handoff-panel p {
+  font-size: 15px;
+  color: #687a60;
+  line-height: 1.8;
+  margin: 22px 0;
+}
+.handoff-identity {
+  background: #f6f8f2;
+  border-radius: 10px;
+  padding: 16px;
+  font-size: 12px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.identity-check {
+  color: #627b52;
+}
+.handoff-identity > span:last-child {
+  width: 100%;
+  color: #657953;
+  overflow-wrap: anywhere;
+}
+.return-link {
+  display: inline-flex;
+  gap: 24px;
+  background: #176b59;
+  color: white;
+  border-radius: 9px;
+  padding: 13px 18px;
+  font-size: 13px;
+  margin-top: 26px;
+}
+
+@media (max-width: 480px) {
+  .entry-content h1 {
+    letter-spacing: -3px;
+  }
+  .entry-actions {
+    flex-direction: column;
+    gap: 12px;
+  }
+  .entry-button {
+    min-width: 220px;
+  }
+  .handoff-panel {
+    padding: 26px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition: none !important;
   }
 }

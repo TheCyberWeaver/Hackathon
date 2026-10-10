@@ -1,5 +1,18 @@
 # API contract
 
+## GET /api/me
+
+Reads the managed proxy's `X-User-Id` and percent-encoded `X-User-Name` headers.
+Returns HTTP 401 when the user identifier is absent or blank. On success, returns
+HTTP 200 with `Cache-Control: no-store`:
+
+```json
+{ "id": "alex@ethz.ch", "name": "Alex Morgan" }
+```
+
+This identifies the user; it does not assign professor permissions. See
+[entry page integration](Entry_Page.md) for dashboard handoff and local preview.
+
 ## GET /api/hello
 
 No authentication, query parameters or request body are required.

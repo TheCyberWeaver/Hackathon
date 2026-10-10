@@ -16,3 +16,5 @@ Thumbs.db
 
 # Local build cache used during setup
 .gradle-user-home/
+deploy/artifacts/
+/deploy-local.ps1
