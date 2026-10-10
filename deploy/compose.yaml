@@ -6,7 +6,6 @@ services:
     environment:
       PORT: "8080"
       APP_FRONTEND_ORIGIN: https://08.hackathon.ethz.ch
-      APP_TESTING_PERMISSIONS: ${APP_TESTING_PERMISSIONS:-true}
       DATABASE_URL: ${DATABASE_URL:-jdbc:postgresql://postgres:5432/askpool}
       DATABASE_USER: askpool_app
       DATABASE_BASELINE: ${DATABASE_BASELINE:-false}

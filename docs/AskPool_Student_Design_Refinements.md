@@ -1,6 +1,5 @@
 # AskPool — student frontend design refinements
 
-Project: `C:\Users\qiang\Documents\Coding\Hackathon_ethz\hackathon-app-2\Hackathon`
 Date: 2026-10-11
 Scope: frontend design and the presentation interactions needed for these two student-facing changes.
 
@@ -52,7 +51,7 @@ Replace the current placeholder-style panel and plain lecture links with a polis
 
 ### Compact lecture summaries
 
-Each collapsed lecture box should contain:
+Each lecture summary should contain:
 
 - **Left:** the lecture/session name as the primary text.
 - **Right, in smaller gray text:** only the date, start time, and total number of questions.
@@ -74,16 +73,16 @@ This is a content/layout illustration, not a fixed-width implementation requirem
 
 ### Opening a lecture
 
-Assumption for this design round: removing the dropdown arrow changes the visual treatment, while lecture rows still expand and collapse to reveal their questions.
+The merged design opens a separate read-only lecture page when a history row is selected.
 
-- Start with every lecture collapsed.
+- Show compact summary rows without question text on the history list.
 - Make the whole summary row clickable/tappable and keyboard operable.
-- Communicate interactivity and the expanded state with restrained hover, focus, and surface/border treatment, without adding a replacement arrow.
-- Expand questions inline below the summary with a subtle divider.
+- Communicate interactivity with restrained hover, focus, and surface/border treatment, without adding a replacement arrow.
+- Open a separate lecture page showing questions and their statuses.
 - Use compact question text and small Answered/Unanswered status labels, consistent with the professor history design. Preserve anonymity and display full question text.
-- The history view is for reading. Do not place a new-question composer or live-session controls inside an expanded archived lecture.
+- The history view is for reading. Do not place a new-question composer or live-session controls on the archived lecture page.
 - Browsing a past lecture must not join it, replace the student's currently joined live lecture, or redirect the student to the join screen.
-- Expanding or collapsing one entry should preserve the user's place in the list.
+- Opening a lecture and returning to the list should preserve the selected sort order.
 
 ### Date sorting
 
@@ -91,8 +90,7 @@ Assumption for this design round: removing the dropdown arrow changes the visual
 - Default to Newest first.
 - Sort chronologically by session start date and time, using the same timestamp fallback as the summary. Use a stable order when timestamps match.
 - Apply selection immediately and update the visible sort label.
-- Keep the selected order during list refreshes and expansion/collapse.
-- Reordering should preserve which lecture entries are expanded.
+- Keep the selected order during list refreshes and when returning from an archived lecture page.
 - Keep the control usable by touch and keyboard, with clear focus and selected states.
 - No backend preference storage is required for this display choice.
 
@@ -102,10 +100,10 @@ Assumption for this design round: removing the dropdown arrow changes the visual
 - Use existing read APIs for lecture details, questions, and totals. This round does not add database changes, endpoints, attendance tracking, or access-policy changes.
 - Keep historical display state separate from the current live-session state.
 - Show concise loading feedback. A count that is still loading or failed must not falsely display as zero.
-- A genuine zero-question lecture remains visible with 0 questions and a concise empty message when expanded.
+- A genuine zero-question lecture remains visible with 0 questions and a concise empty message on its lecture page.
 - Show a friendly No past lectures yet state when appropriate.
 - Provide retry feedback for failed loading, without unnecessarily removing successfully loaded entries.
-- Avoid repeated unnecessary requests while switching sort order or expanding already loaded entries.
+- Avoid repeated unnecessary requests while switching sort order or reopening already loaded entries.
 
 ### Acceptance
 
@@ -113,42 +111,9 @@ Assumption for this design round: removing the dropdown arrow changes the visual
 - Collapsed boxes have a title on the left and only date, start time, and question total on the right.
 - No blue arrow or native dropdown marker appears.
 - Newest first and Oldest first produce the correct chronological ordering, including lectures on the same date.
-- Expanding a row displays its questions inline without interfering with the currently joined live lecture.
+- Opening a row displays its questions on a separate page without interfering with the currently joined live lecture.
 - The design remains readable and compact on a small phone, a larger phone/tablet, and desktop, including long lecture titles and empty histories.
 
-## Scope and verification
+## Integration notes
 
-- This is a frontend design iteration. Keep professor screens and the previous round's backend behavior intact.
-- Frontend state/data-loading adjustments required to make the new views work are in scope.
-- Preserve unrelated user changes. Leave all work uncommitted; do not commit, push, switch branches, reset, or perform other Git mutations.
-- Use the existing frontend checks appropriate to the change, including build and lint.
-- Visually inspect the actual rendered result at representative mobile and desktop widths. Do not rely only on source inspection or automated compilation.
-- Exercise tab selection, post-submit selection, empty lists, history expansion, both sort orders, long titles, loading/error feedback, and continuity of a joined live lecture.
-- Use existing local data where possible. Do not reset or clear the user's local database to prepare a demonstration.
-- Technical details such as component boundaries, precise dimensions, and request coordination are implementation choices. Prioritize the interaction and visual results described here.
-
-## Required finish: leave the local application running
-
-**At the end of implementation, keep the updated local version running so the user can immediately click through the changes. This is part of completion, not an optional follow-up.**
-
-- Inspect the existing local development setup and use the correct hackathon-app-2 checkout.
-- Reuse an already running instance if it serves the correct checkout and the new changes. Otherwise start the local frontend and the backend/database services it needs.
-- Keep the processes alive after the implementation chat's final message. A server that stops when a temporary tool command or test finishes does not satisfy this requirement.
-- Run background helpers without opening visible terminal windows unless the user asks for them.
-- Verify that the actual student pages load and their data requests succeed. Do not report success merely because a development-server process started.
-- Avoid disrupting an unrelated server or local database. If an unrelated process occupies the default port, use a suitable alternate local port and report the actual URL.
-- Do not deploy or modify remote/live data.
-- In the final response, provide clickable links to the running local student page and Past Lectures page, identify the port if it differs from the usual one, and briefly state what was verified.
-- Explain how to access the mobile tab layout, such as using a narrow browser viewport, and provide a short practical click-through sequence.
-- Report any genuine launch blocker accurately. Do not claim that the local app is running unless it was verified and left running.
-
-## Current source starting points
-
-These are orientation aids, not mandatory implementation boundaries:
-
-- `frontend/src/student/StudentDashboard.tsx`: mobile list selection and the current student history placeholder.
-- `frontend/src/student/components/ViewSwitchButton.tsx`: old circular switch control.
-- `frontend/src/student/student.css`: existing student theme, responsive layout, and question-section styles.
-- `frontend/src/professor/ProfessorDashboard.tsx`: compact professor history reference.
-- `frontend/src/lib/poolApi.ts` and `frontend/src/student/lib/studentApi.ts`: existing lecture/question read interfaces.
-- `docs/Local_Development.md` and `dev-local.ps1`: local startup guidance. Inspect actual current code where older documentation refers to features removed in the previous round.
+Past Lectures uses each signed-in account's saved lecture history and shows ended lectures. Opening one uses the existing question read API without joining it or replacing an active session. A student can remove an ended lecture from their own history without deleting its questions or affecting another account. The separate lecture page has no composer or live controls.

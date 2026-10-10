@@ -58,8 +58,12 @@ export function parseJoinCode(value: string): string | null {
   let candidate = value.trim()
   try {
     const url = new URL(candidate)
-    if (url.pathname.replace(/\/$/, '') !== '/student/join') return null
-    candidate = url.searchParams.get('code') || ''
+    if (
+      !['/student', '/student/join'].includes(url.pathname.replace(/\/$/, ''))
+    )
+      return null
+    candidate =
+      url.searchParams.get('code') || url.searchParams.get('lecture') || ''
   } catch {
     // A typed code is not a URL.
   }

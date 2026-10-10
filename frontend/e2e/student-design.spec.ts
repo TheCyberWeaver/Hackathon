@@ -62,7 +62,19 @@ async function fixture(
     reads[path] = (reads[path] || 0) + 1
     let data: unknown
     if (path === '/api/me') data = { id: 'student-design', name: 'Student' }
-    else if (path === '/api/lectures') data = lectures
+    else if (
+      path === '/api/lectures' ||
+      path === '/api/student/lectures/history'
+    )
+      data = lectures
+    else if (path === '/api/student/summary')
+      data = { submittedCount: 1, answeredCount: 0 }
+    else if (/^\/api\/lectures\/\d+\/visits$/.test(path))
+      data = lectures.find(
+        (lecture) => path === `/api/lectures/${lecture.id}/visits`,
+      )
+    else if (/^\/api\/lectures\/\d+$/.test(path))
+      data = lectures.find((lecture) => path === `/api/lectures/${lecture.id}`)
     else if (path === '/api/sessions/mine')
       data = {
         session: {
@@ -164,9 +176,18 @@ for (const width of [320, 430, 768, 1280]) {
       )
     await page.evaluate(() => window.dispatchEvent(new Event('focus')))
     await expect
-      .poll(() => data.reads['/api/lectures'])
-      .toBeGreaterThan(readsBefore['/api/lectures'])
+      .poll(() => data.reads['/api/student/lectures/history'])
+      .toBeGreaterThan(readsBefore['/api/student/lectures/history'])
     await expect(page.getByLabel('Sort lectures by date')).toHaveValue('oldest')
+    await row.getByRole('link').click()
+    await page.getByRole('link', { name: '← Past Lectures' }).click()
+    await expect(page.getByLabel('Sort lectures by date')).toHaveValue('oldest')
+    await expect(titles).toHaveText([
+      'Earlier lecture',
+      'Morning lecture',
+      longTitle,
+      'Same start time',
+    ])
     await page.getByLabel('Sort lectures by date').selectOption('newest')
     await expect(titles).toHaveText([
       longTitle,
@@ -196,7 +217,7 @@ for (const width of [320, 430, 768, 1280]) {
     await navigate(page, 'Current Lecture')
     await expect(page.locator('.student-session-course')).toHaveText(live.title)
     await expect(page.locator('textarea')).toHaveValue('Keep this unsent draft')
-    expect(new URL(page.url()).searchParams.get('lecture')).toBe(live.id)
+    expect(new URL(page.url()).searchParams.get('lecture')).toBeNull()
     await page.goBack()
     await expect(page.getByRole('heading', { level: 1 })).toHaveText(longTitle)
     await page.goBack()
@@ -217,7 +238,7 @@ for (const width of [320, 430, 768, 1280]) {
     await expect(page).toHaveURL(/lecture=11$/)
     await expect(page.getByText('No questions in this lecture.')).toBeVisible()
     await noOverflow(page)
-    expect(data.mutations).toEqual([])
+    expect(data.mutations.every((path) => path.endsWith('/visits'))).toBe(true)
   })
 }
 
@@ -334,19 +355,19 @@ test('history loading, failure, retry, stale data retention and empty history', 
   await page.evaluate(() => window.dispatchEvent(new Event('focus')))
   await expect(row).toContainText('Showing the last loaded questions.')
   await expect(row).toContainText('1 question')
-  await page.route('**/api/lectures', (route) =>
+  await page.route('**/api/student/lectures/history', (route) =>
     route.fulfill({ status: 503, json: { error: 'Unavailable' } }),
   )
   await page.evaluate(() => window.dispatchEvent(new Event('focus')))
   await expect(page.getByText(/Could not refresh past lectures/)).toBeVisible()
   await expect(page.locator('.student-history-summary')).toHaveCount(4)
-  await page.unroute('**/api/lectures')
+  await page.unroute('**/api/student/lectures/history')
   await page
     .getByRole('button', { name: 'Try again', exact: true })
     .first()
     .click()
   await expect(page.getByText(/Could not refresh past lectures/)).toHaveCount(0)
-  await page.route('**/api/lectures', (route) =>
+  await page.route('**/api/student/lectures/history', (route) =>
     route.fulfill({ json: [live] }),
   )
   await page.evaluate(() => window.dispatchEvent(new Event('focus')))
@@ -412,7 +433,7 @@ test('a past lecture link works with no joined session and survives live-session
   await page.reload()
   await expect(page.locator('.student-history-question')).toHaveCount(2)
   await expect(page.getByLabel('Lecture code')).toHaveCount(0)
-  expect(data.mutations).toEqual([])
+  expect(data.mutations.every((path) => path.endsWith('/visits'))).toBe(true)
 })
 
 for (const width of [320, 430, 768, 1280]) {

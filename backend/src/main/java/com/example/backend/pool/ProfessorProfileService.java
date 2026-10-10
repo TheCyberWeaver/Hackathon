@@ -1,7 +1,6 @@
 package com.example.backend.pool;
 
 import java.util.*;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -12,18 +11,11 @@ import static org.springframework.http.HttpStatus.*;
 @Service
 public class ProfessorProfileService {
     private final JdbcTemplate jdbc;
-    private final boolean testingPermissions;
-    public ProfessorProfileService(JdbcTemplate jdbc, @Value("${app.testing-permissions:false}") boolean testingPermissions) {
+    public ProfessorProfileService(JdbcTemplate jdbc) {
         this.jdbc = jdbc;
-        this.testingPermissions = testingPermissions;
-    }
-    private void authorize(User user) {
-        if (!testingPermissions && !List.of("professor", "admin").contains(user.role()))
-            throw new ApiException(FORBIDDEN, "Professor permission is required.");
     }
     @Transactional(readOnly = true, isolation = org.springframework.transaction.annotation.Isolation.REPEATABLE_READ)
     public ProfessorProfile get(User user) {
-        authorize(user);
         return jdbc.query("SELECT onboarding_completed, revision FROM professor_profiles WHERE user_id = ?",
             (rs, row) -> new ProfessorProfile(rs.getBoolean(1), rs.getLong(2),
                 jdbc.query("SELECT id, title FROM professor_courses WHERE user_id = ? ORDER BY position",
@@ -32,7 +24,6 @@ public class ProfessorProfileService {
     }
     @Transactional
     public ProfessorProfile initialize(User user, ProfileUpdate legacy) {
-        authorize(user);
         // Serialize first use on different devices. Once present, ignore browser-local data.
         jdbc.queryForObject("SELECT id FROM users WHERE id = ? FOR UPDATE", Long.class, user.id());
         // Existing-profile loads must pair the same revision with the same ordered courses.
@@ -46,7 +37,6 @@ public class ProfessorProfileService {
     }
     @Transactional
     public ProfessorProfile save(User user, ProfileUpdate update) {
-        authorize(user);
         var courses = validate(update);
         var revision = jdbc.queryForList("SELECT revision FROM professor_profiles WHERE user_id = ? FOR UPDATE", Long.class, user.id());
         if (revision.isEmpty()) throw new ApiException(CONFLICT, "Load your professor profile before saving.");

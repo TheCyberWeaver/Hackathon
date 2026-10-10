@@ -384,6 +384,78 @@ test('shared transport honors base URL and encodes route identifiers', async (t)
   assert.deepEqual(await api.student.listQuestions('lecture/id'), [])
 })
 
+test('personal history uses account-backed visit and removal routes without leaving or deleting a lecture', async (t) => {
+  const api = await clients()
+  const calls = []
+  const lecture = {
+    id: '42',
+    title: 'Saved lecture',
+    endedAt: '2026-10-10T12:00:00Z',
+  }
+  t.mock.method(globalThis, 'fetch', async (url, init) => {
+    calls.push([init.method ?? 'GET', url])
+    if (init.method === 'DELETE') return new Response(null, { status: 204 })
+    return new Response(
+      JSON.stringify(url.endsWith('/history') ? [lecture] : lecture),
+    )
+  })
+  assert.deepEqual(await api.student.listLectureHistory(), [lecture])
+  assert.deepEqual(await api.student.visitLecture('42'), lecture)
+  assert.deepEqual(await api.pool.getLecture('42'), lecture)
+  await api.student.removeLectureFromHistory('lecture/42')
+  assert.deepEqual(calls, [
+    ['GET', '/api/student/lectures/history'],
+    ['POST', '/api/lectures/42/visits'],
+    ['GET', '/api/lectures/42'],
+    ['DELETE', '/api/student/lectures/history/lecture%2F42'],
+  ])
+  assert.equal(
+    api.sessions.parseJoinCode('https://example.org/student?lecture=42'),
+    '42',
+  )
+  assert.equal(
+    api.sessions.parseJoinCode('https://example.org/student/join?lecture=42'),
+    '42',
+  )
+  assert.equal(
+    api.sessions.parseJoinCode('https://example.org/student?code=42'),
+    '42',
+  )
+})
+
+test('history polling ignores a stale result after removal and never records visits', async (t) => {
+  t.mock.timers.enable({ apis: ['setInterval'] })
+  const { student } = await clients()
+  let version = 0
+  let resolveFetch
+  const calls = []
+  const snapshots = []
+  t.mock.method(globalThis, 'fetch', (url, init) => {
+    calls.push([init.method ?? 'GET', url])
+    return new Promise((resolve) => {
+      resolveFetch = resolve
+    })
+  })
+  const stop = student.watchLectureHistory(
+    (items) => snapshots.push(items),
+    assert.fail,
+    () => version,
+  )
+  t.after(stop)
+  version++
+  resolveFetch(new Response('[{"id":"42"}]'))
+  await setImmediate()
+  assert.deepEqual(snapshots, [])
+  t.mock.timers.tick(5000)
+  resolveFetch(new Response('[]'))
+  await setImmediate()
+  assert.deepEqual(snapshots, [[]])
+  assert.deepEqual(calls, [
+    ['GET', '/api/student/lectures/history'],
+    ['GET', '/api/student/lectures/history'],
+  ])
+})
+
 test('lecture watcher discovers newly created lectures without reloading the portal', async (t) => {
   t.mock.timers.enable({ apis: ['setInterval'] })
   const { pool } = await clients()

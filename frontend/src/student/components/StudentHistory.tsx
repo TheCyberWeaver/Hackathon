@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import type { Lecture } from '../../lib/poolApi'
 import type { HistoryQuestions } from '../lib/useStudentHistory'
 
@@ -7,9 +6,13 @@ type Props = {
   loading: boolean
   error: boolean
   entries: Record<string, HistoryQuestions>
+  removingId: string | null
+  order: 'newest' | 'oldest'
+  onOrderChange: (order: 'newest' | 'oldest') => void
   onRetryLectures: () => void
   onRetryQuestions: (id: string) => void
   onOpenLecture: (id: string) => void
+  onRemoveLecture: (lecture: Lecture) => void
 }
 
 const dateFormat = new Intl.DateTimeFormat('en-GB', {
@@ -31,11 +34,14 @@ export default function StudentHistory({
   loading,
   error,
   entries,
+  removingId,
+  order,
+  onOrderChange,
   onRetryLectures,
   onRetryQuestions,
   onOpenLecture,
+  onRemoveLecture,
 }: Props) {
-  const [order, setOrder] = useState<'newest' | 'oldest'>('newest')
   const archive = lectures
     .filter((lecture) => lecture.endedAt)
     .sort((a, b) => {
@@ -66,7 +72,9 @@ export default function StudentHistory({
           <span className="sr-only">Sort lectures by date</span>
           <select
             value={order}
-            onChange={(event) => setOrder(event.target.value as typeof order)}
+            onChange={(event) =>
+              onOrderChange(event.target.value as typeof order)
+            }
           >
             <option value="newest">Newest first</option>
             <option value="oldest">Oldest first</option>
@@ -100,45 +108,60 @@ export default function StudentHistory({
           const validDate = Number.isFinite(start.getTime())
           return (
             <article key={lecture.id} className="student-history-entry">
-              <h2>
-                <a
-                  className="student-history-summary"
-                  href={`/student?lecture=${encodeURIComponent(lecture.id)}`}
-                  onClick={(event) => {
-                    if (
-                      event.button !== 0 ||
-                      event.metaKey ||
-                      event.ctrlKey ||
-                      event.shiftKey ||
-                      event.altKey
-                    )
-                      return
-                    event.preventDefault()
-                    onOpenLecture(lecture.id)
-                  }}
-                >
-                  <span className="student-history-title">{lecture.title}</span>
-                  <span className="student-history-meta">
-                    <time
-                      dateTime={validDate ? start.toISOString() : undefined}
-                    >
-                      <span>
-                        {validDate
-                          ? dateFormat.format(start)
-                          : 'Date unavailable'}
-                      </span>
-                      {validDate && <span> · {timeFormat.format(start)}</span>}
-                    </time>
-                    <span className="student-history-count">
-                      {questions
-                        ? `${questions.length} ${questions.length === 1 ? 'question' : 'questions'}`
-                        : entry?.error
-                          ? 'Count unavailable'
-                          : 'Loading count…'}
+              <div className="student-history-row">
+                <h2>
+                  <a
+                    className="student-history-summary"
+                    href={`/student?lecture=${encodeURIComponent(lecture.id)}`}
+                    onClick={(event) => {
+                      if (
+                        event.button !== 0 ||
+                        event.metaKey ||
+                        event.ctrlKey ||
+                        event.shiftKey ||
+                        event.altKey
+                      )
+                        return
+                      event.preventDefault()
+                      onOpenLecture(lecture.id)
+                    }}
+                  >
+                    <span className="student-history-title">
+                      {lecture.title}
                     </span>
-                  </span>
-                </a>
-              </h2>
+                    <span className="student-history-meta">
+                      <time
+                        dateTime={validDate ? start.toISOString() : undefined}
+                      >
+                        <span>
+                          {validDate
+                            ? dateFormat.format(start)
+                            : 'Date unavailable'}
+                        </span>
+                        {validDate && (
+                          <span> · {timeFormat.format(start)}</span>
+                        )}
+                      </time>
+                      <span className="student-history-count">
+                        {questions
+                          ? `${questions.length} ${questions.length === 1 ? 'question' : 'questions'}`
+                          : entry?.error
+                            ? 'Count unavailable'
+                            : 'Loading count…'}
+                      </span>
+                    </span>
+                  </a>
+                </h2>
+                <button
+                  type="button"
+                  className="student-history-remove"
+                  aria-label={`Remove ${lecture.title} from history`}
+                  disabled={removingId !== null}
+                  onClick={() => onRemoveLecture(lecture)}
+                >
+                  {removingId === lecture.id ? 'Removing…' : 'Remove'}
+                </button>
+              </div>
               {entry?.error && (
                 <div className="student-history-feedback" role="alert">
                   <span>

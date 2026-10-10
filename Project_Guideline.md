@@ -11,6 +11,7 @@ Students join a lecture session through a QR code or session link. They submit q
 Questions are ranked by **votes first**. Earlier submissions come first when vote counts are tied. Professors can select questions to answer, mark them as answered, and review unanswered questions after class.
 
 ### Core features
+- **Personal accounts:** Every signed-in account can use both Student and Professor. A user's professor history contains their created lectures; student history contains their visited lectures. Profiles, courses, histories, and lecture management remain scoped to the authenticated account and lecture ownership.
 - **Anonymous questions to classmates:** Students can ask without displaying their names in the shared question pool. Professors may see authors.
 - **Upvoting:** Students highlight shared concerns, helping professors identify common misunderstandings.
 - **Professor dashboard:** Professors browse, filter, and select questions, with clear statuses such as open, selected, and answered.
