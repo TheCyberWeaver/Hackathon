@@ -28,6 +28,7 @@ IDs in JSON are decimal strings, avoiding JavaScript BIGINT precision loss. Time
 | ------ | ----------------------------------------- | ------------------------------------------- | ------------------------------------ |
 | PATCH  | `/api/lectures/{id}/session`              | Lecture                                     | Lecture owner                        |
 | GET    | `/api/professor/summary`                  | Counts                                      | Signed in, own created lectures only |
+| GET    | `/api/student/summary`                    | StudentSummary                              | Signed in, own questions only         |
 | GET    | `/api/professor/lectures/archive`         | Ended lectures and questions                | Signed in, own created lectures only |
 | POST   | `/api/lectures/{id}/questions/clear-open` | `{ "deletedIds": string[] }`                | Lecture owner                        |
 | GET    | `/api/professor/profile`                  | Profile                                     | Signed in, own account only          |
@@ -44,6 +45,8 @@ IDs in JSON are decimal strings, avoiding JavaScript BIGINT precision loss. Time
 | DELETE | `/api/student/lectures/history/{id}` | 204, idempotent                          | Signed in, removes caller's entry only |
 
 Joining a session or explicitly opening its shared link records an entry in `lecture_history`. Submission, voting and reporting also record participation. Leaving or ending a session clears only the active membership; history survives across devices and allows reviewing ended question pools. Removing history does not delete the lecture, questions, another user's history, or the active membership. Revisiting records it again. Polling history or questions does not recreate a removed entry. Professor-created lectures remain in the professor archive regardless of removal from student history.
+
+The student summary is `{ "submittedCount": 5, "answeredCount": 2 }` for the signed-in account's remaining questions across all lectures. `answeredCount` includes only questions currently marked answered; reopening or deleting a question updates the counts. Removing a lecture from personal history does not change them.
 
 V10 backfills history from surviving memberships, authored questions, votes and reports. Visits that were never saved cannot be reconstructed. Ownership and existing per-user profile/course records remain intact. See [current database structure](Database_State.md).
 

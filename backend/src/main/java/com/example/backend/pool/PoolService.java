@@ -140,6 +140,9 @@ public class PoolService {
     public Summary summary(User user) {
         return repository.summary(user);
     }
+    public StudentSummary studentSummary(User user) {
+        return repository.studentSummary(user);
+    }
     @Transactional(readOnly = true)
     public List<ArchivedLecture> archive(User user) {
         return lectures(user).stream().filter(l -> l.canManage() && l.endedAt() != null)

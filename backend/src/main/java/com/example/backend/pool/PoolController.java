@@ -97,6 +97,8 @@ public class PoolController {
     }
     @GetMapping("/professor/summary")
     public Summary summary(@RequestHeader(value = "X-User-Id", required = false) String identity) { return service.summary(service.identify(identity)); }
+    @GetMapping("/student/summary")
+    public StudentSummary studentSummary(@RequestHeader(value = "X-User-Id", required = false) String identity) { return service.studentSummary(service.identify(identity)); }
     @GetMapping("/professor/lectures/archive")
     public List<ArchivedLecture> archive(@RequestHeader(value = "X-User-Id", required = false) String identity) { return service.archive(service.identify(identity)); }
     @PostMapping("/lectures/{lecture}/questions/clear-open")

@@ -153,6 +153,14 @@ public class PoolRepository {
             WHERE l.owner_id = ?
             """, (rs, row) -> new Summary(rs.getLong("lectures"), rs.getLong("unanswered"), rs.getLong("answered")), user.id());
     }
+    public StudentSummary studentSummary(User user) {
+        return jdbc.queryForObject("""
+            SELECT count(*) AS submitted,
+                   count(*) FILTER (WHERE status = 'answered') AS answered
+            FROM questions
+            WHERE author_id = ?
+            """, (rs, row) -> new StudentSummary(rs.getLong("submitted"), rs.getLong("answered")), user.id());
+    }
     private static Question publicQuestion(ResultSet rs, long user) throws SQLException {
         return new Question(Long.toString(rs.getLong("id")), rs.getString("text"), rs.getLong("votes"),
             time(rs, "submitted_at"), status(rs), rs.getLong("author_id") == user, rs.getBoolean("voted_by_me"));

@@ -4,6 +4,15 @@ export function listLectureHistory(): Promise<Lecture[]> {
   return request<Lecture[]>('/student/lectures/history')
 }
 
+export type StudentSummary = {
+  submittedCount: number
+  answeredCount: number
+}
+
+export function getStudentSummary(): Promise<StudentSummary> {
+  return request<StudentSummary>('/student/summary')
+}
+
 export function watchLectureHistory(
   onLectures: (lectures: Lecture[]) => void,
   onError: (error: unknown) => void,

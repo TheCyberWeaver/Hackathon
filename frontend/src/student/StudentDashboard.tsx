@@ -29,6 +29,7 @@ import {
 } from '../lib/sessions'
 import './student.css'
 import {
+  getStudentSummary,
   listQuestions,
   deleteQuestion,
   reportQuestion,
@@ -38,6 +39,7 @@ import {
   removeLectureFromHistory,
   watchLectureHistory,
   type Question,
+  type StudentSummary,
 } from './lib/studentApi'
 
 const examples = [
@@ -86,6 +88,14 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
   const [lectureId, setLectureId] = useState('')
   const [historyLoading, setHistoryLoading] = useState(true)
   const [historyError, setHistoryError] = useState('')
+  const [studentSummary, setStudentSummary] = useState<{
+    userId: string
+    counts: StudentSummary
+  } | null>(null)
+  const [studentSummaryError, setStudentSummaryError] = useState<{
+    userId: string
+    message: string
+  } | null>(null)
   const [removingHistoryId, setRemovingHistoryId] = useState<string | null>(
     null,
   )
@@ -362,6 +372,35 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
       () => historyVersion.current,
     )
   }, [user.id])
+
+  useEffect(() => {
+    if (page !== 'profile') return
+    let active = true
+    const load = async () => {
+      try {
+        const counts = await getStudentSummary()
+        if (active) {
+          setStudentSummary({ userId: user.id, counts })
+          setStudentSummaryError(null)
+        }
+      } catch (error) {
+        if (active)
+          setStudentSummaryError({
+            userId: user.id,
+            message:
+              error instanceof Error
+                ? error.message
+                : 'Could not load your question statistics.',
+          })
+      }
+    }
+    void load()
+    const timer = window.setInterval(() => void load(), 5000)
+    return () => {
+      active = false
+      window.clearInterval(timer)
+    }
+  }, [page, user.id])
 
   useEffect(() => {
     let active = true
@@ -698,6 +737,10 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
     .filter((question) => question.mine)
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
   const others = questions.filter((question) => !question.mine)
+  const visibleStudentSummary =
+    studentSummary?.userId === user.id ? studentSummary.counts : null
+  const visibleStudentSummaryError =
+    studentSummaryError?.userId === user.id ? studentSummaryError.message : ''
 
   function cards(items: Question[], isMine: boolean) {
     if (items.length === 0) {
@@ -1001,16 +1044,65 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
             {mobileView === 'other' ? cards(others, false) : cards(mine, true)}
           </section>
         </main>
+      ) : page === 'profile' ? (
+        <main className="student-profile-page">
+          <h1>Profile</h1>
+          <section
+            aria-label="Student profile"
+            className="student-profile-name"
+          >
+            <p>Full name</p>
+            <p>{user.name}</p>
+          </section>
+          <section
+            aria-labelledby="student-question-summary-title"
+            className="student-profile-summary"
+          >
+            <h2 id="student-question-summary-title">Your questions</h2>
+            {visibleStudentSummaryError && (
+              <p role="alert" className="student-profile-message">
+                {visibleStudentSummaryError}
+              </p>
+            )}
+            {!visibleStudentSummary && !visibleStudentSummaryError && (
+              <p role="status" className="student-profile-message">
+                Loading your question statistics…
+              </p>
+            )}
+            {visibleStudentSummary && (
+              <div className="student-profile-stats">
+                <div className="student-profile-stat student-profile-stat--submitted">
+                  <span>
+                    <span
+                      aria-hidden="true"
+                      className="student-profile-stat-dot"
+                    />
+                    Submitted
+                  </span>
+                  <p>{visibleStudentSummary.submittedCount}</p>
+                </div>
+                <div className="student-profile-stat student-profile-stat--answered">
+                  <span>
+                    <span
+                      aria-hidden="true"
+                      className="student-profile-stat-dot"
+                    />
+                    Answered
+                  </span>
+                  <p>{visibleStudentSummary.answeredCount}</p>
+                </div>
+              </div>
+            )}
+            <p className="student-profile-note">
+              Counts cover all your submitted questions and exclude deleted
+              ones.
+            </p>
+          </section>
+        </main>
       ) : (
         <main className="placeholder-page">
           <section className="placeholder-page__content page-column">
-            <h1>
-              {page === 'pastLectures'
-                ? 'Past Lectures'
-                : page === 'profile'
-                  ? 'Profile'
-                  : 'Settings'}
-            </h1>
+            <h1>{page === 'pastLectures' ? 'Past Lectures' : 'Settings'}</h1>
             {page === 'settings' ? (
               <div className="placeholder-page__card student-settings-card">
                 <div>
@@ -1029,14 +1121,8 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
               </div>
             ) : (
               <div className="placeholder-page__card">
-                <h2>
-                  {page === 'pastLectures' ? 'Past lectures' : 'Your profile'}
-                </h2>
-                <p>
-                  {page === 'pastLectures'
-                    ? 'Choose a saved lecture to review its question pool.'
-                    : 'Your profile will appear here.'}
-                </p>
+                <h2>Past lectures</h2>
+                <p>Choose a saved lecture to review its question pool.</p>
                 {page === 'pastLectures' && historyLoading && (
                   <p role="status">Loading your lecture history…</p>
                 )}

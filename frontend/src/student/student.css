@@ -365,6 +365,117 @@ html:has(.student-settings-card) {
   line-height: 1.5;
 }
 
+.student-profile-page {
+  width: min(calc(100% - 40px), 848px);
+  min-height: 100dvh;
+  margin-inline: auto;
+  padding: 104px 0 80px;
+  animation: student-page-enter 220ms var(--ease-drawer) both;
+}
+.student-app .student-profile-page h1 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 30px;
+  line-height: 1.2;
+  text-align: left;
+}
+.student-profile-name {
+  margin-top: 32px;
+  padding: 24px 20px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #f8fafc;
+}
+.student-profile-name p:first-child {
+  margin: 0;
+  color: #475569;
+  font-size: 14px;
+  font-weight: 500;
+}
+.student-profile-name p:last-child {
+  margin: 8px 0 0;
+  color: #0f172a;
+  font-size: 20px;
+  font-weight: 600;
+}
+.student-profile-summary {
+  margin-top: 32px;
+}
+.student-profile-summary h2 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 18px;
+  font-weight: 600;
+}
+.student-profile-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+.student-profile-stat {
+  padding: 16px;
+  border: 1px solid;
+  border-radius: 12px;
+}
+.student-profile-stat > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 500;
+}
+.student-profile-stat-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+.student-profile-stat p {
+  margin: 8px 0 0;
+  color: #0f172a;
+  font-size: 24px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.student-profile-stat--submitted {
+  border-color: #bfdbfe;
+  background: rgb(239 246 255 / 60%);
+  color: #1e3a8a;
+}
+.student-profile-stat--submitted .student-profile-stat-dot {
+  background: #3b82f6;
+}
+.student-profile-stat--answered {
+  border-color: #a7f3d0;
+  background: rgb(236 253 245 / 60%);
+  color: #064e3b;
+}
+.student-profile-stat--answered .student-profile-stat-dot {
+  background: #10b981;
+}
+.student-profile-message {
+  margin: 12px 0 0;
+  color: #475569;
+  font-size: 14px;
+}
+.student-profile-note {
+  margin: 12px 0 0;
+  color: #64748b;
+  font-size: 12px;
+}
+@media (min-width: 640px) {
+  .student-profile-page {
+    width: min(calc(100% - 48px), 848px);
+    padding-top: 56px;
+  }
+  .student-app .student-profile-page h1 {
+    font-size: 36px;
+  }
+  .student-profile-name {
+    padding-inline: 24px;
+  }
+}
+
 .hero {
   position: relative;
   height: calc(100dvh - 96px);
