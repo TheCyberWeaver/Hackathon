@@ -46,12 +46,35 @@ public class PoolRepository {
                 user.role().equals("admin") || (user.role().equals("professor") && Long.valueOf(user.id()).equals(rs.getObject("owner_id", Long.class))),
                 rs.getString("course"), time(rs, "started_at"), time(rs, "ended_at"), rs.getBoolean("questions_paused")));
     }
-    public long createLecture(String title, OffsetDateTime time, long owner, String course) {
-        return jdbc.queryForObject("INSERT INTO lectures (title, lecture_time, owner_id, course) VALUES (?, ?, ?, ?) RETURNING id", Long.class, title, time, owner, course);
+    public long createLecture(String title, OffsetDateTime time, long owner, String course, String joinCode) {
+        return jdbc.queryForObject("INSERT INTO lectures (title, lecture_time, owner_id, course, join_code) VALUES (?, ?, ?, ?, ?) RETURNING id", Long.class, title, time, owner, course, joinCode);
     }
     public void session(long id, LectureSession.State state) {
         jdbc.update("UPDATE lectures SET started_at = ?, ended_at = ?, questions_paused = ? WHERE id = ?",
             state.startedAt(), state.endedAt(), state.paused(), id);
+    }
+    private static SharedSession sharedSession(ResultSet rs) throws SQLException {
+        var code = rs.getString("join_code");
+        return new SharedSession(Long.toString(rs.getLong("id")), code.substring(0, 4) + "-" + code.substring(4),
+            rs.getString("course"), time(rs, "started_at"));
+    }
+    public SharedSession activeSession(long lecture) {
+        return jdbc.query("SELECT id, join_code, course, started_at FROM lectures WHERE id = ? AND started_at IS NOT NULL AND ended_at IS NULL",
+            (rs, row) -> sharedSession(rs), lecture).stream().findFirst().orElse(null);
+    }
+    public SharedSession activeSessionByCode(String code) {
+        return jdbc.query("SELECT id, join_code, course, started_at FROM lectures WHERE join_code = ? AND started_at IS NOT NULL AND ended_at IS NULL",
+            (rs, row) -> sharedSession(rs), code).stream().findFirst().orElse(null);
+    }
+    public SharedSession joinedSession(long user) {
+        return jdbc.query("SELECT l.id, l.join_code, l.course, l.started_at FROM lecture_memberships m JOIN lectures l ON l.id = m.lecture_id WHERE m.user_id = ? AND l.started_at IS NOT NULL AND l.ended_at IS NULL",
+            (rs, row) -> sharedSession(rs), user).stream().findFirst().orElse(null);
+    }
+    public void joinSession(long user, long lecture) {
+        jdbc.update("INSERT INTO lecture_memberships (user_id, lecture_id) VALUES (?, ?) ON CONFLICT (user_id) DO UPDATE SET lecture_id = EXCLUDED.lecture_id, joined_at = now()", user, lecture);
+    }
+    public void leaveSession(long user) {
+        jdbc.update("DELETE FROM lecture_memberships WHERE user_id = ?", user);
     }
     public long createQuestion(long lecture, long author, String text) {
         return jdbc.queryForObject("INSERT INTO questions (lecture_id, author_id, text) VALUES (?, ?, ?) RETURNING id",

@@ -29,6 +29,23 @@ public class PoolController {
     public Lecture lecture(@RequestHeader(value = "X-User-Id", required = false) String identity, @PathVariable long lecture) {
         return service.lecture(service.identify(identity), lecture);
     }
+    @GetMapping("/lectures/{lecture}/invite")
+    public SharedSession invite(@RequestHeader(value = "X-User-Id", required = false) String identity, @PathVariable long lecture) {
+        return service.invite(service.identify(identity), lecture);
+    }
+    @PostMapping("/sessions/join")
+    public SharedSession join(@RequestHeader(value = "X-User-Id", required = false) String identity, @RequestBody JoinRequest body) {
+        return service.join(service.identify(identity), body);
+    }
+    @GetMapping("/sessions/mine")
+    public JoinedSession joined(@RequestHeader(value = "X-User-Id", required = false) String identity) {
+        return service.joined(service.identify(identity));
+    }
+    @DeleteMapping("/sessions/mine")
+    public ResponseEntity<Void> leave(@RequestHeader(value = "X-User-Id", required = false) String identity) {
+        service.leave(service.identify(identity));
+        return ResponseEntity.noContent().build();
+    }
     @GetMapping("/lectures/{lecture}/questions")
     public List<Question> questions(@RequestHeader(value = "X-User-Id", required = false) String identity, @PathVariable long lecture) {
         return service.questions(service.identify(identity), lecture);

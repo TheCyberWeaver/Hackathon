@@ -2,7 +2,7 @@
 
 This initial contract can evolve. Java wire records in `ApiModels.java` are separate from database columns. Update this document and the frontend adapters (`src/lib/poolApi.ts`, `src/student/lib/studentApi.ts`, `src/professor/professorApi.ts`) together. Breaking changes require a coordinated frontend release or versioned routes. The old Node list/create `/api/questions` routes are replaced by explicit lecture routes.
 
-Every pool route requires the trusted proxy's `X-User-Id`. New identities become students. Permissions come from `users.role`, never a browser role or dashboard selection. Only a lecture's owner or an admin may view authors/report counts or moderate. Any authenticated user can view anonymous pools and report. This prototype has no enrollment checks: a lecture ID is not a private access token. Keep Java behind the managed login proxy with no public port.
+Every pool route requires the trusted proxy's `X-User-Id`. New identities become students. Permissions come from `users.role`, never a browser role or dashboard selection. Only a lecture's owner or an admin may view authors/report counts or moderate. Any authenticated user can view anonymous pools and report. Join codes and student membership are persisted for the QR/code entry flow, but question endpoints still have no enrollment checks: a lecture ID is not a private access token. Keep Java behind the managed login proxy with no public port.
 
 For hackathon testing, the deployment enables `APP_TESTING_PERMISSIONS=true`.
 Every signed-in account can then create/manage every lecture, submit questions,
@@ -37,6 +37,10 @@ IDs in JSON are decimal strings, avoiding JavaScript BIGINT precision loss. Time
 | POST | `/api/questions/{id}/restore` | ProfessorQuestion | Lecture owner/admin |
 | DELETE | `/api/questions/{id}/permanent` | 204 | Lecture owner/admin, already deleted question only |
 | DELETE | `/api/lectures/{id}/questions/trash` | 204 | Lecture owner/admin, only that lecture's deleted questions |
+| GET | `/api/lectures/{id}/invite` | Active lecture ID, course, code, start time | Lecture owner/admin |
+| POST | `/api/sessions/join` | Active lecture ID, course, code, start time | Student, valid code |
+| GET | `/api/sessions/mine` | `{ "session": SharedSession or null }` | Signed in |
+| DELETE | `/api/sessions/mine` | 204 | Signed in |
 
 New lectures are scheduled: create with `title`, `lectureTime`, and optional
 `course` (up to 200 characters), then start with `{ "action": "start" }`.
@@ -63,7 +67,7 @@ Lecture creation body:
 { "title": "Algorithms", "lectureTime": "2026-10-10T10:00:00Z" }
 ```
 
-Title is trimmed, 1-200 characters. Time is required. The frontend currently creates a lecture with the current time. Share `/student?lecture=123` to join; QR image generation is not implemented.
+Title is trimmed, 1-200 characters. Time is required. The frontend currently creates a lecture with the current time. Starting the lecture enables its persistent join code. The invite screen renders a QR for `/student/join?code=XXXX-XXXX`; students may scan it or type the code. Joining stores one current lecture membership per student. Leaving deletes that membership; ending a lecture makes its code unusable. Existing lectures receive unique codes in migration V6.
 
 Lecture response:
 

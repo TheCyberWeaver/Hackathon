@@ -22,6 +22,8 @@ import {
 import LecturePicker from '../components/LecturePicker'
 import type { CurrentUser } from '../lib/api'
 import { ThumbsUpIcon } from '../components/Icons'
+import JoinQrCode from '../components/JoinQrCode'
+import { getSessionInvite, joinUrl, type SharedSession } from '../lib/sessions'
 import SidePanel, { type SidePanelPage } from '../components/SidePanel'
 import './professor.css'
 
@@ -37,6 +39,8 @@ const professorRoutes: Record<ProfessorPage, string> = {
   profile: '/professor/profile',
   settings: '/professor/settings',
 }
+const courseSelectionRoute = '/professor/start'
+const sessionShareRoute = '/professor/session'
 
 function pageFromPath(pathname: string): ProfessorPage {
   const path = pathname.replace(/\/$/, '')
@@ -165,6 +169,13 @@ export default function ProfessorDashboard({ user }: { user: CurrentUser }) {
   const [page, setPage] = useState<ProfessorPage>(() =>
     pageFromPath(window.location.pathname),
   )
+  const [courseSelectionPage, setCourseSelectionPage] = useState(
+    () => window.location.pathname === courseSelectionRoute,
+  )
+  const [sessionSharePage, setSessionSharePage] = useState(
+    () => window.location.pathname === sessionShareRoute,
+  )
+  const [invite, setInvite] = useState<SharedSession | null>(null)
   const [sortMode, setSortMode] = useState<SortMode>('votes')
   const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set())
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null)
@@ -221,11 +232,34 @@ export default function ProfessorDashboard({ user }: { user: CurrentUser }) {
   }, [])
 
   useEffect(() => {
-    const handleLocationChange = () =>
+    const handleLocationChange = () => {
       setPage(pageFromPath(window.location.pathname))
+      setCourseSelectionPage(window.location.pathname === courseSelectionRoute)
+      setSessionSharePage(window.location.pathname === sessionShareRoute)
+    }
     window.addEventListener('popstate', handleLocationChange)
     return () => window.removeEventListener('popstate', handleLocationChange)
   }, [])
+
+  useEffect(() => {
+    if (!sessionSharePage || !lectureId || !lectureStartedAt) return
+    let active = true
+    getSessionInvite(lectureId)
+      .then((session) => {
+        if (active) setInvite(session)
+      })
+      .catch((error: unknown) => {
+        if (active)
+          setApiError(
+            error instanceof Error
+              ? error.message
+              : 'Could not load the join code.',
+          )
+      })
+    return () => {
+      active = false
+    }
+  }, [sessionSharePage, lectureId, lectureStartedAt])
 
   useEffect(
     () =>
@@ -355,15 +389,43 @@ export default function ProfessorDashboard({ user }: { user: CurrentUser }) {
   }
 
   function navigateTo(nextPage: SidePanelPage) {
-    if (nextPage === page) return
+    if (
+      nextPage === page &&
+      window.location.pathname === professorRoutes[nextPage]
+    )
+      return
     window.history.pushState(
       null,
       '',
       `${professorRoutes[nextPage]}${window.location.search}`,
     )
     setPage(nextPage)
+    setCourseSelectionPage(false)
+    setSessionSharePage(false)
     window.scrollTo(0, 0)
     window.requestAnimationFrame(() => mainHeadingRef.current?.focus())
+  }
+
+  function openCourseSelectionPage() {
+    window.history.pushState(null, '', courseSelectionRoute)
+    setCourseSelectionPage(true)
+    setSessionSharePage(false)
+    window.scrollTo(0, 0)
+  }
+
+  function openSessionSharePage() {
+    setInvite(null)
+    window.history.pushState(null, '', sessionShareRoute)
+    setCourseSelectionPage(false)
+    setSessionSharePage(true)
+    window.scrollTo(0, 0)
+  }
+
+  function goToQuestions() {
+    window.history.pushState(null, '', professorRoutes.questions)
+    setCourseSelectionPage(false)
+    setSessionSharePage(false)
+    window.scrollTo(0, 0)
   }
 
   async function runMutation(
@@ -415,10 +477,11 @@ export default function ProfessorDashboard({ user }: { user: CurrentUser }) {
   }
 
   async function startLecture() {
-    await updateSession(
+    const started = await updateSession(
       'start',
       'Lecture started. Students can now submit questions.',
     )
+    if (started) openSessionSharePage()
   }
 
   async function toggleQuestionIntake() {
@@ -439,6 +502,7 @@ export default function ProfessorDashboard({ user }: { user: CurrentUser }) {
         'Lecture ended. Its questions and answers are saved.',
       ))
     ) {
+      setInvite(null)
       setExpandedIds(new Set())
       navigateTo('pastLectures')
     } else {
@@ -567,553 +631,673 @@ export default function ProfessorDashboard({ user }: { user: CurrentUser }) {
         </div>
       </header>
 
-      {page === 'questions' && (
-        <div className="mx-auto max-w-[848px] px-5 sm:px-6">
-          <LecturePicker
-            lectures={lectures}
-            lectureId={lectureId}
-            disabled={busyId !== null}
-            onSelect={(id) => {
-              setLectureId(id)
-              setQuestions([])
-              setExpandedIds(new Set())
-              setAnswerDrafts({})
-            }}
-            onCreated={(lecture) => {
-              setLectures((items) => [lecture, ...items])
-              setLectureId(lecture.id)
-              setQuestions([])
-              setExpandedIds(new Set())
-              setAnswerDrafts({})
-            }}
-          />
-        </div>
-      )}
       {apiError && (
         <p role="alert" className="mx-auto max-w-[848px] px-5 text-red-700">
           {apiError}
         </p>
       )}
 
-      {page === 'questions' && lectureStartedAt === null && (
-        <main className="professor-page-enter grid min-h-[calc(100dvh-5rem)] place-items-center bg-[#f7f8fc] px-5 py-16 sm:px-6">
-          <section className="w-full max-w-xl text-center">
-            <span
-              aria-hidden="true"
-              className="mx-auto grid size-20 place-items-center rounded-3xl border border-blue-100 bg-white text-blue-700 shadow-[0_12px_32px_rgba(15,23,42,0.07)]"
-            >
-              <svg
-                className="size-9"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth="1.7"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <rect x="3" y="4" width="18" height="12" rx="2" />
-                <path d="M12 16v4m-4 0h8" />
-              </svg>
-            </span>
-            <h1
-              ref={mainHeadingRef}
-              tabIndex={-1}
-              className="mt-8 text-3xl font-semibold tracking-tight text-slate-900 outline-none sm:text-4xl"
-            >
-              No session running
-            </h1>
-            <p className="mx-auto mt-4 max-w-md text-base leading-7 text-slate-600">
-              Start a lecture to open the question pool for this session.
-            </p>
+      {page === 'questions' && courseSelectionPage && (
+        <main className="professor-page-enter min-h-[calc(100dvh-5rem)] bg-[#f7f8fc] px-5 pb-20 pt-10 sm:px-6 sm:pt-14">
+          <div className="mx-auto max-w-[640px]">
             <button
               type="button"
-              onClick={startLecture}
-              disabled={
-                !selectedLecture || !!selectedLecture.endedAt || busyId !== null
-              }
-              className="mt-9 inline-flex min-h-12 items-center justify-center gap-3 rounded-xl bg-emerald-600 px-6 py-3 text-sm font-semibold text-white shadow-[0_8px_20px_rgba(5,150,105,0.2)] hover:bg-emerald-700 focus-visible:outline-2 focus-visible:outline-offset-3 focus-visible:outline-emerald-700 motion-safe:transition-[background,transform,box-shadow] motion-safe:duration-200 motion-safe:hover:-translate-y-0.5 motion-safe:hover:shadow-[0_12px_24px_rgba(5,150,105,0.24)] motion-safe:active:translate-y-0"
+              onClick={goToQuestions}
+              className="inline-flex min-h-10 items-center gap-2 rounded-lg px-2 text-sm font-semibold text-slate-600 hover:bg-white hover:text-slate-900"
             >
-              Start lecture
-              <svg
-                aria-hidden="true"
-                className="size-4"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M5 12h14m-6-6 6 6-6 6" />
-              </svg>
+              <span aria-hidden="true">←</span> go back
             </button>
-          </section>
+            <p className="mt-10 text-xs font-bold uppercase tracking-[0.14em] text-blue-700">
+              New lecture session
+            </p>
+            <h1 className="mt-3 text-3xl font-semibold tracking-tight text-slate-900">
+              Choose a course
+            </h1>
+            <p className="mt-3 text-slate-600">
+              Select an existing lecture or create one, then start its question
+              pool.
+            </p>
+            <div className="mt-8 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <LecturePicker
+                lectures={lectures}
+                lectureId={lectureId}
+                disabled={busyId !== null}
+                onSelect={(id) => {
+                  setLectureId(id)
+                  setQuestions([])
+                  setExpandedIds(new Set())
+                  setAnswerDrafts({})
+                }}
+                onCreated={(lecture) => {
+                  setLectures((items) => [lecture, ...items])
+                  setLectureId(lecture.id)
+                  setQuestions([])
+                  setExpandedIds(new Set())
+                  setAnswerDrafts({})
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => void startLecture()}
+                disabled={
+                  !selectedLecture ||
+                  !!selectedLecture.startedAt ||
+                  busyId !== null
+                }
+                className="mt-5 min-h-12 rounded-xl bg-emerald-600 px-6 py-3 text-sm font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {busyId === 'session' ? 'Starting…' : 'Start selected lecture'}
+              </button>
+              {selectedLecture?.endedAt && (
+                <p className="mt-3 text-sm text-amber-800">
+                  This lecture has ended. Choose or create another.
+                </p>
+              )}
+              {selectedLecture?.startedAt && !selectedLecture.endedAt && (
+                <p className="mt-3 text-sm text-amber-800">
+                  This lecture is already running. Go back to its questions.
+                </p>
+              )}
+            </div>
+          </div>
         </main>
       )}
 
-      {page === 'questions' && lectureStartedAt !== null && (
-        <main className="professor-page-enter mx-auto max-w-[848px] px-5 pb-20 pt-8 sm:px-6 sm:pt-10">
-          <div className="min-[720px]:flex min-[720px]:items-center min-[720px]:justify-between min-[720px]:gap-6">
-            <div className="min-w-0">
+      {page === 'questions' &&
+        sessionSharePage &&
+        lectureStartedAt !== null && (
+          <main className="professor-page-enter min-h-[calc(100dvh-5rem)] bg-[#f7f8fc] px-5 pb-20 pt-10 sm:px-6 sm:pt-14">
+            <div className="mx-auto max-w-[640px] text-center">
+              <p className="text-xs font-bold uppercase tracking-[0.14em] text-blue-700">
+                Lecture ready
+              </p>
+              <h1 className="mt-3 text-3xl font-semibold tracking-tight text-slate-900">
+                Invite students
+              </h1>
+              <p className="mt-3 text-slate-600">
+                Share the code or QR link for{' '}
+                {selectedLecture?.course ||
+                  selectedLecture?.title ||
+                  'this lecture'}
+                .
+              </p>
+              <div className="mt-8 flex flex-col items-center rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                {invite?.id === lectureId ? (
+                  <>
+                    <JoinQrCode url={joinUrl(invite.code)} />
+                    <p className="mt-5 text-xs font-bold uppercase tracking-widest text-slate-500">
+                      Lecture code
+                    </p>
+                    <p className="mt-1 font-mono text-3xl font-bold tracking-[0.18em] text-slate-900">
+                      {invite.code}
+                    </p>
+                    <a
+                      className="mt-5 break-all text-sm text-blue-700 underline"
+                      href={joinUrl(invite.code)}
+                    >
+                      {joinUrl(invite.code)}
+                    </a>
+                  </>
+                ) : (
+                  <p role="status" className="py-20 text-slate-600">
+                    Loading the join code…
+                  </p>
+                )}
+              </div>
+              {(window.location.hostname === 'localhost' ||
+                window.location.hostname === '127.0.0.1') && (
+                <p className="mt-4 text-sm text-amber-800">
+                  This local address only works on this computer. Open AskPool
+                  at a shared network or public address before showing the QR
+                  code to students on other devices.
+                </p>
+              )}
+              <button
+                type="button"
+                onClick={goToQuestions}
+                className="mt-8 min-h-12 rounded-xl bg-emerald-600 px-6 py-3 text-sm font-semibold text-white hover:bg-emerald-700"
+              >
+                Go to questions →
+              </button>
+            </div>
+          </main>
+        )}
+
+      {page === 'questions' &&
+        lectureStartedAt === null &&
+        !courseSelectionPage && (
+          <main className="professor-page-enter grid min-h-[calc(100dvh-5rem)] place-items-center bg-[#f7f8fc] px-5 py-16 sm:px-6">
+            <section className="w-full max-w-xl text-center">
+              <span
+                aria-hidden="true"
+                className="mx-auto grid size-20 place-items-center rounded-3xl border border-blue-100 bg-white text-blue-700 shadow-[0_12px_32px_rgba(15,23,42,0.07)]"
+              >
+                <svg
+                  className="size-9"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth="1.7"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <rect x="3" y="4" width="18" height="12" rx="2" />
+                  <path d="M12 16v4m-4 0h8" />
+                </svg>
+              </span>
               <h1
                 ref={mainHeadingRef}
                 tabIndex={-1}
-                className="text-[28px] leading-tight font-semibold tracking-tight outline-none sm:text-[30px]"
+                className="mt-8 text-3xl font-semibold tracking-tight text-slate-900 outline-none sm:text-4xl"
               >
-                Lecture questions
+                No session running
               </h1>
-              <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2">
-                <p className="text-sm text-slate-500">
-                  Started{' '}
-                  <time dateTime={lectureStartedAt}>
-                    {timestampFormatter.format(new Date(lectureStartedAt))}
-                  </time>
-                </p>
-                <span className="group relative inline-flex">
-                  <span
-                    tabIndex={0}
-                    aria-describedby="pool-status-description"
-                    className={`inline-flex cursor-help items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 ${questionsPaused ? 'bg-amber-100 text-amber-900' : 'bg-emerald-100 text-emerald-900'}`}
-                  >
+              <p className="mx-auto mt-4 max-w-md text-base leading-7 text-slate-600">
+                Start a lecture to open the question pool for this session.
+              </p>
+              <button
+                type="button"
+                onClick={openCourseSelectionPage}
+                disabled={busyId !== null}
+                className="mt-9 inline-flex min-h-12 items-center justify-center gap-3 rounded-xl bg-emerald-600 px-6 py-3 text-sm font-semibold text-white shadow-[0_8px_20px_rgba(5,150,105,0.2)] hover:bg-emerald-700 focus-visible:outline-2 focus-visible:outline-offset-3 focus-visible:outline-emerald-700 motion-safe:transition-[background,transform,box-shadow] motion-safe:duration-200 motion-safe:hover:-translate-y-0.5 motion-safe:hover:shadow-[0_12px_24px_rgba(5,150,105,0.24)] motion-safe:active:translate-y-0"
+              >
+                Start lecture
+                <svg
+                  aria-hidden="true"
+                  className="size-4"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M5 12h14m-6-6 6 6-6 6" />
+                </svg>
+              </button>
+            </section>
+          </main>
+        )}
+
+      {page === 'questions' &&
+        lectureStartedAt !== null &&
+        !courseSelectionPage &&
+        !sessionSharePage && (
+          <main className="professor-page-enter mx-auto max-w-[848px] px-5 pb-20 pt-8 sm:px-6 sm:pt-10">
+            <div className="min-[720px]:flex min-[720px]:items-center min-[720px]:justify-between min-[720px]:gap-6">
+              <div className="min-w-0">
+                <h1
+                  ref={mainHeadingRef}
+                  tabIndex={-1}
+                  className="text-[28px] leading-tight font-semibold tracking-tight outline-none sm:text-[30px]"
+                >
+                  Lecture questions
+                </h1>
+                <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2">
+                  <p className="text-sm font-medium text-slate-700">
+                    {selectedLecture?.course || selectedLecture?.title}
+                  </p>
+                  <p className="text-sm text-slate-500">
+                    Started{' '}
+                    <time dateTime={lectureStartedAt}>
+                      {timestampFormatter.format(new Date(lectureStartedAt))}
+                    </time>
+                  </p>
+                  <span className="group relative inline-flex">
                     <span
-                      aria-hidden="true"
-                      className={`size-1.5 rounded-full ${questionsPaused ? 'bg-amber-600' : 'bg-emerald-600'}`}
-                    />
-                    {questionsPaused ? 'Pool paused' : 'Pool open'}
+                      tabIndex={0}
+                      aria-describedby="pool-status-description"
+                      className={`inline-flex cursor-help items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 ${questionsPaused ? 'bg-amber-100 text-amber-900' : 'bg-emerald-100 text-emerald-900'}`}
+                    >
+                      <span
+                        aria-hidden="true"
+                        className={`size-1.5 rounded-full ${questionsPaused ? 'bg-amber-600' : 'bg-emerald-600'}`}
+                      />
+                      {questionsPaused ? 'Pool paused' : 'Pool open'}
+                    </span>
+                    <span
+                      id="pool-status-description"
+                      role="tooltip"
+                      className="pointer-events-none invisible absolute right-0 top-full z-30 mt-2 w-60 max-w-[calc(100vw-2rem)] rounded-lg bg-slate-900 px-3 py-2 text-xs leading-5 font-medium text-white opacity-0 shadow-lg transition-opacity group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100"
+                    >
+                      {questionsPaused
+                        ? 'Students cannot submit new questions until you resume the pool.'
+                        : 'Students can submit new questions to this lecture.'}
+                    </span>
                   </span>
-                  <span
-                    id="pool-status-description"
-                    role="tooltip"
-                    className="pointer-events-none invisible absolute right-0 top-full z-30 mt-2 w-60 max-w-[calc(100vw-2rem)] rounded-lg bg-slate-900 px-3 py-2 text-xs leading-5 font-medium text-white opacity-0 shadow-lg transition-opacity group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100"
-                  >
-                    {questionsPaused
-                      ? 'Students cannot submit new questions until you resume the pool.'
-                      : 'Students can submit new questions to this lecture.'}
-                  </span>
-                </span>
+                </div>
               </div>
-            </div>
-            <div
-              role="group"
-              aria-label="Session controls"
-              className="mt-5 flex flex-wrap gap-2 min-[720px]:mt-0 min-[720px]:shrink-0"
-            >
-              <span className="group relative inline-flex">
+              <div
+                role="group"
+                aria-label="Session controls"
+                className="mt-5 flex flex-wrap gap-2 min-[720px]:mt-0 min-[720px]:shrink-0"
+              >
                 <button
                   type="button"
-                  aria-pressed={questionsPaused}
-                  aria-describedby="question-intake-action-description"
-                  onClick={toggleQuestionIntake}
+                  onClick={openSessionSharePage}
                   disabled={busyId !== null}
-                  className="min-h-11 rounded-lg border border-blue-200 bg-blue-50 px-3.5 py-2 text-sm font-semibold text-blue-700 transition-colors hover:border-blue-300 hover:bg-blue-100 hover:text-blue-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+                  className="min-h-11 rounded-lg border border-emerald-200 bg-emerald-50 px-3.5 py-2 text-sm font-semibold text-emerald-800 hover:bg-emerald-100"
                 >
-                  {questionsPaused ? 'Resume questions' : 'Pause questions'}
+                  Show join code
                 </button>
-                <span
-                  id="question-intake-action-description"
-                  role="tooltip"
-                  className="pointer-events-none invisible absolute left-0 top-full z-30 mt-2 w-60 max-w-[calc(100vw-2rem)] rounded-lg bg-slate-900 px-3 py-2 text-xs leading-5 font-medium text-white opacity-0 shadow-lg transition-opacity group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100 min-[720px]:left-auto min-[720px]:right-0"
-                >
-                  {questionsPaused
-                    ? 'Allow students to submit new questions again.'
-                    : 'Pause new question submissions. Existing questions stay visible.'}
-                </span>
-              </span>
-              <button
-                ref={endTriggerRef}
-                type="button"
-                onClick={() => setEndConfirmationOpen(true)}
-                disabled={busyId !== null}
-                className="min-h-11 rounded-lg border border-rose-200 bg-rose-100 px-3.5 py-2 text-sm font-semibold text-rose-800 transition-colors hover:border-rose-300 hover:bg-rose-200 hover:text-rose-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-700"
-              >
-                End lecture
-              </button>
-            </div>
-          </div>
-          <div className="professor-question-toolbar mt-8 min-[720px]:mt-6">
-            <div className="professor-question-toolbar__layout">
-              <div
-                role="tablist"
-                aria-label="Question sections"
-                className="professor-question-tabs flex min-w-0 flex-wrap gap-x-3 sm:gap-x-5"
-              >
-                {questionTabs.map((tab) => (
+                <span className="group relative inline-flex">
                   <button
-                    key={tab}
-                    ref={tabRefs[tab]}
                     type="button"
-                    role="tab"
-                    id={`${tab}-tab`}
-                    aria-controls="questions-panel"
-                    aria-selected={selectedTab === tab}
-                    tabIndex={selectedTab === tab ? 0 : -1}
-                    onClick={() => setSelectedTab(tab)}
-                    onKeyDown={(event) => {
-                      if (
-                        event.key !== 'ArrowLeft' &&
-                        event.key !== 'ArrowRight'
-                      )
-                        return
-                      event.preventDefault()
-                      const currentIndex = questionTabs.indexOf(tab)
-                      const direction = event.key === 'ArrowRight' ? 1 : -1
-                      const next =
-                        questionTabs[
-                          (currentIndex + direction + questionTabs.length) %
-                            questionTabs.length
-                        ]
-                      setSelectedTab(next)
-                      tabRefs[next].current?.focus()
-                    }}
-                    className={`-mb-px flex min-h-12 shrink-0 items-center gap-2 border-b-2 text-sm font-semibold focus-visible:rounded-t focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 ${selectedTab === tab ? 'border-blue-600 text-blue-700' : 'border-transparent text-slate-600 hover:text-slate-900'}`}
+                    aria-pressed={questionsPaused}
+                    aria-describedby="question-intake-action-description"
+                    onClick={toggleQuestionIntake}
+                    disabled={busyId !== null}
+                    className="min-h-11 rounded-lg border border-blue-200 bg-blue-50 px-3.5 py-2 text-sm font-semibold text-blue-700 transition-colors hover:border-blue-300 hover:bg-blue-100 hover:text-blue-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
                   >
-                    {tab === 'open'
-                      ? 'Open'
-                      : tab === 'answered'
-                        ? 'Answered'
-                        : 'Deleted'}
-                    <span
-                      className={`rounded-full px-2 py-0.5 text-xs tabular-nums ${selectedTab === tab ? 'bg-blue-50 text-blue-700' : 'bg-slate-100 text-slate-700'}`}
+                    {questionsPaused ? 'Resume questions' : 'Pause questions'}
+                  </button>
+                  <span
+                    id="question-intake-action-description"
+                    role="tooltip"
+                    className="pointer-events-none invisible absolute left-0 top-full z-30 mt-2 w-60 max-w-[calc(100vw-2rem)] rounded-lg bg-slate-900 px-3 py-2 text-xs leading-5 font-medium text-white opacity-0 shadow-lg transition-opacity group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100 min-[720px]:left-auto min-[720px]:right-0"
+                  >
+                    {questionsPaused
+                      ? 'Allow students to submit new questions again.'
+                      : 'Pause new question submissions. Existing questions stay visible.'}
+                  </span>
+                </span>
+                <button
+                  ref={endTriggerRef}
+                  type="button"
+                  onClick={() => setEndConfirmationOpen(true)}
+                  disabled={busyId !== null}
+                  className="min-h-11 rounded-lg border border-rose-200 bg-rose-100 px-3.5 py-2 text-sm font-semibold text-rose-800 transition-colors hover:border-rose-300 hover:bg-rose-200 hover:text-rose-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-700"
+                >
+                  End lecture
+                </button>
+              </div>
+            </div>
+            <div className="professor-question-toolbar mt-8 min-[720px]:mt-6">
+              <div className="professor-question-toolbar__layout">
+                <div
+                  role="tablist"
+                  aria-label="Question sections"
+                  className="professor-question-tabs flex min-w-0 flex-wrap gap-x-3 sm:gap-x-5"
+                >
+                  {questionTabs.map((tab) => (
+                    <button
+                      key={tab}
+                      ref={tabRefs[tab]}
+                      type="button"
+                      role="tab"
+                      id={`${tab}-tab`}
+                      aria-controls="questions-panel"
+                      aria-selected={selectedTab === tab}
+                      tabIndex={selectedTab === tab ? 0 : -1}
+                      onClick={() => setSelectedTab(tab)}
+                      onKeyDown={(event) => {
+                        if (
+                          event.key !== 'ArrowLeft' &&
+                          event.key !== 'ArrowRight'
+                        )
+                          return
+                        event.preventDefault()
+                        const currentIndex = questionTabs.indexOf(tab)
+                        const direction = event.key === 'ArrowRight' ? 1 : -1
+                        const next =
+                          questionTabs[
+                            (currentIndex + direction + questionTabs.length) %
+                              questionTabs.length
+                          ]
+                        setSelectedTab(next)
+                        tabRefs[next].current?.focus()
+                      }}
+                      className={`-mb-px flex min-h-12 shrink-0 items-center gap-2 border-b-2 text-sm font-semibold focus-visible:rounded-t focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 ${selectedTab === tab ? 'border-blue-600 text-blue-700' : 'border-transparent text-slate-600 hover:text-slate-900'}`}
                     >
                       {tab === 'open'
-                        ? openQuestions.length
+                        ? 'Open'
                         : tab === 'answered'
-                          ? answeredQuestions.length
-                          : trashQuestions.length}
-                    </span>
-                  </button>
-                ))}
-              </div>
-              <details
-                ref={sortMenuRef}
-                className="professor-question-sort relative w-full max-w-[204px]"
-                onBlur={(event) => {
-                  if (
-                    !event.currentTarget.contains(
-                      event.relatedTarget as Node | null,
+                          ? 'Answered'
+                          : 'Deleted'}
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-xs tabular-nums ${selectedTab === tab ? 'bg-blue-50 text-blue-700' : 'bg-slate-100 text-slate-700'}`}
+                      >
+                        {tab === 'open'
+                          ? openQuestions.length
+                          : tab === 'answered'
+                            ? answeredQuestions.length
+                            : trashQuestions.length}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+                <details
+                  ref={sortMenuRef}
+                  className="professor-question-sort relative w-full max-w-[204px]"
+                  onBlur={(event) => {
+                    if (
+                      !event.currentTarget.contains(
+                        event.relatedTarget as Node | null,
+                      )
                     )
-                  )
+                      event.currentTarget.open = false
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key !== 'Escape') return
+                    event.preventDefault()
                     event.currentTarget.open = false
-                }}
-                onKeyDown={(event) => {
-                  if (event.key !== 'Escape') return
-                  event.preventDefault()
-                  event.currentTarget.open = false
-                  event.currentTarget.querySelector('summary')?.focus()
-                }}
-              >
-                <summary className="relative flex min-h-10 cursor-pointer list-none items-center gap-1 rounded-lg border border-slate-200 bg-white py-2 pr-8 pl-3 text-slate-700 transition-colors hover:border-slate-300 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 [&::-webkit-details-marker]:hidden">
-                  <span className="text-xs text-slate-500">Sort:</span>
-                  <span className="text-sm font-medium">
-                    {sortMode === 'votes' ? 'Most votes' : 'Newest first'}
-                  </span>
+                    event.currentTarget.querySelector('summary')?.focus()
+                  }}
+                >
+                  <summary className="relative flex min-h-10 cursor-pointer list-none items-center gap-1 rounded-lg border border-slate-200 bg-white py-2 pr-8 pl-3 text-slate-700 transition-colors hover:border-slate-300 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 [&::-webkit-details-marker]:hidden">
+                    <span className="text-xs text-slate-500">Sort:</span>
+                    <span className="text-sm font-medium">
+                      {sortMode === 'votes' ? 'Most votes' : 'Newest first'}
+                    </span>
+                    <svg
+                      aria-hidden="true"
+                      className="pointer-events-none absolute top-1/2 right-2.5 size-4 -translate-y-1/2 text-slate-500"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="m6 9 6 6 6-6"
+                      />
+                    </svg>
+                  </summary>
+                  <div
+                    role="group"
+                    aria-label="Sort questions by"
+                    className="absolute right-0 left-0 z-30 mt-1 rounded-lg border border-slate-200 bg-white p-1 shadow-lg"
+                  >
+                    {(
+                      [
+                        ['votes', 'Most votes'],
+                        ['newest', 'Time asked (newest first)'],
+                      ] as const
+                    ).map(([mode, label]) => (
+                      <button
+                        key={mode}
+                        type="button"
+                        aria-pressed={sortMode === mode}
+                        onClick={() => {
+                          setSortMode(mode)
+                          if (sortMenuRef.current)
+                            sortMenuRef.current.open = false
+                          sortMenuRef.current?.querySelector('summary')?.focus()
+                        }}
+                        className={`flex w-full cursor-pointer items-center justify-between gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors focus-visible:outline-2 focus-visible:outline-blue-600 ${sortMode === mode ? 'bg-blue-50 font-semibold text-blue-700' : 'text-slate-700 hover:bg-slate-100'}`}
+                      >
+                        <span>{label}</span>
+                        {sortMode === mode && (
+                          <span aria-hidden="true" className="text-blue-700">
+                            ✓
+                          </span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </details>
+              </div>
+            </div>
+
+            {selectedTab === 'trash' && (
+              <div className="mt-4">
+                <button
+                  type="button"
+                  disabled={trashQuestions.length === 0 || busyId !== null}
+                  onClick={(event) => {
+                    deleteTriggerRef.current = event.currentTarget
+                    setDeleteTarget({ kind: 'allTrash' })
+                  }}
+                  className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-red-700 bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-600 disabled:cursor-not-allowed disabled:border-slate-300 disabled:bg-slate-200 disabled:text-slate-500"
+                >
                   <svg
                     aria-hidden="true"
-                    className="pointer-events-none absolute top-1/2 right-2.5 size-4 -translate-y-1/2 text-slate-500"
+                    className="size-4 shrink-0"
                     viewBox="0 0 24 24"
                     fill="none"
                     stroke="currentColor"
                     strokeWidth="1.8"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
                   >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="m6 9 6 6 6-6"
-                    />
+                    <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 10v7M14 10v7" />
                   </svg>
-                </summary>
-                <div
-                  role="group"
-                  aria-label="Sort questions by"
-                  className="absolute right-0 left-0 z-30 mt-1 rounded-lg border border-slate-200 bg-white p-1 shadow-lg"
-                >
-                  {(
-                    [
-                      ['votes', 'Most votes'],
-                      ['newest', 'Time asked (newest first)'],
-                    ] as const
-                  ).map(([mode, label]) => (
-                    <button
-                      key={mode}
-                      type="button"
-                      aria-pressed={sortMode === mode}
-                      onClick={() => {
-                        setSortMode(mode)
-                        if (sortMenuRef.current)
-                          sortMenuRef.current.open = false
-                        sortMenuRef.current?.querySelector('summary')?.focus()
-                      }}
-                      className={`flex w-full cursor-pointer items-center justify-between gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors focus-visible:outline-2 focus-visible:outline-blue-600 ${sortMode === mode ? 'bg-blue-50 font-semibold text-blue-700' : 'text-slate-700 hover:bg-slate-100'}`}
-                    >
-                      <span>{label}</span>
-                      {sortMode === mode && (
-                        <span aria-hidden="true" className="text-blue-700">
-                          ✓
-                        </span>
-                      )}
-                    </button>
-                  ))}
-                </div>
-              </details>
-            </div>
-          </div>
-
-          {selectedTab === 'trash' && (
-            <div className="mt-4">
-              <button
-                type="button"
-                disabled={trashQuestions.length === 0 || busyId !== null}
-                onClick={(event) => {
-                  deleteTriggerRef.current = event.currentTarget
-                  setDeleteTarget({ kind: 'allTrash' })
-                }}
-                className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-red-700 bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-600 disabled:cursor-not-allowed disabled:border-slate-300 disabled:bg-slate-200 disabled:text-slate-500"
-              >
-                <svg
-                  aria-hidden="true"
-                  className="size-4 shrink-0"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 10v7M14 10v7" />
-                </svg>
-                Delete all
-              </button>
-            </div>
-          )}
-
-          <section
-            id="questions-panel"
-            role="tabpanel"
-            aria-labelledby={`${selectedTab}-tab`}
-            className="pt-5"
-          >
-            {visibleQuestions.length === 0 ? (
-              <p className="rounded-xl border border-slate-200 bg-slate-50 px-6 py-12 text-center text-sm text-slate-600">
-                {selectedTab === 'open'
-                  ? 'No open questions.'
-                  : selectedTab === 'answered'
-                    ? 'No answered questions yet.'
-                    : 'No deleted questions.'}
-              </p>
-            ) : (
-              <div className="space-y-3">
-                {visibleQuestions.map((question) => {
-                  const expanded = expandedIds.has(question.id)
-                  const topRank =
-                    selectedTab === 'open'
-                      ? topVotedRanks.get(question.id)
-                      : undefined
-                  const topQuestion = topRank !== undefined
-                  return (
-                    <article
-                      key={question.id}
-                      className={`rounded-xl border ${topQuestion ? 'border-orange-200 border-l-[3px] border-l-orange-500 bg-orange-50/70' : `bg-slate-50 ${expanded ? 'border-blue-300' : 'border-slate-200'}`}`}
-                    >
-                      {topQuestion && (
-                        <div className="flex items-center gap-1.5 px-4 pt-4 text-[11px] font-bold uppercase tracking-[0.1em] text-orange-700 sm:px-5 sm:pt-5">
-                          <svg
-                            aria-hidden="true"
-                            className="size-4 shrink-0"
-                            viewBox="0 0 24 24"
-                            fill="currentColor"
-                          >
-                            <path d="M12 22c4.4 0 7-3.1 7-7.1 0-3.3-1.8-5.6-3.5-7.2.1 2.1-1.1 3.1-2.2 3.5C13.8 7.7 11.8 4.5 8.9 2c.2 3.3-1.1 5.1-2.5 7C5.5 10.3 5 12 5 14.9 5 19 7.6 22 12 22Z" />
-                          </svg>
-                          Top voted <span aria-hidden="true">·</span> #{topRank}
-                        </div>
-                      )}
-                      <div
-                        className={`flex items-start gap-3 px-4 sm:px-5 ${topQuestion ? 'pt-2' : 'pt-4 sm:pt-5'}`}
-                      >
-                        <button
-                          type="button"
-                          aria-expanded={expanded}
-                          aria-controls={`details-${question.id}`}
-                          onClick={() => toggleExpanded(question.id)}
-                          className="flex min-w-0 flex-1 items-start gap-3 rounded-md text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
-                        >
-                          <span className="min-w-0 flex-1 text-[15px] font-medium leading-6 break-words text-slate-900">
-                            {question.text}
-                          </span>
-                          <span className="mt-0.5 text-slate-500">
-                            <ChevronIcon expanded={expanded} />
-                          </span>
-                        </button>
-                        <div
-                          className={`flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1 text-sm font-semibold tabular-nums ${topQuestion ? 'bg-orange-100 text-orange-800' : 'bg-white text-slate-700'}`}
-                          aria-label={`${question.upvoteCount} votes`}
-                        >
-                          <ThumbsUpIcon className="size-4" />
-                          {question.upvoteCount}
-                        </div>
-                      </div>
-                      {expanded && (
-                        <div
-                          id={`details-${question.id}`}
-                          className="mx-4 mt-4 border-t border-slate-200 pt-3 text-sm leading-6 text-slate-600 sm:mx-5"
-                        >
-                          <p>
-                            Submitted:{' '}
-                            <time dateTime={question.createdAt}>
-                              {timestampFormatter.format(
-                                new Date(question.createdAt),
-                              )}
-                            </time>
-                          </p>
-                          <p>Reports: {question.reportCount}</p>
-                          {selectedTab !== 'trash' && (
-                            <div className="mt-3 space-y-2">
-                              <label
-                                className="block text-sm font-medium"
-                                htmlFor={`answer-${question.id}`}
-                              >
-                                Written answer (optional)
-                              </label>
-                              <textarea
-                                id={`answer-${question.id}`}
-                                className="w-full rounded-lg border border-slate-300 bg-white p-3"
-                                rows={3}
-                                maxLength={4000}
-                                value={
-                                  answerDrafts[question.id] ??
-                                  question.answer ??
-                                  ''
-                                }
-                                onChange={(event) =>
-                                  setAnswerDrafts((items) => ({
-                                    ...items,
-                                    [question.id]: event.target.value,
-                                  }))
-                                }
-                                disabled={busyId !== null}
-                              />
-                              <button
-                                type="button"
-                                className="rounded-lg bg-blue-700 px-3 py-2 text-white"
-                                disabled={busyId !== null}
-                                onClick={() => void saveAnswer(question)}
-                              >
-                                Save answer and mark answered
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 pb-4 pt-4 sm:px-5 sm:pb-5">
-                        {selectedTab === 'open' && (
-                          <button
-                            type="button"
-                            className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-700"
-                            disabled={busyId !== null}
-                            onClick={() => void selectQuestion(question)}
-                          >
-                            {question.status === 'selected'
-                              ? 'Unselect question'
-                              : 'Select to answer'}
-                          </button>
-                        )}
-                        {selectedTab === 'trash' ? (
-                          <button
-                            type="button"
-                            onClick={() => restoreQuestion(question)}
-                            disabled={busyId !== null}
-                            className="inline-flex min-h-9 items-center gap-2 rounded-md border border-[#70476a] bg-[#70476a] px-3 py-2 text-sm font-semibold text-white transition-colors hover:border-[#583651] hover:bg-[#583651] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#70476a]"
-                          >
-                            <svg
-                              aria-hidden="true"
-                              className="size-4 shrink-0"
-                              viewBox="0 0 24 24"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth="1.8"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                            >
-                              <path d="M9 14 4 9l5-5M4 9h10a6 6 0 0 1 0 12h-2" />
-                            </svg>
-                            Restore to {question.answered ? 'Answered' : 'Open'}
-                          </button>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => changeStatus(question)}
-                            disabled={busyId !== null}
-                            className={`inline-flex min-h-9 items-center gap-2 rounded-md border px-3 py-2 text-sm font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#70476a] ${question.answered ? 'border-[#bd9db6] bg-[#f5edf3]/80 text-[#61395c] hover:border-[#a6809f] hover:bg-[#eadce7]' : 'border-[#70476a] bg-[#70476a] text-white hover:border-[#583651] hover:bg-[#583651]'}`}
-                          >
-                            <svg
-                              aria-hidden="true"
-                              className="size-4 shrink-0"
-                              viewBox="0 0 24 24"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth="1.8"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                            >
-                              {question.answered ? (
-                                <path d="M9 14 4 9l5-5M4 9h10a6 6 0 0 1 0 12h-2" />
-                              ) : (
-                                <path d="m5 12 4.5 4.5L19 7" />
-                              )}
-                            </svg>
-                            {question.answered
-                              ? 'Mark unanswered'
-                              : 'Mark answered'}
-                          </button>
-                        )}
-                        <button
-                          type="button"
-                          onClick={(event) => {
-                            deleteTriggerRef.current = event.currentTarget
-                            setDeleteTarget({
-                              kind: 'question',
-                              id: question.id,
-                            })
-                          }}
-                          disabled={busyId !== null}
-                          aria-label={
-                            selectedTab === 'trash'
-                              ? undefined
-                              : 'Delete question'
-                          }
-                          title={
-                            selectedTab === 'trash'
-                              ? undefined
-                              : 'Delete question'
-                          }
-                          className={`ml-auto inline-flex min-h-9 shrink-0 items-center justify-center rounded-md border transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 ${selectedTab === 'trash' ? 'border-red-200 bg-red-50/70 px-3 py-2 text-sm font-semibold text-red-700 hover:border-red-300 hover:bg-red-100' : 'size-9 border-slate-300/70 bg-white/50 text-slate-600 hover:border-red-200 hover:bg-red-50/80 hover:text-red-700'}`}
-                        >
-                          {selectedTab === 'trash' ? (
-                            'Delete permanently'
-                          ) : (
-                            <svg
-                              aria-hidden="true"
-                              className="size-4"
-                              viewBox="0 0 24 24"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth="1.8"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                            >
-                              <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 10v7M14 10v7" />
-                            </svg>
-                          )}
-                        </button>
-                      </div>
-                    </article>
-                  )
-                })}
+                  Delete all
+                </button>
               </div>
             )}
-          </section>
-        </main>
-      )}
+
+            <section
+              id="questions-panel"
+              role="tabpanel"
+              aria-labelledby={`${selectedTab}-tab`}
+              className="pt-5"
+            >
+              {visibleQuestions.length === 0 ? (
+                <p className="rounded-xl border border-slate-200 bg-slate-50 px-6 py-12 text-center text-sm text-slate-600">
+                  {selectedTab === 'open'
+                    ? 'No open questions.'
+                    : selectedTab === 'answered'
+                      ? 'No answered questions yet.'
+                      : 'No deleted questions.'}
+                </p>
+              ) : (
+                <div className="space-y-3">
+                  {visibleQuestions.map((question) => {
+                    const expanded = expandedIds.has(question.id)
+                    const topRank =
+                      selectedTab === 'open'
+                        ? topVotedRanks.get(question.id)
+                        : undefined
+                    const topQuestion = topRank !== undefined
+                    return (
+                      <article
+                        key={question.id}
+                        className={`rounded-xl border ${topQuestion ? 'border-orange-200 border-l-[3px] border-l-orange-500 bg-orange-50/70' : `bg-slate-50 ${expanded ? 'border-blue-300' : 'border-slate-200'}`}`}
+                      >
+                        {topQuestion && (
+                          <div className="flex items-center gap-1.5 px-4 pt-4 text-[11px] font-bold uppercase tracking-[0.1em] text-orange-700 sm:px-5 sm:pt-5">
+                            <svg
+                              aria-hidden="true"
+                              className="size-4 shrink-0"
+                              viewBox="0 0 24 24"
+                              fill="currentColor"
+                            >
+                              <path d="M12 22c4.4 0 7-3.1 7-7.1 0-3.3-1.8-5.6-3.5-7.2.1 2.1-1.1 3.1-2.2 3.5C13.8 7.7 11.8 4.5 8.9 2c.2 3.3-1.1 5.1-2.5 7C5.5 10.3 5 12 5 14.9 5 19 7.6 22 12 22Z" />
+                            </svg>
+                            Top voted <span aria-hidden="true">·</span> #
+                            {topRank}
+                          </div>
+                        )}
+                        <div
+                          className={`flex items-start gap-3 px-4 sm:px-5 ${topQuestion ? 'pt-2' : 'pt-4 sm:pt-5'}`}
+                        >
+                          <button
+                            type="button"
+                            aria-expanded={expanded}
+                            aria-controls={`details-${question.id}`}
+                            onClick={() => toggleExpanded(question.id)}
+                            className="flex min-w-0 flex-1 items-start gap-3 rounded-md text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+                          >
+                            <span className="min-w-0 flex-1 text-[15px] font-medium leading-6 break-words text-slate-900">
+                              {question.text}
+                            </span>
+                            <span className="mt-0.5 text-slate-500">
+                              <ChevronIcon expanded={expanded} />
+                            </span>
+                          </button>
+                          <div
+                            className={`flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1 text-sm font-semibold tabular-nums ${topQuestion ? 'bg-orange-100 text-orange-800' : 'bg-white text-slate-700'}`}
+                            aria-label={`${question.upvoteCount} votes`}
+                          >
+                            <ThumbsUpIcon className="size-4" />
+                            {question.upvoteCount}
+                          </div>
+                        </div>
+                        {expanded && (
+                          <div
+                            id={`details-${question.id}`}
+                            className="mx-4 mt-4 border-t border-slate-200 pt-3 text-sm leading-6 text-slate-600 sm:mx-5"
+                          >
+                            <p>
+                              Submitted:{' '}
+                              <time dateTime={question.createdAt}>
+                                {timestampFormatter.format(
+                                  new Date(question.createdAt),
+                                )}
+                              </time>
+                            </p>
+                            <p>Reports: {question.reportCount}</p>
+                            {selectedTab !== 'trash' && (
+                              <div className="mt-3 space-y-2">
+                                <label
+                                  className="block text-sm font-medium"
+                                  htmlFor={`answer-${question.id}`}
+                                >
+                                  Written answer (optional)
+                                </label>
+                                <textarea
+                                  id={`answer-${question.id}`}
+                                  className="w-full rounded-lg border border-slate-300 bg-white p-3"
+                                  rows={3}
+                                  maxLength={4000}
+                                  value={
+                                    answerDrafts[question.id] ??
+                                    question.answer ??
+                                    ''
+                                  }
+                                  onChange={(event) =>
+                                    setAnswerDrafts((items) => ({
+                                      ...items,
+                                      [question.id]: event.target.value,
+                                    }))
+                                  }
+                                  disabled={busyId !== null}
+                                />
+                                <button
+                                  type="button"
+                                  className="rounded-lg bg-blue-700 px-3 py-2 text-white"
+                                  disabled={busyId !== null}
+                                  onClick={() => void saveAnswer(question)}
+                                >
+                                  Save answer and mark answered
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 pb-4 pt-4 sm:px-5 sm:pb-5">
+                          {selectedTab === 'open' && (
+                            <button
+                              type="button"
+                              className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-700"
+                              disabled={busyId !== null}
+                              onClick={() => void selectQuestion(question)}
+                            >
+                              {question.status === 'selected'
+                                ? 'Unselect question'
+                                : 'Select to answer'}
+                            </button>
+                          )}
+                          {selectedTab === 'trash' ? (
+                            <button
+                              type="button"
+                              onClick={() => restoreQuestion(question)}
+                              disabled={busyId !== null}
+                              className="inline-flex min-h-9 items-center gap-2 rounded-md border border-[#70476a] bg-[#70476a] px-3 py-2 text-sm font-semibold text-white transition-colors hover:border-[#583651] hover:bg-[#583651] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#70476a]"
+                            >
+                              <svg
+                                aria-hidden="true"
+                                className="size-4 shrink-0"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="1.8"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              >
+                                <path d="M9 14 4 9l5-5M4 9h10a6 6 0 0 1 0 12h-2" />
+                              </svg>
+                              Restore to{' '}
+                              {question.answered ? 'Answered' : 'Open'}
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => changeStatus(question)}
+                              disabled={busyId !== null}
+                              className={`inline-flex min-h-9 items-center gap-2 rounded-md border px-3 py-2 text-sm font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#70476a] ${question.answered ? 'border-[#bd9db6] bg-[#f5edf3]/80 text-[#61395c] hover:border-[#a6809f] hover:bg-[#eadce7]' : 'border-[#70476a] bg-[#70476a] text-white hover:border-[#583651] hover:bg-[#583651]'}`}
+                            >
+                              <svg
+                                aria-hidden="true"
+                                className="size-4 shrink-0"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="1.8"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              >
+                                {question.answered ? (
+                                  <path d="M9 14 4 9l5-5M4 9h10a6 6 0 0 1 0 12h-2" />
+                                ) : (
+                                  <path d="m5 12 4.5 4.5L19 7" />
+                                )}
+                              </svg>
+                              {question.answered
+                                ? 'Mark unanswered'
+                                : 'Mark answered'}
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={(event) => {
+                              deleteTriggerRef.current = event.currentTarget
+                              setDeleteTarget({
+                                kind: 'question',
+                                id: question.id,
+                              })
+                            }}
+                            disabled={busyId !== null}
+                            aria-label={
+                              selectedTab === 'trash'
+                                ? undefined
+                                : 'Delete question'
+                            }
+                            title={
+                              selectedTab === 'trash'
+                                ? undefined
+                                : 'Delete question'
+                            }
+                            className={`ml-auto inline-flex min-h-9 shrink-0 items-center justify-center rounded-md border transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 ${selectedTab === 'trash' ? 'border-red-200 bg-red-50/70 px-3 py-2 text-sm font-semibold text-red-700 hover:border-red-300 hover:bg-red-100' : 'size-9 border-slate-300/70 bg-white/50 text-slate-600 hover:border-red-200 hover:bg-red-50/80 hover:text-red-700'}`}
+                          >
+                            {selectedTab === 'trash' ? (
+                              'Delete permanently'
+                            ) : (
+                              <svg
+                                aria-hidden="true"
+                                className="size-4"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="1.8"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              >
+                                <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 10v7M14 10v7" />
+                              </svg>
+                            )}
+                          </button>
+                        </div>
+                      </article>
+                    )
+                  })}
+                </div>
+              )}
+            </section>
+          </main>
+        )}
 
       {page === 'pastLectures' && (
         <main className="professor-page-enter mx-auto max-w-[848px] px-5 pb-20 pt-10 sm:px-6 sm:pt-14">

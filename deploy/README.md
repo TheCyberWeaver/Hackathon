@@ -1,10 +1,10 @@
 # Java + PostgreSQL deployment
 
-Caddy serves the frontend and proxies all `/api/*` to Java. Java joins the external `askpool_shared` network. The managed address https://08.hackathon.ethz.ch provides TLS/login. Java and PostgreSQL must have no public ports. The Node demo API is no longer deployed; its old data volume is neither migrated nor removed.
+Caddy serves the frontend and proxies all `/api/*` to Java, including lecture join codes and memberships. Java joins the external `askpool_shared` network. The managed address https://08.hackathon.ethz.ch provides TLS/login. Java and PostgreSQL must have no public ports. The Node demo API is no longer deployed; its old data volume is neither migrated nor removed.
 
 ## Adopt the supplied VM schema
 
-Back up the database. V1 matches the supplied schema; V2 adds lecture ownership, selection, soft deletion, votes, and reports. Do not run V1 again on the existing database.
+Back up the database. V1 matches the supplied schema; later migrations add ownership, moderation, lecture sessions, and QR join codes/memberships. Do not run V1 again on the existing database.
 
 Verify the three tables match V1 and are owned by `askpool_app`. Changing the database owner does not transfer existing table ownership. If initial SQL ran as postgres, run this from the database Compose directory:
 
@@ -29,15 +29,15 @@ docker compose up -d
 docker compose logs --tail 100 backend
 ```
 
-Flyway baselines at V1 and applies V2 transactionally. Remove DATABASE_BASELINE after successful startup; the default is false. On an empty database leave it false, and both migrations run. Baseline does not validate that an untracked schema matches V1; verify first. See the [official Flyway baseline reference](https://documentation.red-gate.com/flyway/reference/commands/baseline).
+Flyway baselines at V1 and applies pending migrations transactionally. Remove DATABASE_BASELINE after successful startup; the default is false. On an empty database leave it false so all migrations run. Baseline does not validate that an untracked schema matches V1; verify first. See the [official Flyway baseline reference](https://documentation.red-gate.com/flyway/reference/commands/baseline).
 
 ## Professor permissions
 
 The hackathon deployment currently defaults to `APP_TESTING_PERMISSIONS=true`:
 all signed-in users can submit, vote, create lectures, view authors/reports in
 the professor dashboard, and manage every lecture. This allows the same account
-to test both dashboards without changing database roles. The one-question quota
-and self-vote restriction still apply.
+to test both dashboards without changing database roles. The self-vote
+restriction still applies.
 
 To restore role/owner checks on the VM, set `APP_TESTING_PERMISSIONS=false` in
 the release `.env`, then run `docker compose -p hackathon up -d backend`.
@@ -61,7 +61,7 @@ WHERE id = 123;
 
 ## Verification and rollout
 
-Java tests start an isolated PostgreSQL instance and test empty databases, V1 adoption, permissions, privacy, voting, quota races, and moderation without contacting the VM. Verify `/api/hello`, unauthenticated 401 for `/api/lectures`, managed login, professor creation, student joining/submission, voting/reports, and answer synchronization.
+Java tests start an isolated PostgreSQL instance and test empty databases, V1 adoption, permissions, privacy, voting, lecture join/leave, submission races, and moderation without contacting the VM. Verify `/api/hello`, unauthenticated 401 for `/api/lectures`, managed login, professor creation, student joining/submission, voting/reports, and answer synchronization.
 
 The ignored local `deploy-local.ps1` builds/lints the frontend, runs `test:api`,
 tests/builds Java, and packages only Java and frontend assets. It prepares the
@@ -100,7 +100,7 @@ PostgreSQL client matching the server's major version, then switches and checks
 production. Baseline is disabled again after successful startup. Runtime
 configuration is saved in the release `.env` for later Compose commands.
 
-Retain PostgreSQL backups/volumes. V2 is additive and keeps the original answer constraint. A rollback to the former Node deployment shows its separate demo store while PostgreSQL data remains intact. Do not remove either data volume during rollout or rollback.
+Retain PostgreSQL backups/volumes. The migrations are additive and keep the original answer constraint. A rollback to the former Node deployment shows its separate demo store while PostgreSQL data remains intact. Do not remove either data volume during rollout or rollback.
 
 V3 handles the older VM schema where `lectures.professor_id` is required.
 It backfills missing `owner_id` values and installs an insert trigger to populate

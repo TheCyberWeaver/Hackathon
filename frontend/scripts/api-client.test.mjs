@@ -38,8 +38,59 @@ async function clients(baseUrl = '') {
       '../../lib/poolApi',
     ),
     professor: await load('../src/professor/professorApi.ts', '../lib/poolApi'),
+    sessions: await load('../src/lib/sessions.ts', './poolApi'),
   }
 }
+
+test('QR join clients use the Java API and accept typed or linked codes', async (t) => {
+  const api = await clients()
+  const requests = []
+  t.mock.method(globalThis, 'fetch', async (url, init) => {
+    requests.push([init.method ?? 'GET', url, init.body ?? null, init])
+    if (init.method === 'DELETE') return new Response(null, { status: 204 })
+    if (url === '/api/sessions/mine')
+      return new Response(JSON.stringify({ session: null }), { status: 200 })
+    return new Response(
+      JSON.stringify({
+        id: '42',
+        code: 'ABCD-2345',
+        course: 'Algorithms',
+        startedAt: '2026-10-10T10:00:00Z',
+      }),
+      { status: 200 },
+    )
+  })
+  assert.equal(api.sessions.parseJoinCode('abcd2345'), 'ABCD-2345')
+  assert.equal(
+    api.sessions.parseJoinCode(
+      'https://example.org/student/join?code=ABCD-2345',
+    ),
+    'ABCD-2345',
+  )
+  assert.equal(
+    api.sessions.parseJoinCode('https://example.org/other?code=ABCD-2345'),
+    null,
+  )
+  assert.equal(api.sessions.parseJoinCode('ABC!-2345'), null)
+  assert.equal((await api.sessions.getSessionInvite('42')).code, 'ABCD-2345')
+  assert.equal(await api.sessions.getJoinedSession(), null)
+  assert.equal((await api.sessions.joinSession('ABCD-2345')).id, '42')
+  await api.sessions.leaveJoinedSession()
+  assert.deepEqual(
+    requests.map(([method, url]) => [method, url]),
+    [
+      ['GET', '/api/lectures/42/invite'],
+      ['GET', '/api/sessions/mine'],
+      ['POST', '/api/sessions/join'],
+      ['DELETE', '/api/sessions/mine'],
+    ],
+  )
+  assert.deepEqual(JSON.parse(requests[2][2]), { code: 'ABCD-2345' })
+  for (const [, , , init] of requests) {
+    assert.equal(init.credentials, 'same-origin')
+    assert.equal(new Headers(init.headers).has('X-User-Id'), false)
+  }
+})
 
 test('Java API clients use lecture routes and proxy identity without browser identity', async (t) => {
   const api = await clients()
