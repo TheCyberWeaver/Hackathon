@@ -1,14 +1,16 @@
 import { useEffect, useRef, useState } from 'react'
+import { mockPastLectures } from './mockPastLectures'
 import type { Question } from './mockQuestions'
 import { mockQuestions } from './mockQuestions'
 import type { CurrentUser } from '../lib/api'
 import './professor.css'
 
 type Tab = 'open' | 'answered'
-type ProfessorPage = 'questions' | 'profile' | 'settings'
+type ProfessorPage = 'questions' | 'pastLectures' | 'profile' | 'settings'
 
 const professorRoutes: Record<ProfessorPage, string> = {
   questions: '/professor',
+  pastLectures: '/professor/past-lectures',
   profile: '/professor/profile',
   settings: '/professor/settings',
 }
@@ -17,6 +19,7 @@ const professorFullName = 'Alex Morgan'
 
 function pageFromPath(pathname: string): ProfessorPage {
   const path = pathname.replace(/\/$/, '')
+  if (path === professorRoutes.pastLectures) return 'pastLectures'
   if (path === professorRoutes.profile) return 'profile'
   if (path === professorRoutes.settings) return 'settings'
   return 'questions'
@@ -25,6 +28,10 @@ function pageFromPath(pathname: string): ProfessorPage {
 const timestampFormatter = new Intl.DateTimeFormat('en-US', {
   dateStyle: 'medium',
   timeStyle: 'short',
+})
+const lectureDateFormatter = new Intl.DateTimeFormat('en-US', {
+  dateStyle: 'medium',
+  timeZone: 'UTC',
 })
 
 function sortQuestions(questions: Question[]) {
@@ -558,6 +565,61 @@ export default function ProfessorDashboard({
               </div>
             )}
           </section>
+        </main>
+      )}
+
+      {page === 'pastLectures' && (
+        <main className="professor-page-enter mx-auto max-w-[848px] px-5 pb-20 pt-10 sm:px-6 sm:pt-14">
+          <h1
+            ref={mainHeadingRef}
+            tabIndex={-1}
+            className="text-3xl font-semibold tracking-tight outline-none sm:text-4xl"
+          >
+            Past Lectures
+          </h1>
+          <p className="mt-3 text-sm leading-6 text-slate-600">
+            Browse questions and answers from previous lectures. This is a mock
+            archive for the demo.
+          </p>
+          <div className="mt-8 space-y-4">
+            {mockPastLectures.map((lecture, index) => (
+              <details
+                key={lecture.id}
+                open={index === 0}
+                className="rounded-xl border border-slate-200 bg-slate-50"
+              >
+                <summary className="cursor-pointer px-5 py-5 marker:text-blue-600 hover:bg-slate-100 focus-visible:rounded-xl focus-visible:outline-2 focus-visible:outline-blue-600 sm:px-6">
+                  <span className="font-semibold text-slate-900">
+                    {lecture.title}
+                  </span>
+                  <span className="mt-2 block pl-4 text-xs text-slate-600">
+                    <time dateTime={lecture.date}>
+                      {lectureDateFormatter.format(new Date(lecture.date))}
+                    </time>{' '}
+                    · {lecture.questions.length} answered questions
+                  </span>
+                </summary>
+                <div className="space-y-3 border-t border-slate-200 px-5 py-5 sm:px-6">
+                  {lecture.questions.map((question) => (
+                    <article
+                      key={question.id}
+                      className="rounded-lg border border-slate-200 bg-white p-4"
+                    >
+                      <h2 className="text-sm font-semibold leading-6 text-slate-900">
+                        {question.text}
+                      </h2>
+                      <p className="mt-3 text-xs font-bold uppercase tracking-wide text-blue-700">
+                        Answer
+                      </p>
+                      <p className="mt-1 text-sm leading-6 text-slate-700">
+                        {question.answer}
+                      </p>
+                    </article>
+                  ))}
+                </div>
+              </details>
+            ))}
+          </div>
         </main>
       )}
 

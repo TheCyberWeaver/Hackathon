@@ -5,6 +5,7 @@ The professor demo lives at `/professor`, reached through the Professor button o
 ## Files and data
 
 - `frontend/src/professor/mockQuestions.ts` defines the `Question` type and 12 fixed fictional questions (9 open, 3 answered). All fields required by the UI are present. The `StudentN` values are demo identifiers, not verified identities.
+- `frontend/src/professor/mockPastLectures.ts` contains two fictional previous lectures with three saved question-and-answer pairs each. They are static demo records, not persisted lecture history.
 - `frontend/src/professor/ProfessorDashboard.tsx` owns rendering and in-memory state. The data module has no rendering or network logic.
 
 The component copies the mock array on first render. Status changes and deletions update only that state, so a reload restores the initial questions. There is no persistence or backend request. To connect real data later, replace the initialization source and state mutations in the dashboard; keep the `Question` shape and sorting rule unless the product requirements change.
