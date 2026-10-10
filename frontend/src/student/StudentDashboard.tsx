@@ -400,7 +400,7 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
                   >
                     {questionsPaused
                       ? 'The professor has paused new questions.'
-                      : 'Anonymous to classmates. Professors can view authors.'}
+                      : 'Your name is not shown on question cards.'}
                   </span>
                   <div className="composer__send">
                     <button

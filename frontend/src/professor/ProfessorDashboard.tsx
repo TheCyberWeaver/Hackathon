@@ -743,7 +743,6 @@ export default function ProfessorDashboard({ user }: { user: CurrentUser }) {
                           id={`details-${question.id}`}
                           className="mx-4 mt-4 border-t border-slate-200 pt-3 text-sm leading-6 text-slate-600 sm:mx-5"
                         >
-                          <p>Author: {question.authorId}</p>
                           <p>
                             Submitted:{' '}
                             <time dateTime={question.createdAt}>
