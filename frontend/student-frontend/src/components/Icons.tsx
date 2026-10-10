@@ -38,20 +38,16 @@ export function SendIcon(props: IconProps) {
   )
 }
 
-export function UpIcon({
+export function LikeIcon({
   filled = false,
   ...props
 }: IconProps & { filled?: boolean }) {
-  if (filled) {
-    return (
-      <Icon {...props} stroke="none">
-        <path d="M12 3 3 12h5.4v9h7.2v-9H21L12 3Z" fill="currentColor" />
-      </Icon>
-    )
-  }
   return (
     <Icon {...props}>
-      <path d="M12 19V5m-6 6 6-6 6 6" />
+      <path
+        d="M7 10v11H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3Zm0 0 4.3-6.6A2 2 0 0 1 13 2.5c.9 0 1.5.8 1.3 1.7L13.4 8H19a2.5 2.5 0 0 1 2.4 3.2l-2.1 7.8A2.5 2.5 0 0 1 16.9 21H7"
+        fill={filled ? 'currentColor' : 'none'}
+      />
     </Icon>
   )
 }

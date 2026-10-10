@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { Question } from '../lib/studentApi'
-import { CheckIcon, MoreIcon, UpIcon } from './Icons'
+import { CheckIcon, LikeIcon, MoreIcon } from './Icons'
 
 type Props = {
   question: Question
@@ -19,12 +19,15 @@ export function QuestionCard({
 
   return (
     <article
-      className={`question-card ${highlighted ? 'question-card--new' : ''} ${menuOpen ? 'question-card--menu-open' : ''}`}
+      className={`question-card ${question.mine ? 'question-card--mine' : ''} ${highlighted ? 'question-card--new' : ''} ${menuOpen ? 'question-card--menu-open' : ''}`}
       style={{
         viewTransitionName: `question-${question.id.replace(/[^a-zA-Z0-9]/g, '-')}`,
       }}
     >
       <div className="question-card__content">
+        {question.mine && (
+          <span className="question-card__owner">Your Question</span>
+        )}
         <p>{question.text}</p>
         {question.status === 'selected' && (
           <span className="status status--selected">Being answered</span>
@@ -38,21 +41,21 @@ export function QuestionCard({
       <div className="question-card__actions">
         {question.mine ? (
           <div
-            className="vote-count-only"
-            aria-label={`${question.votes} votes`}
+            className="like-button like-button--readonly"
+            aria-label={`${question.votes} likes on your question`}
           >
+            <LikeIcon width="19" height="19" />
             <span>{question.votes}</span>
-            <small>{question.votes === 1 ? 'vote' : 'votes'}</small>
           </div>
         ) : (
           <button
             type="button"
-            className={`vote-button ${question.votedByMe ? 'vote-button--voted' : ''}`}
-            aria-label={`${question.votedByMe ? 'Remove vote from' : 'Upvote'}: ${question.text}`}
+            className={`like-button ${question.votedByMe ? 'like-button--voted' : ''}`}
+            aria-label={`${question.votedByMe ? 'Unlike' : 'Like'}: ${question.text}`}
             aria-pressed={question.votedByMe}
             onClick={() => onVote(question)}
           >
-            <UpIcon width="22" height="22" filled={question.votedByMe} />
+            <LikeIcon width="19" height="19" filled={question.votedByMe} />
             <span>{question.votes}</span>
           </button>
         )}

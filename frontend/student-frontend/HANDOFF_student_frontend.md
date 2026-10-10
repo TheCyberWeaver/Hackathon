@@ -51,8 +51,8 @@ The sketch defines **layout and behavior only**. Styling:
   - page background `#f7f8fc`, surface white, border slate-200, text slate-900, secondary text slate-500, placeholder slate-400
 - No indigo anywhere in the new app.
 - Calm, rounded, spacious. Large input with about 20px radius; cards with 1px slate border and a very light shadow; no heavy gradients. Font: Segoe UI / system stack as in the starter, headline weight 600.
-- Simple outline icons as inline SVG (sidebar panel, arrow-right, arrow-up, left-right arrows, more). No icon library.
-- Voted state = filled accent arrow. Unvoted = outline slate arrow.
+- Simple outline icons as inline SVG (sidebar panel, arrow-right, thumbs-up, left-right arrows, more). No icon library.
+- Liked state = filled accent thumb inside an accent-tinted box. Unliked = outline slate thumb inside a white bordered box.
 
 ## 5. Screens and behavior
 
@@ -97,16 +97,16 @@ Trigger: tap Send, then a **200 ms delay** before scrolling.
 **Other Questions** (the shared pool, including the student's own questions):
 
 - Header "Other Questions" with underline. On mobile a circular **switch button (left-right arrows)** at the right end of the header toggles the section to **"Your questions"** and back.
-- Each **question card**: text on the left, **upvote arrow with count** on the right (count below the arrow).
-- **Voting is instant** (optimistic): arrow fills and count changes on tap, before the server answers. On failure roll back and show a small toast.
-- **At most one vote per question.** Tapping a voted arrow again removes the vote (toggle).
+- Each **question card**: text on the left, **boxed thumbs-up icon and count side by side** at the existing right-side vote position. The student's own cards show a small **"Your Question"** label at the top left.
+- **Voting is instant** (optimistic): the thumb fills and count changes on tap, before the server answers. On failure roll back and show a small toast.
+- **At most one vote per question.** Tapping a liked thumb again removes the vote (toggle).
 - Order: by rank from the server (votes first, older questions get a small boost). After a vote do not reshuffle abruptly; default is to keep order stable until the next load or until the user switches views, then animate reorder smoothly.
 - **Status badges** (default, keep): `selected` shows a small accent "Being answered" pill, `answered` shows a muted check and sorts to the bottom.
 - **Report**: a small "..." menu per card with "Report"; it opens a simple confirm sheet and then a toast "Thanks, we'll take a look." Purely a clickable demo, the server just records it.
 
 **Your questions** (what this student has sent, loaded from the server so it survives a page reload):
 
-- Same card layout, showing the vote count **without a vote arrow** (you cannot vote on your own question) and the status badge.
+- Same card layout, showing a **non-interactive like box** with the count (you cannot vote on your own question), the **"Your Question"** label, and the status badge.
 - Newest first. A question the student just sent appears at the top with a brief highlight.
 
 **Desktop layout (1920x1080):**
@@ -125,7 +125,7 @@ Trigger: tap Send, then a **200 ms delay** before scrolling.
 ## 6. Feel (what matters most, ranked)
 
 1. **Motion is the product.** Timings and easings in the sketch are deliberate. Implement exactly: sidebar 250 ms out-quad; textbox move and grow out-quad, with shrinking when content is removed; counter fade linear; send, 200 ms delay, then 1000 ms in-out-quad non-interruptible scroll to the page bottom. Reference curves: `out-quad = cubic-bezier(0.5, 1, 0.89, 1)`, `in-out-quad = cubic-bezier(0.45, 0, 0.55, 1)`. Respect `prefers-reduced-motion` by shortening to near-instant.
-2. **Instant feedback on votes.** No spinners; arrow and count change on tap.
+2. **Instant feedback on votes.** No spinners; thumb and count change on tap.
 3. **Calm and safe to ask.** Minimal chrome, one clear action, friendly copy, visible "fully anonymous" reassurance.
 4. **Mobile keyboard behavior is flawless.** No jump, no covered input, no iOS zoom on focus (input font-size at least 16px). Use `100dvh` and `visualViewport`.
 5. **Looks good in a screenshot and in a live click-through.** This is shown to teammates; every button visible in the sketch must be clickable and do something sensible.

@@ -361,6 +361,18 @@ h1 {
   min-width: 0;
   padding-block: 3px;
 }
+.question-card--mine .question-card__content {
+  padding-top: 25px;
+}
+.question-card__owner {
+  position: absolute;
+  top: 14px;
+  left: 17px;
+  color: var(--color-accent);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+}
 .question-card__content p {
   margin: 0;
   font-size: 15px;
@@ -370,60 +382,46 @@ h1 {
 }
 .question-card__actions {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   align-self: stretch;
-  gap: 1px;
+  gap: 4px;
   flex-shrink: 0;
 }
-.vote-button {
+.like-button {
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  width: 44px;
-  min-height: 58px;
-  padding: 4px 0;
-  border: 0;
-  border-radius: 12px;
-  background: transparent;
+  gap: 6px;
+  min-width: 68px;
+  height: 44px;
+  padding: 6px 9px;
+  border: 1px solid var(--color-border);
+  border-radius: 9px;
+  background: var(--color-surface);
   color: var(--color-secondary);
   transition:
     color 160ms,
+    border-color 160ms,
     background 160ms,
     transform 160ms var(--ease-out-quad);
 }
-.vote-button:hover {
+.like-button:hover:not(.like-button--readonly) {
   color: var(--color-accent);
+  border-color: var(--color-accent-ring);
   background: var(--color-accent-soft);
 }
-.vote-button:active {
+.like-button:active:not(.like-button--readonly) {
   transform: translateY(-2px);
 }
-.vote-button--voted {
+.like-button--voted {
   color: var(--color-accent);
+  border-color: var(--color-accent-ring);
+  background: var(--color-accent-soft);
 }
-.vote-button span {
-  margin-top: 2px;
-  font-size: 13px;
+.like-button span {
+  font-size: 14px;
   line-height: 1;
   font-weight: 600;
-}
-.vote-count-only {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  min-width: 44px;
-  height: 58px;
-  color: var(--color-secondary);
-}
-.vote-count-only span {
-  font-size: 18px;
-  line-height: 1.2;
-  font-weight: 600;
-}
-.vote-count-only small {
-  font-size: 10px;
 }
 .menu-wrap {
   position: relative;
@@ -650,6 +648,10 @@ h1 {
   }
   .question-card__content p {
     font-size: 16px;
+  }
+  .question-card__owner {
+    top: 18px;
+    left: 22px;
   }
   .report-sheet {
     padding-bottom: 27px;
