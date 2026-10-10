@@ -1,65 +1,81 @@
 # VIScon deployment
 
-The app runs from `/home/viscon/hackathon` on SSH host `viscon-2026`.
-The portal at https://08.hackathon.ethz.ch handles TLS and login and forwards
-HTTP to port 8080. Caddy serves the production frontend and proxies `/api/*`
-to the Java 21 backend. Student question requests go to the existing Node demo
-API, whose state persists in the `hackathon_student-data` Docker volume. All
-containers restart automatically. The professor dashboard retains its mock data.
+The managed address https://08.hackathon.ethz.ch handles TLS and login and
+forwards HTTP to VM port 8080. Caddy serves the single built frontend containing
+the entry page and both dashboards. It forwards `/api/me` and other Java routes
+to the Java 21 backend, and `/api/questions` routes to the Node student API.
+Student questions persist in the `hackathon_student-data` Docker volume.
+The professor dashboard retains its mock data. Keep the managed login enabled;
+the backend and student API have no published host ports.
 
-## Build and package (PowerShell, repository root)
+## Automatic deployment from this Windows machine
 
-Use JDK 21 with `JAVA_HOME` pointing to the JDK root directory.
+The local `deploy-local.ps1` at the repository root is ignored by Git. It contains
+the temporary VM password and resolves `viscon-2026` through the existing
+OpenSSH configuration. The password is used for automatic SSH/SFTP login and
+is excluded from uploaded bundles. The script verifies the VM's existing key
+in `%USERPROFILE%\.ssh\known_hosts`.
+
+Prerequisites: Node.js, JDK 21, Windows OpenSSH, `tar.exe`, and Python 3.10+.
+The script prepares Paramiko 4.0.0 automatically in an isolated environment at
+`backend/build/deploy-tools/`; no global Python package installation is needed.
+
+Run from any directory:
 
 ```powershell
-npm.cmd --prefix frontend ci
-npm.cmd --prefix frontend run build
-npm.cmd --prefix frontend run lint
-$env:GRADLE_USER_HOME = "$PWD/.gradle-user-home"
-Push-Location backend
-.\gradlew.bat test bootJar --no-daemon
-Pop-Location
-New-Item -ItemType Directory -Force deploy/artifacts/frontend | Out-Null
-Copy-Item backend/build/libs/backend-0.0.1-SNAPSHOT.jar deploy/artifacts/backend.jar
-Copy-Item frontend/dist/* deploy/artifacts/frontend -Recurse -Force
-New-Item -ItemType Directory -Force deploy/artifacts/student-api | Out-Null
-Copy-Item frontend/server/student-api/*.mjs, frontend/server/student-api/seed.json deploy/artifacts/student-api
-tar -czf backend/build/viscon-deploy.tar.gz -C deploy compose.yaml Caddyfile artifacts
-scp backend/build/viscon-deploy.tar.gz viscon-2026:~/
-```
-
-For subsequent deployments, build into a fresh artifacts directory to avoid
-retaining obsolete frontend assets. Transfer only build outputs and deployment
-configuration; credentials are not part of the bundle.
-
-## Run (on the VM)
-
-```bash
-mkdir -p ~/hackathon
-tar -xzf ~/viscon-deploy.tar.gz -C ~/hackathon
-cd ~/hackathon
-docker compose -p hackathon pull
-docker compose -p hackathon up -d
-curl --fail http://localhost:8080/
-curl --fail http://localhost:8080/api/hello
-```
-
-The API should return `{"message":"Hello from Java 21"}`.
-Inspect status and logs with `docker compose -p hackathon ps` and
-`docker compose -p hackathon logs --tail 100`.
-
-Before replacing the supplied demo, run with `HTTP_PORT=18080` and verify both
-URLs at that port. Then stop `template-frontend-1` and `template-backend-1`,
-and run `docker compose -p hackathon up -d` again without `HTTP_PORT`.
-The original demo files and containers remain available.
-
-## Roll back to the supplied demo
-
-```bash
-cd ~/hackathon
-docker compose -p hackathon down
-docker start template-backend-1 template-frontend-1
-```
-
-## cmd - auto deployment
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File E:\Hackathon\deploy-local.ps1
+```
+
+Optional checks:
+
+```powershell
+# Verify automatic VM login and Docker prerequisites without deploying.
+.\deploy-local.ps1 -CheckConnection
+
+# Build, test, and package locally without connecting to the VM.
+.\deploy-local.ps1 -BuildOnly
+
+# Test a temporary VM candidate, then clean it up without switching production.
+.\deploy-local.ps1 -ValidateOnly
+
+# Reuse installed frontend dependencies, or select a JDK explicitly.
+.\deploy-local.ps1 -BuildOnly -SkipInstall
+.\deploy-local.ps1 -JdkPath 'C:\Program Files\Eclipse Adoptium\jdk-21.0.8.9-hotspot'
+```
+
+The script installs frontend dependencies, runs its build/lint/student API
+tests, and runs Java tests plus `bootJar`. It packages a fresh directory with
+`frontend/dist`, the Java JAR, and only `index.mjs`, `store.mjs`, and `seed.json`
+from `frontend/server/student-api/`. Local student data, development identity,
+credentials, and the obsolete nested student app are excluded.
+
+## Rollout and rollback
+
+Each upload is checksum-verified and extracted into
+`/home/viscon/hackathon-releases/<release-id>`. A VM lock prevents overlapping
+deployments. The candidate runs on `127.0.0.1:18080` with its own disposable
+student-data volume. Checks cover the Java API, login name/ID, student API,
+unauthenticated HTTP 401 responses, frontend assets, and both dashboard routes.
+
+After those checks pass, the script recreates project `hackathon` on port 8080
+and repeats the checks. Its existing student-data volume is preserved. Candidate
+containers and volumes are removed. If switching fails, the script restores
+the previous release; the supplied template containers are the first-release
+fallback. Previous release directories remain available for rollback.
+
+To inspect the current release on the VM:
+
+```bash
+release=$(docker inspect -f '{{index .Config.Labels "com.docker.compose.project.working_dir"}}' hackathon-frontend-1)
+docker compose -p hackathon -f "$release/compose.yaml" ps
+docker compose -p hackathon -f "$release/compose.yaml" logs --tail 100
+```
+
+For a manual rollback, use the previous release directory printed by the script:
+
+```bash
+docker compose -p hackathon -f /home/viscon/hackathon-releases/<previous-release>/compose.yaml up -d --force-recreate --remove-orphans
+```
+
+Keep the production student volume when rolling back; do not pass `--volumes`
+to a production `down` command.
