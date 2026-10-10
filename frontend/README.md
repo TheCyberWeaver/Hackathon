@@ -19,3 +19,5 @@ local questions, votes, and reports. The current local state is kept in
 
 Student questions use a local demo store. Professor questions and past lectures
 are still mock data. The two dashboards do not yet share live lecture data.
+Both dashboards use the same navigation panel. Past Lectures opens existing mock
+lecture history for professors and a placeholder page for students.

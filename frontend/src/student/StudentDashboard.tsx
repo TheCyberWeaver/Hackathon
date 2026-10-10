@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState, type MouseEvent } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
 import { QuestionCard } from './components/QuestionCard'
-import { GearIcon, PanelIcon, ProfileIcon, SendIcon } from './components/Icons'
+import { SendIcon } from './components/Icons'
+import SidePanel, { type SidePanelPage } from '../components/SidePanel'
 import { ViewSwitchButton } from './components/ViewSwitchButton'
 import { animateScrollTo, prefersReducedMotion } from './lib/motion'
 import type { CurrentUser } from '../lib/api'
@@ -22,11 +23,14 @@ const examples = [
   'Where does this step in the proof come from?',
 ]
 
-type Page = 'questions' | 'settings'
+type Page = SidePanelPage
 const basePath = '/student'
 
 function currentPage(): Page {
-  if (window.location.pathname === `${basePath}/settings`) return 'settings'
+  const path = window.location.pathname.replace(/\/$/, '')
+  if (path === `${basePath}/past-lectures`) return 'pastLectures'
+  if (path === `${basePath}/profile`) return 'profile'
+  if (path === `${basePath}/settings`) return 'settings'
   return 'questions'
 }
 
@@ -49,7 +53,6 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
   const [draft, setDraft] = useState('')
   const [focused, setFocused] = useState(false)
   const [sending, setSending] = useState(false)
-  const [sidebarOpen, setSidebarOpen] = useState(false)
   const [mobileView, setMobileView] = useState<'other' | 'mine'>('other')
   const [reportTarget, setReportTarget] = useState<Question | null>(null)
   const [toast, setToast] = useState('')
@@ -71,36 +74,20 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
 
   function navigate(nextPage: Page) {
     const path =
-      nextPage === 'questions' ? basePath || '/' : `${basePath}/${nextPage}`
+      nextPage === 'questions'
+        ? basePath
+        : `${basePath}/${nextPage === 'pastLectures' ? 'past-lectures' : nextPage}`
     if (window.location.pathname !== path) {
       window.history.pushState(null, '', path)
     }
     setPage(nextPage)
-    setSidebarOpen(false)
     setFocused(false)
     window.scrollTo(0, 0)
-  }
-
-  function handleNavigation(
-    event: MouseEvent<HTMLAnchorElement>,
-    nextPage: Page,
-  ) {
-    if (
-      event.button !== 0 ||
-      event.metaKey ||
-      event.ctrlKey ||
-      event.shiftKey ||
-      event.altKey
-    )
-      return
-    event.preventDefault()
-    navigate(nextPage)
   }
 
   useEffect(() => {
     function syncPage() {
       setPage(currentPage())
-      setSidebarOpen(false)
       setFocused(false)
       window.scrollTo(0, 0)
     }
@@ -109,16 +96,7 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
   }, [])
 
   useEffect(() => {
-    if (!sidebarOpen) return
-    function closeOnEscape(event: KeyboardEvent) {
-      if (event.key === 'Escape') setSidebarOpen(false)
-    }
-    window.addEventListener('keydown', closeOnEscape)
-    return () => window.removeEventListener('keydown', closeOnEscape)
-  }, [sidebarOpen])
-
-  useEffect(() => {
-    document.title = `AskPool — ${page === 'questions' ? 'Student demo' : 'Settings'}`
+    document.title = `AskPool — ${page === 'questions' ? 'Student' : page === 'pastLectures' ? 'Past Lectures' : page === 'profile' ? 'Profile' : 'Settings'}`
   }, [page])
 
   useEffect(() => {
@@ -337,91 +315,13 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
 
   return (
     <div className="student-app">
-      <button
-        type="button"
-        className="sidebar-trigger sidebar-trigger--site"
-        aria-label="Open sidebar"
-        aria-expanded={sidebarOpen}
-        aria-hidden={sidebarOpen}
-        tabIndex={sidebarOpen ? -1 : 0}
-        onClick={() => setSidebarOpen(true)}
-      >
-        <PanelIcon width="22" height="22" />
-      </button>
-      <a
-        className="brand-mark brand-mark--site"
-        href={basePath || '/'}
-        onClick={(event) => handleNavigation(event, 'questions')}
-      >
-        ASKPOOL
-      </a>
-      <div
-        className={`sidebar-scrim ${sidebarOpen ? 'sidebar-scrim--open' : ''}`}
-        onClick={() => setSidebarOpen(false)}
-        aria-hidden="true"
+      <SidePanel
+        user={user}
+        role="student"
+        page={page}
+        onNavigate={navigate}
+        launcherClassName="side-panel-launcher--student"
       />
-      <aside
-        className={`sidebar ${sidebarOpen ? 'sidebar--open' : ''}`}
-        aria-hidden={!sidebarOpen}
-      >
-        <div className="sidebar__header">
-          <button
-            type="button"
-            className="sidebar-trigger sidebar-trigger--inside"
-            aria-label="Close sidebar"
-            onClick={() => setSidebarOpen(false)}
-          >
-            <PanelIcon width="22" height="22" />
-          </button>
-          <a
-            className="brand-mark brand-mark--inside"
-            href={basePath || '/'}
-            onClick={(event) => handleNavigation(event, 'questions')}
-          >
-            ASKPOOL
-          </a>
-        </div>
-        <div className="sidebar__identity">
-          <span className="sidebar__avatar">
-            <ProfileIcon width="25" height="25" />
-          </span>
-          <div className="sidebar__account">
-            <span className="sidebar__name">{user.name}</span>
-            <span className="sidebar__email">{user.id}</span>
-          </div>
-        </div>
-        <nav className="sidebar__nav" aria-label="Main navigation">
-          <a
-            href={basePath || '/'}
-            className={`sidebar__link ${page === 'questions' ? 'sidebar__link--active' : ''}`}
-            aria-current={page === 'questions' ? 'page' : undefined}
-            onClick={(event) => handleNavigation(event, 'questions')}
-          >
-            Current Lecture
-          </a>
-        </nav>
-        <div className="sidebar__footer">
-          <div className="sidebar__divider" />
-          <div className="sidebar__profile">
-            <span className="sidebar__avatar">
-              <ProfileIcon width="23" height="23" />
-            </span>
-            <span className="sidebar__name">{user.name}</span>
-            <a
-              href={`${basePath}/settings`}
-              className={`sidebar__settings ${page === 'settings' ? 'sidebar__settings--active' : ''}`}
-              aria-label="Settings"
-              aria-current={page === 'settings' ? 'page' : undefined}
-              onClick={(event) => handleNavigation(event, 'settings')}
-            >
-              <GearIcon width="23" height="23" />
-            </a>
-          </div>
-          <a className="sidebar__logout" href="/">
-            Log out
-          </a>
-        </div>
-      </aside>
 
       {page === 'questions' ? (
         <main>
@@ -527,10 +427,28 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
       ) : (
         <main className="placeholder-page">
           <section className="placeholder-page__content page-column">
-            <h1>Settings</h1>
+            <h1>
+              {page === 'pastLectures'
+                ? 'Past Lectures'
+                : page === 'profile'
+                  ? 'Profile'
+                  : 'Settings'}
+            </h1>
             <div className="placeholder-page__card">
-              <h2>Settings page</h2>
-              <p>This is a placeholder for your settings.</p>
+              <h2>
+                {page === 'pastLectures'
+                  ? 'Past lectures'
+                  : page === 'profile'
+                    ? 'Your profile'
+                    : 'Settings page'}
+              </h2>
+              <p>
+                {page === 'pastLectures'
+                  ? 'Past lectures will appear here.'
+                  : page === 'profile'
+                    ? 'Your profile will appear here.'
+                    : 'This is a placeholder for your settings.'}
+              </p>
             </div>
           </section>
         </main>
