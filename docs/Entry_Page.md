@@ -1,7 +1,10 @@
 # AskPool entry page integration
 
-The entry page is `/`. It reads the signed-in user from `GET /api/me` and opens
-`/student` or `/professor`. Both dashboards live in the same Vite app under
+The entry page is `/`. It reads the signed-in user from `GET /api/me`, shows the
+current sign-in state, and lets visitors select Student or Professor before
+continuing to `/student` or `/professor`. The continue button updates to match
+the selected space and whether the visitor is signed in, signed out, or retrying
+an identity error. Both dashboards live in the same Vite app under
 `frontend/src/student/` and `frontend/src/professor/`. A reload on either route
 checks identity again. Vite and Caddy use an SPA fallback for dashboard routes.
 
@@ -13,7 +16,9 @@ uses mock questions and past lectures, so its data is not shared with students.
 
 Choosing Student or Professor is demo navigation, not an authorization grant.
 Real professor permissions and lecture ownership must be enforced by the
-backend. The current “Log out” controls return to the entry page; the managed
+backend. A signed-out visitor is sent to the managed school sign-in URL for the
+selected space; an identity-check failure can be retried from the entry page.
+The current “Log out” controls return to the entry page; the managed
 login portal must handle actual sign-out when it is integrated.
 
 ## Identity endpoint

@@ -64,6 +64,30 @@ test('student client relies on proxy identity for every request', async (t) => {
   }
 })
 
+test('join links and typed codes resolve to the same session code', async () => {
+  const source = await readFile(
+    new URL('../src/lib/sessions.ts', import.meta.url),
+    'utf8',
+  )
+  const { outputText } = ts.transpileModule(source, {
+    compilerOptions: { module: ts.ModuleKind.ESNext },
+  })
+  const api = await import(
+    `data:text/javascript;base64,${Buffer.from(outputText).toString('base64')}`
+  )
+  assert.equal(api.parseJoinCode('abcd2345'), 'ABCD-2345')
+  assert.equal(api.parseJoinCode('abcd-2345'), 'ABCD-2345')
+  assert.equal(
+    api.parseJoinCode('https://example.org/student/join?code=ABCD-2345'),
+    'ABCD-2345',
+  )
+  assert.equal(
+    api.parseJoinCode('https://example.org/other?code=ABCD-2345'),
+    null,
+  )
+  assert.equal(api.parseJoinCode('ABCI-2345'), null)
+})
+
 test('integrated student API uses proxy identity for ownership and votes', async () => {
   const reservation = createServer()
   reservation.listen(0, '127.0.0.1')
@@ -156,6 +180,135 @@ test('integrated student API uses proxy identity for ownership and votes', async
     await exited
     // Remove only this test's fresh temporary directory.
     assert.ok(dataDirectory.startsWith(join(tmpdir(), 'askpool-api-test-')))
+    await rm(dataDirectory, { recursive: true, force: true })
+  }
+})
+
+test('lecture join codes connect students and expire when the lecture ends', async () => {
+  const reservation = createServer()
+  reservation.listen(0, '127.0.0.1')
+  await once(reservation, 'listening')
+  const port = reservation.address().port
+  await new Promise((resolve) => reservation.close(resolve))
+  const dataDirectory = await mkdtemp(join(tmpdir(), 'askpool-session-test-'))
+  const server = spawn(
+    process.execPath,
+    [
+      fileURLToPath(
+        new URL('../server/student-api/index.mjs', import.meta.url),
+      ),
+    ],
+    {
+      env: {
+        ...process.env,
+        PORT: String(port),
+        ASKPOOL_DATA_DIR: dataDirectory,
+      },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    },
+  )
+  const exited = once(server, 'exit')
+  try {
+    await new Promise((resolve, reject) => {
+      const timeout = setTimeout(
+        () => reject(new Error('Session API failed to start')),
+        5000,
+      )
+      server.once('error', reject)
+      server.stdout.once('data', () => {
+        clearTimeout(timeout)
+        resolve()
+      })
+    })
+    const url = `http://127.0.0.1:${port}/api/sessions`
+    const professorHeaders = {
+      'X-User-Id': 'professor@ethz.ch',
+      'Content-Type': 'application/json',
+    }
+    const studentHeaders = {
+      'X-User-Id': 'student@ethz.ch',
+      'Content-Type': 'application/json',
+    }
+    assert.equal((await fetch(url)).status, 401)
+    const createdResponse = await fetch(url, {
+      method: 'POST',
+      headers: professorHeaders,
+      body: JSON.stringify({ course: 'Applied Statistics' }),
+    })
+    assert.equal(createdResponse.status, 201)
+    const created = await createdResponse.json()
+    assert.match(created.code, /^[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}$/)
+    assert.equal(created.course, 'Applied Statistics')
+    assert.equal(
+      (await fetch(`${url}/active`, { headers: professorHeaders })).status,
+      200,
+    )
+    assert.equal(
+      await (await fetch(`${url}/active`, { headers: studentHeaders })).json(),
+      null,
+    )
+    assert.equal(
+      (
+        await fetch(`${url}/active`, {
+          method: 'DELETE',
+          headers: studentHeaders,
+        })
+      ).status,
+      404,
+    )
+    const invalidJoin = await fetch(`${url}/join`, {
+      method: 'POST',
+      headers: studentHeaders,
+      body: JSON.stringify({ code: 'WRONG-999' }),
+    })
+    assert.equal(invalidJoin.status, 404)
+    const joinedResponse = await fetch(`${url}/join`, {
+      method: 'POST',
+      headers: studentHeaders,
+      body: JSON.stringify({
+        code: created.code.toLowerCase().replace('-', ''),
+      }),
+    })
+    assert.equal(joinedResponse.status, 200)
+    assert.equal((await joinedResponse.json()).id, created.id)
+    const mine = await (
+      await fetch(`${url}/mine`, { headers: studentHeaders })
+    ).json()
+    assert.equal(mine.code, created.code)
+    const left = await fetch(`${url}/mine`, {
+      method: 'DELETE',
+      headers: studentHeaders,
+    })
+    assert.equal(left.status, 204)
+    assert.equal(
+      await (await fetch(`${url}/mine`, { headers: studentHeaders })).json(),
+      null,
+    )
+    const rejoined = await fetch(`${url}/join`, {
+      method: 'POST',
+      headers: studentHeaders,
+      body: JSON.stringify({ code: created.code }),
+    })
+    assert.equal(rejoined.status, 200)
+    const ended = await fetch(`${url}/active`, {
+      method: 'DELETE',
+      headers: professorHeaders,
+    })
+    assert.equal(ended.status, 204)
+    assert.equal(
+      await (await fetch(`${url}/mine`, { headers: studentHeaders })).json(),
+      null,
+    )
+    const expired = await fetch(`${url}/join`, {
+      method: 'POST',
+      headers: studentHeaders,
+      body: JSON.stringify({ code: created.code }),
+    })
+    assert.equal(expired.status, 404)
+  } finally {
+    server.kill()
+    await exited
+    assert.ok(dataDirectory.startsWith(join(tmpdir(), 'askpool-session-test-')))
     await rm(dataDirectory, { recursive: true, force: true })
   }
 })

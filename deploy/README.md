@@ -3,7 +3,7 @@
 The managed address https://08.hackathon.ethz.ch handles TLS and login and
 forwards HTTP to VM port 8080. Caddy serves the single built frontend containing
 the entry page and both dashboards. It forwards `/api/me` and other Java routes
-to the Java 21 backend, and `/api/questions` routes to the Node student API.
+to the Java 21 backend, and `/api/questions` and `/api/sessions` routes to the Node demo API.
 Student questions persist in the `hackathon_student-data` Docker volume.
 The professor dashboard retains its mock data. Keep the managed login enabled;
 the backend and student API have no published host ports.

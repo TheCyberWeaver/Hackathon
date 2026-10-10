@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
 import { QuestionCard } from './components/QuestionCard'
+import StudentJoinPage from './StudentJoinPage'
 import { SendIcon } from './components/Icons'
 import SidePanel, { type SidePanelPage } from '../components/SidePanel'
 import {
@@ -10,6 +11,12 @@ import {
 import { ViewSwitchButton } from './components/ViewSwitchButton'
 import { animateScrollTo, prefersReducedMotion } from './lib/motion'
 import type { CurrentUser } from '../lib/api'
+import {
+  getJoinedSession,
+  joinSession,
+  leaveJoinedSession,
+  type SharedSession,
+} from '../lib/sessions'
 import './student.css'
 import {
   listQuestions,
@@ -53,6 +60,11 @@ function sleep(ms: number) {
 
 export default function StudentDashboard({ user }: { user: CurrentUser }) {
   const [page, setPage] = useState<Page>(currentPage)
+  const [joinedSession, setJoinedSession] = useState<SharedSession | null>(null)
+  const [sessionChecking, setSessionChecking] = useState(true)
+  const [joinBusy, setJoinBusy] = useState(false)
+  const [leaveBusy, setLeaveBusy] = useState(false)
+  const [joinError, setJoinError] = useState('')
   const [questions, setQuestions] = useState<Question[]>([])
   const [draft, setDraft] = useState('')
   const [questionsPaused, setQuestionsPaused] = useState(
@@ -72,11 +84,50 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
   const pendingVotes = useRef(new Set<string>())
   const switchingView = useRef(false)
   const toastTimer = useRef<number | undefined>(undefined)
+  const joinedSessionId = joinedSession?.id
 
   function showToast(message: string) {
     window.clearTimeout(toastTimer.current)
     setToast(message)
     toastTimer.current = window.setTimeout(() => setToast(''), 3500)
+  }
+
+  async function joinLecture(code: string) {
+    if (joinBusy) return
+    setJoinBusy(true)
+    setJoinError('')
+    try {
+      const session = await joinSession(code)
+      setJoinedSession(session)
+      setQuestions([])
+      window.history.replaceState(null, '', basePath)
+      showToast(`Joined ${session.course}.`)
+    } catch (error) {
+      setJoinError(
+        error instanceof Error ? error.message : 'Could not join this lecture.',
+      )
+    } finally {
+      setJoinBusy(false)
+    }
+  }
+
+  async function leaveLecture() {
+    if (leaveBusy) return
+    setLeaveBusy(true)
+    try {
+      await leaveJoinedSession()
+      setJoinedSession(null)
+      setQuestions([])
+      setDraft('')
+      setJoinError('')
+      window.history.replaceState(null, '', `${basePath}/join`)
+    } catch (error) {
+      showToast(
+        error instanceof Error ? error.message : 'Could not leave this lecture.',
+      )
+    } finally {
+      setLeaveBusy(false)
+    }
   }
 
   function navigate(nextPage: Page) {
@@ -120,6 +171,33 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
 
   useEffect(() => {
     let active = true
+    const code = new URLSearchParams(window.location.search).get('code')
+    const sessionRequest = code ? joinSession(code) : getJoinedSession()
+    sessionRequest
+      .then((session) => {
+        if (!active) return
+        setJoinedSession(session)
+        if (code && session) window.history.replaceState(null, '', basePath)
+      })
+      .catch((error: unknown) => {
+        if (active)
+          setJoinError(
+            error instanceof Error
+              ? error.message
+              : 'Could not check your lecture. Please try again.',
+          )
+      })
+      .finally(() => {
+        if (active) setSessionChecking(false)
+      })
+    return () => {
+      active = false
+    }
+  }, [user.id])
+
+  useEffect(() => {
+    let active = true
+    if (!joinedSessionId) return
     listQuestions()
       .then((items) => {
         if (active) setQuestions(items)
@@ -132,7 +210,31 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
       active = false
       window.clearTimeout(toastTimer.current)
     }
-  }, [])
+  }, [joinedSessionId])
+
+  useEffect(() => {
+    if (!joinedSessionId) return
+    let active = true
+    const timer = window.setInterval(() => {
+      getJoinedSession()
+        .then((session) => {
+          if (!active) return
+          if (session?.id === joinedSessionId) {
+            setJoinedSession(session)
+          } else {
+            setJoinedSession(null)
+            setJoinError('This lecture has ended. Enter another code to join.')
+          }
+        })
+        .catch(() => {
+          // Keep the current screen during a transient network failure.
+        })
+    }, 10_000)
+    return () => {
+      active = false
+      window.clearInterval(timer)
+    }
+  }, [joinedSessionId])
 
   useEffect(() => {
     const viewport = window.visualViewport
@@ -343,13 +445,50 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
         launcherClassName="side-panel-launcher--student"
       />
 
-      {page === 'questions' ? (
+      {page === 'questions' && !joinedSession ? (
+        <StudentJoinPage
+          busy={joinBusy}
+          checking={sessionChecking}
+          error={joinError}
+          onJoin={(code) => void joinLecture(code)}
+        />
+      ) : page === 'questions' ? (
         <main>
           <section
             className={`hero ${focused ? 'hero--focused' : ''}`}
             aria-label="Ask a question"
           >
             <div className="hero__content page-column">
+              <div className="student-session-bar">
+                <div className="student-session-summary">
+                  <span className="student-session-kicker">Current lecture</span>
+                  <span className="student-session-course">
+                    {joinedSession?.course}
+                  </span>
+                  <span className="student-session-code">
+                    Code {joinedSession?.code}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  className="student-session-leave"
+                  onClick={() => void leaveLecture()}
+                  disabled={leaveBusy}
+                >
+                  <svg
+                    aria-hidden="true"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M10 17l5-5-5-5M15 12H3M12 3h6a3 3 0 0 1 3 3v12a3 3 0 0 1-3 3h-6" />
+                  </svg>
+                  {leaveBusy ? 'Leaving…' : 'Leave lecture'}
+                </button>
+              </div>
               <h1>
                 {questionsPaused
                   ? 'Questions are paused'

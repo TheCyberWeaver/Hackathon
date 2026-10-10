@@ -4,6 +4,7 @@ import tailwindcss from '@tailwindcss/vite'
 
 const proxy = {
   '/api/questions': { target: 'http://127.0.0.1:3001', changeOrigin: true },
+  '/api/sessions': { target: 'http://127.0.0.1:3001', changeOrigin: true },
   '/api': { target: 'http://localhost:8080', changeOrigin: true },
 }
 

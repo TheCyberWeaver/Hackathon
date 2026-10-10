@@ -25,15 +25,19 @@ export function resetState() {
       ownerId: null,
     })),
     reports: [],
+    sessions: [],
   }
   saveState(state)
   return state
 }
 
 export function readState() {
-  return existsSync(statePath)
+  const state = existsSync(statePath)
     ? JSON.parse(readFileSync(statePath, 'utf8'))
     : resetState()
+  // Existing demo data predates lecture sessions.
+  state.sessions ??= []
+  return state
 }
 
 export function saveState(state) {
