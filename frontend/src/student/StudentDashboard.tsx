@@ -609,7 +609,12 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
               {!tutorialCompleted && !tutorialDismissed && (
                 <div className="student-tutorial-invite">
                   <div className="student-tutorial-invite__prompt">
-                    <svg aria-hidden="true" viewBox="0 0 72 38" fill="none">
+                    <svg
+                      className="student-tutorial-arrow"
+                      aria-hidden="true"
+                      viewBox="0 0 72 38"
+                      fill="none"
+                    >
                       <path
                         d="M3 3c18 0 20 27 52 27m-9-9 10 9-11 6"
                         stroke="currentColor"
@@ -624,15 +629,23 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
                       aria-haspopup="dialog"
                       onClick={openTutorial}
                     >
-                      New here? Need a quick tutorial?
+                      Need a quick tutorial?
                     </button>
                   </div>
                   <button
                     type="button"
                     className="student-tutorial-dismiss"
+                    aria-label="Dismiss tutorial suggestion"
                     onClick={dismissTutorialInvite}
                   >
-                    Ignore
+                    <svg aria-hidden="true" viewBox="0 0 20 20" fill="none">
+                      <path
+                        d="M5 5l10 10M15 5L5 15"
+                        stroke="currentColor"
+                        strokeWidth="1.8"
+                        strokeLinecap="round"
+                      />
+                    </svg>
                   </button>
                 </div>
               )}

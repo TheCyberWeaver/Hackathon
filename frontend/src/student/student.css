@@ -69,10 +69,14 @@
 }
 
 .student-tutorial-invite {
+  position: relative;
   display: flex;
-  flex-direction: column;
   align-items: flex-end;
+  justify-content: flex-end;
+  width: max-content;
+  max-width: 100%;
   margin-top: 5px;
+  margin-left: auto;
   color: var(--color-accent);
 }
 
@@ -81,9 +85,10 @@
   align-items: flex-end;
   justify-content: flex-end;
   gap: 2px;
+  transition: transform 180ms var(--ease-out-quad);
 }
 
-.student-tutorial-invite svg {
+.student-tutorial-arrow {
   flex: 0 0 58px;
   width: 58px;
   height: 34px;
@@ -116,19 +121,57 @@
 }
 
 .student-tutorial-dismiss {
-  min-height: 44px;
-  padding: 4px 0 22px;
+  position: absolute;
+  top: 50%;
+  right: 0;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 44px;
+  padding: 0;
   border: 0;
   background: transparent;
   color: var(--color-secondary);
-  font-size: 12px;
-  line-height: 1.25;
-  text-decoration: underline;
-  text-underline-offset: 3px;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(4px, -50%);
+  transition:
+    opacity 180ms var(--ease-out-quad),
+    transform 180ms var(--ease-out-quad);
 }
 
-.student-tutorial-dismiss:hover {
+.student-tutorial-dismiss svg {
+  width: 15px;
+  height: 15px;
+}
+
+.student-tutorial-invite:is(:hover, :focus-within)
+  .student-tutorial-invite__prompt {
+  transform: translateX(-36px);
+}
+
+.student-tutorial-invite:is(:hover, :focus-within) .student-tutorial-dismiss {
+  opacity: 0.55;
+  pointer-events: auto;
+  transform: translate(0, -50%);
+}
+
+.student-tutorial-invite:is(:hover, :focus-within)
+  .student-tutorial-dismiss:is(:hover, :focus-visible) {
   color: var(--color-ink);
+  opacity: 0.9;
+}
+
+@media (hover: none) {
+  .student-tutorial-invite__prompt {
+    transform: translateX(-36px);
+  }
+
+  .student-tutorial-dismiss {
+    opacity: 0.55;
+    pointer-events: auto;
+    transform: translate(0, -50%);
+  }
 }
 
 .student-settings-card {
@@ -259,6 +302,7 @@ html:has(.student-settings-card) {
   height: 36px;
   min-height: 36px;
   max-height: 42vh;
+  margin-top: 6px;
   padding: 0;
   border: 0;
   outline: 0;
@@ -292,7 +336,7 @@ html:has(.student-settings-card) {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  margin-top: 4px;
+  margin-top: 0;
 }
 .anonymous-note {
   color: var(--color-secondary);
