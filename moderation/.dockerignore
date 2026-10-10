@@ -1,0 +1,8 @@
+*
+!requirements.txt
+!app.py
+!moderator.py
+!model_files.py
+!check_model.py
+!check_backend.py
+!Dockerfile

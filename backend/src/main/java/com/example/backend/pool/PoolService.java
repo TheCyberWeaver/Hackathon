@@ -11,10 +11,12 @@ import static org.springframework.http.HttpStatus.*;
 @Service
 public class PoolService {
     private final PoolRepository repository;
+    private final QuestionModerator moderator;
     private final boolean testingPermissions;
-    public PoolService(PoolRepository repository,
+    public PoolService(PoolRepository repository, QuestionModerator moderator,
                        @Value("${app.testing-permissions:false}") boolean testingPermissions) {
         this.repository = repository;
+        this.moderator = moderator;
         this.testingPermissions = testingPermissions;
     }
     public User identify(String identity) {
@@ -52,6 +54,9 @@ public class PoolService {
         if (!testingPermissions && !user.role().equals("student")) throw new ApiException(FORBIDDEN, "Only students may submit questions.");
         LectureSession.requireOpen(repository.lockLecture(lecture).session());
         var text = text(request == null ? null : request.text(), 200, "Question");
+        if (!moderator.accepts(text)) {
+            throw new ApiException(UNPROCESSABLE_CONTENT, "Please avoid abusive language.");
+        }
         var id = repository.createQuestion(lecture, user.id(), text);
         return repository.question(lecture, id, user.id());
     }

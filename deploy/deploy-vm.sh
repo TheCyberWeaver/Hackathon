@@ -12,6 +12,8 @@ export DATABASE_URL
 DATABASE_URL=$(printf '%s' '__DATABASE_URL_BASE64__' | base64 -d)
 export ASKPOOL_APP_PASSWORD_FILE
 ASKPOOL_APP_PASSWORD_FILE=$(printf '%s' '__APP_PASSWORD_FILE_BASE64__' | base64 -d)
+export MODERATION_IMAGE_TAG="$release_id"
+export MODERATION_THRESHOLD=__MODERATION_THRESHOLD__
 archive="$HOME/hackathon-$release_id.tar.gz"
 release="$HOME/hackathon-releases/$release_id"
 candidate="hackathon-check-$release_id"
@@ -41,6 +43,7 @@ export DATABASE_BASELINE=false
 if [ "$baseline" -eq 1 ]; then DATABASE_BASELINE=true; fi
 printf "ASKPOOL_APP_PASSWORD_FILE='%s'\nDATABASE_URL='%s'\nDATABASE_BASELINE=%s\n" \
     "$ASKPOOL_APP_PASSWORD_FILE" "$DATABASE_URL" "$DATABASE_BASELINE" > .env
+printf 'MODERATION_IMAGE_TAG=%s\nMODERATION_THRESHOLD=%s\n' "$MODERATION_IMAGE_TAG" "$MODERATION_THRESHOLD" >> .env
 
 candidate_password=$(cat /proc/sys/kernel/random/uuid)
 cat > compose.candidate.yaml <<YAML
@@ -51,6 +54,7 @@ services:
       DATABASE_USER: postgres
       DATABASE_PASSWORD: $candidate_password
       DATABASE_BASELINE: "false"
+      APP_TESTING_PERMISSIONS: "true"
     depends_on:
       candidate-db:
         condition: service_healthy
@@ -79,7 +83,7 @@ cleanup() {
     result=$?
     trap - EXIT
     if [ "$result" -ne 0 ]; then
-        candidate_compose logs --tail 40 backend >&2 || true
+        candidate_compose logs --tail 40 backend moderation >&2 || true
     fi
     candidate_compose down --volumes >/dev/null 2>&1 || true
     if [ "$result" -ne 0 ] && [ "$switched" -eq 1 ]; then
@@ -87,7 +91,7 @@ cleanup() {
         docker compose -p hackathon -f "$release/compose.yaml" logs --tail 40 backend >&2 || true
         docker compose -p hackathon -f "$release/compose.yaml" down || true
         if [ -n "$previous" ] && [ -f "$previous/compose.yaml" ]; then
-            if (unset DATABASE_URL DATABASE_BASELINE ASKPOOL_APP_PASSWORD_FILE; cd "$previous" && docker compose -p hackathon up -d --force-recreate); then
+            if (unset DATABASE_URL DATABASE_BASELINE ASKPOOL_APP_PASSWORD_FILE MODERATION_IMAGE_TAG MODERATION_THRESHOLD; cd "$previous" && docker compose -p hackathon up -d --force-recreate); then
                 curl -fsS --retry 15 --retry-delay 2 --retry-all-errors http://127.0.0.1:8080/api/hello || true
             else
                 echo "ROLLBACK FAILED: inspect $previous manually." >&2
@@ -101,7 +105,8 @@ cleanup() {
 trap cleanup EXIT
 
 docker compose -p hackathon config --quiet
-docker compose -p hackathon pull
+docker compose -p hackathon pull backend frontend
+docker compose -p hackathon build moderation
 docker pull postgres:17-alpine
 
 # Read-only database checks use the application role and the existing mounted secret.
@@ -155,7 +160,9 @@ check_app() {
 
 echo 'Starting candidate on localhost:18080 with an isolated disposable PostgreSQL database...'
 candidate_compose up -d
+candidate_compose exec -T moderation python check_model.py --url http://127.0.0.1:8090
 check_app 18080
+candidate_compose exec -T moderation python check_backend.py
 candidate_compose down --volumes
 if [ "$validate_only" -eq 1 ]; then
     echo 'Candidate validation passed. Production application and database were not changed.'
@@ -171,6 +178,7 @@ for demo in template-frontend-1 template-backend-1; do
     if docker inspect "$demo" >/dev/null 2>&1; then docker stop "$demo"; fi
 done
 docker compose -p hackathon up -d --force-recreate --remove-orphans
+docker compose -p hackathon exec -T moderation python check_model.py --url http://127.0.0.1:8090
 check_app 8080
 # Recreate Java with baseline disabled after successful adoption.
 sed -i 's/^DATABASE_BASELINE=.*/DATABASE_BASELINE=false/' .env

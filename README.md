@@ -113,3 +113,10 @@ Verify with backend `./gradlew.bat test bootJar` (Windows) or
 `npm run lint` and `npm run test:api`. Java tests start an isolated PostgreSQL process automatically,
 without Docker or VM credentials. The first run downloads platform binaries.
 See the [API contract](docs/API.md) for routes, errors, and permissions.
+
+Abusive-language moderation runs as a separate CPU service on the deployment
+VM. See [moderation](moderation/README.md) for its minimal API and local setup,
+and [deploy-moderation.ps1](deploy-moderation.ps1) to deploy the integrated release.
+For a temporary local testing page, run `./test-moderation.ps1` and open
+http://127.0.0.1:8091. Its **Stop portal** button closes the test service;
+`./test-moderation.ps1 -Stop` also stops it from PowerShell.
