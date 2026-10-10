@@ -23,7 +23,7 @@ New-Item -ItemType Directory -Force deploy/artifacts/frontend | Out-Null
 Copy-Item backend/build/libs/backend-0.0.1-SNAPSHOT.jar deploy/artifacts/backend.jar
 Copy-Item frontend/dist/* deploy/artifacts/frontend -Recurse -Force
 New-Item -ItemType Directory -Force deploy/artifacts/student-api | Out-Null
-Copy-Item frontend/student-frontend/server/*.mjs, frontend/student-frontend/server/seed.json deploy/artifacts/student-api
+Copy-Item frontend/server/student-api/*.mjs, frontend/server/student-api/seed.json deploy/artifacts/student-api
 tar -czf backend/build/viscon-deploy.tar.gz -C deploy compose.yaml Caddyfile artifacts
 scp backend/build/viscon-deploy.tar.gz viscon-2026:~/
 ```

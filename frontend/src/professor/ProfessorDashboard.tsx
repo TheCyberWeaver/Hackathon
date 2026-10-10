@@ -3,6 +3,12 @@ import { mockPastLectures } from './mockPastLectures'
 import type { Question } from './mockQuestions'
 import { mockQuestions } from './mockQuestions'
 import type { CurrentUser } from '../lib/api'
+import {
+  GearIcon,
+  PanelIcon,
+  ProfileIcon,
+  ThumbsUpIcon,
+} from '../components/Icons'
 import './professor.css'
 
 type Tab = 'open' | 'answered'
@@ -58,36 +64,14 @@ function ChevronIcon({ expanded }: { expanded: boolean }) {
   )
 }
 
-function ThumbsUpIcon() {
-  return (
-    <svg
-      aria-hidden="true"
-      className="size-4"
-      fill="none"
-      viewBox="0 0 24 24"
-      stroke="currentColor"
-      strokeWidth="1.7"
-    >
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M7 10v11H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3Zm0 0 4.7-7.1A2 2 0 0 1 15.4 4v1.2c0 .5-.1 1-.3 1.5L14 10h5.5a2.5 2.5 0 0 1 2.5 3l-1.4 6a2.5 2.5 0 0 1-2.4 2H7"
-      />
-    </svg>
-  )
-}
-
-export default function ProfessorDashboard({
-  user,
-  onSwitchSpace,
-}: {
-  user: CurrentUser
-  onSwitchSpace: () => void
-}) {
+export default function ProfessorDashboard({ user }: { user: CurrentUser }) {
   const [questions, setQuestions] = useState<Question[]>(() => [
     ...mockQuestions,
   ])
   const [selectedTab, setSelectedTab] = useState<Tab>('open')
+  const [page, setPage] = useState<ProfessorPage>(() =>
+    pageFromPath(window.location.pathname),
+  )
   const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set())
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [drawerClosing, setDrawerClosing] = useState(false)
@@ -290,17 +274,7 @@ export default function ProfessorDashboard({
               onClick={() => closeDrawer()}
               className="flex size-10 items-center justify-center rounded-xl bg-white text-slate-500 shadow-[0_3px_12px_rgba(15,23,42,0.09)] hover:text-blue-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
             >
-              <svg
-                aria-hidden="true"
-                className="size-5"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.8"
-              >
-                <rect x="4" y="4.5" width="16" height="15" rx="2" />
-                <path d="M10 4.5v15" />
-              </svg>
+              <PanelIcon className="size-5" />
             </button>
             <span className="text-[10px] font-bold tracking-[0.2em] text-blue-700">
               ASKPOOL
@@ -311,16 +285,7 @@ export default function ProfessorDashboard({
               className="flex size-10 items-center justify-center rounded-full bg-blue-100 text-blue-700"
               aria-hidden="true"
             >
-              <svg
-                className="size-5"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.8"
-              >
-                <circle cx="12" cy="8" r="3.5" />
-                <path strokeLinecap="round" d="M5.5 20a6.5 6.5 0 0 1 13 0" />
-              </svg>
+              <ProfileIcon className="size-5" />
             </span>
             <div className="min-w-0 break-words">
               <p className="text-sm font-semibold">{user.name}</p>
@@ -331,24 +296,6 @@ export default function ProfessorDashboard({
             aria-label="Professor navigation"
             className="mt-12 flex flex-col gap-1"
           >
-            <a
-              href="/"
-              onClick={(event) => {
-                if (
-                  event.button !== 0 ||
-                  event.metaKey ||
-                  event.ctrlKey ||
-                  event.shiftKey ||
-                  event.altKey
-                )
-                  return
-                event.preventDefault()
-                onSwitchSpace()
-              }}
-              className="rounded-lg px-3 py-3 text-left text-sm font-medium text-slate-700 hover:bg-white focus-visible:outline-2 focus-visible:outline-blue-600"
-            >
-              Switch space
-            </a>
             <button
               type="button"
               onClick={() => navigateTo('questions')}
@@ -370,19 +317,7 @@ export default function ProfessorDashboard({
                   className="flex size-9 shrink-0 items-center justify-center rounded-full bg-blue-100 text-blue-700"
                   aria-hidden="true"
                 >
-                  <svg
-                    className="size-5"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.8"
-                  >
-                    <circle cx="12" cy="8" r="3.5" />
-                    <path
-                      strokeLinecap="round"
-                      d="M5.5 20a6.5 6.5 0 0 1 13 0"
-                    />
-                  </svg>
+                  <ProfileIcon className="size-5" />
                 </span>
                 <span className="min-w-0">
                   <span className="block truncate text-sm font-semibold text-slate-900">
@@ -400,21 +335,7 @@ export default function ProfessorDashboard({
                 onClick={() => navigateTo('settings')}
                 className={`flex size-10 shrink-0 items-center justify-center rounded-lg hover:bg-slate-50 hover:text-blue-700 focus-visible:outline-2 focus-visible:outline-blue-600 ${page === 'settings' ? 'bg-blue-50 text-blue-700' : 'text-slate-500'}`}
               >
-                <svg
-                  aria-hidden="true"
-                  className="size-5"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M9.8 3.8 10.2 2h3.6l.4 1.8a8.7 8.7 0 0 1 1.8.8l1.6-.9 2.5 2.5-.9 1.6c.3.6.6 1.2.8 1.8l1.8.4v3.6l-1.8.4a8.7 8.7 0 0 1-.8 1.8l.9 1.6-2.5 2.5-1.6-.9a8.7 8.7 0 0 1-1.8.8l-.4 1.8h-3.6l-.4-1.8a8.7 8.7 0 0 1-1.8-.8l-1.6.9-2.5-2.5.9-1.6a8.7 8.7 0 0 1-.8-1.8L2 13.8v-3.6l1.8-.4a8.7 8.7 0 0 1 .8-1.8l-.9-1.6 2.5-2.5 1.6.9a8.7 8.7 0 0 1 1.8-.8Z"
-                  />
-                  <circle cx="12" cy="12" r="3" />
-                </svg>
+                <GearIcon className="size-5" />
               </button>
             </div>
             <button
@@ -516,9 +437,9 @@ export default function ProfessorDashboard({
                         </button>
                         <div
                           className="flex shrink-0 items-center gap-1.5 rounded-md bg-white px-2 py-1 text-sm font-semibold tabular-nums text-slate-700"
-                          aria-label={`${question.upvoteCount} votes`}
+                          aria-label={`${question.upvoteCount} upvotes`}
                         >
-                          <ThumbsUpIcon />
+                          <ThumbsUpIcon className="size-4" />
                           {question.upvoteCount}
                         </div>
                       </div>

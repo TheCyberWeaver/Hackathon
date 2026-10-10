@@ -24,7 +24,7 @@ export default function App() {
 
   useEffect(() => {
     if (path === '/') document.title = 'AskPool'
-    if (path === '/professor') document.title = 'AskPool — Professor'
+    if (path.startsWith('/professor')) document.title = 'AskPool — Professor'
   }, [path])
 
   function navigate(nextPath: string) {
@@ -86,14 +86,14 @@ export default function App() {
             </main>
           }
         >
-          <StudentDashboard
-            user={identity.user}
-            onSwitchSpace={() => navigate('/')}
-          />
+          <StudentDashboard user={identity.user} />
         </Suspense>
       )
     }
-    if (normalizedPath === '/professor') {
+    if (
+      normalizedPath === '/professor' ||
+      normalizedPath.startsWith('/professor/')
+    ) {
       return (
         <Suspense
           fallback={
@@ -102,10 +102,7 @@ export default function App() {
             </main>
           }
         >
-          <ProfessorDashboard
-            user={identity.user}
-            onSwitchSpace={() => navigate('/')}
-          />
+          <ProfessorDashboard user={identity.user} />
         </Suspense>
       )
     }

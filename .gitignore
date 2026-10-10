@@ -18,3 +18,4 @@ Thumbs.db
 .gradle-user-home/
 deploy/artifacts/
 /deploy-local.ps1
+frontend/server/student-api/data/

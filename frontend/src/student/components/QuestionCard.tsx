@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { Question } from '../lib/studentApi'
-import { CheckIcon, LikeIcon, MoreIcon } from './Icons'
+import { CheckIcon, MoreIcon, ThumbsUpIcon } from './Icons'
 
 type Props = {
   question: Question
@@ -41,21 +41,21 @@ export function QuestionCard({
       <div className="question-card__actions">
         {question.mine ? (
           <div
-            className="like-button like-button--readonly"
-            aria-label={`${question.votes} likes on your question`}
+            className="upvote-button upvote-button--readonly"
+            aria-label={`${question.votes} upvotes on your question`}
           >
-            <LikeIcon width="19" height="19" />
+            <ThumbsUpIcon width="16" height="16" />
             <span>{question.votes}</span>
           </div>
         ) : (
           <button
             type="button"
-            className={`like-button ${question.votedByMe ? 'like-button--voted' : ''}`}
-            aria-label={`${question.votedByMe ? 'Unlike' : 'Like'}: ${question.text}`}
+            className={`upvote-button ${question.votedByMe ? 'upvote-button--voted' : ''}`}
+            aria-label={`${question.votedByMe ? 'Remove upvote from' : 'Upvote'}: ${question.text}`}
             aria-pressed={question.votedByMe}
             onClick={() => onVote(question)}
           >
-            <LikeIcon width="19" height="19" filled={question.votedByMe} />
+            <ThumbsUpIcon width="16" height="16" filled={question.votedByMe} />
             <span>{question.votes}</span>
           </button>
         )}

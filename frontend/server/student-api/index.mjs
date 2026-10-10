@@ -24,20 +24,14 @@ function publicQuestion(question, studentId) {
   }
 }
 
-function rank(question) {
-  const ageMinutes = Math.max(
-    0,
-    (Date.now() - Date.parse(question.createdAt)) / 60_000,
-  )
-  return question.votes + Math.min(ageMinutes, 60) / 10
-}
-
 function ranked(questions) {
   return [...questions].sort((a, b) => {
     if (a.status === 'answered' && b.status !== 'answered') return 1
     if (b.status === 'answered' && a.status !== 'answered') return -1
     return (
-      rank(b) - rank(a) || Date.parse(a.createdAt) - Date.parse(b.createdAt)
+      b.votes - a.votes ||
+      Date.parse(a.createdAt) - Date.parse(b.createdAt) ||
+      a.id.localeCompare(b.id)
     )
   })
 }
@@ -54,12 +48,8 @@ async function jsonBody(request) {
 createServer(async (request, response) => {
   try {
     const path = new URL(request.url, 'http://localhost').pathname
-    // Integrated app: identity comes from the managed proxy, not the browser.
-    // Standalone demo retains its per-browser identity for independent development.
-    const userId =
-      process.env.ASKPOOL_REQUIRE_USER_ID === 'true'
-        ? request.headers['x-user-id']
-        : request.headers['x-user-id'] || request.headers['x-student-id']
+    // The trusted proxy supplies identity; browser headers never identify a student.
+    const userId = request.headers['x-user-id']
     if (typeof userId !== 'string' || !userId.trim()) {
       send(response, 401, { error: 'Missing student identity' })
       return
