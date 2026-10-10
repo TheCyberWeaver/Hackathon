@@ -1,7 +1,10 @@
 export type PastLecture = {
   id: string
+  course: string
   title: string
   date: string
+  startsAt: string
+  endsAt: string
   questions: {
     id: string
     text: string
@@ -13,8 +16,11 @@ export type PastLecture = {
 export const mockPastLectures: PastLecture[] = [
   {
     id: 'statistics-inference',
+    course: 'Applied Statistics',
     title: 'Introduction to Statistical Inference',
     date: '2026-10-03',
+    startsAt: '09:00',
+    endsAt: '10:45',
     questions: [
       {
         id: 'statistics-q1',
@@ -38,8 +44,11 @@ export const mockPastLectures: PastLecture[] = [
   },
   {
     id: 'gradient-descent',
+    course: 'Machine Learning Foundations',
     title: 'Gradient Descent and Regularization',
     date: '2026-09-26',
+    startsAt: '14:00',
+    endsAt: '15:45',
     questions: [
       {
         id: 'gradient-q1',
