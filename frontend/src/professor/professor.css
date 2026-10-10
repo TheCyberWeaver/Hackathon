@@ -4,6 +4,35 @@
 .professor-toast {
   animation: professor-toast-in 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
+.professor-question-toolbar {
+  container-type: inline-size;
+}
+.professor-question-toolbar__layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: end;
+  gap: 12px;
+}
+.professor-question-tabs {
+  border-bottom: 1px solid #e2e8f0;
+}
+.professor-question-sort {
+  justify-self: center;
+}
+@container (min-width: 580px) {
+  .professor-question-toolbar__layout {
+    grid-template-columns: minmax(0, 1fr) 204px;
+    gap: 16px;
+    border-bottom: 1px solid #e2e8f0;
+  }
+  .professor-question-tabs {
+    border-bottom: 0;
+  }
+  .professor-question-sort {
+    justify-self: end;
+    margin-bottom: 6px;
+  }
+}
 @keyframes professor-toast-in {
   from {
     opacity: 0;
