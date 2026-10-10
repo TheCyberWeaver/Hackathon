@@ -141,6 +141,7 @@
   background: var(--color-surface);
   box-shadow: 0 8px 26px rgb(15 23 42 / 5%);
   transition:
+    background-color 250ms var(--ease-in-out-quad),
     border-color 250ms var(--ease-in-out-quad),
     box-shadow 250ms var(--ease-in-out-quad),
     min-height 250ms var(--ease-in-out-quad);
@@ -149,6 +150,11 @@
   border-color: var(--color-accent-ring);
   box-shadow: 0 8px 30px rgb(37 99 235 / 8%);
   transition-timing-function: var(--ease-out-quad);
+}
+.composer--paused {
+  border-color: #cbd5e1;
+  background: #f1f5f9;
+  box-shadow: none;
 }
 .composer textarea {
   display: block;
@@ -167,12 +173,19 @@
   line-height: 1.5;
   transition: height 250ms var(--ease-in-out-quad);
 }
+.composer--paused textarea {
+  color: #64748b;
+  cursor: not-allowed;
+}
 .composer--focused textarea {
   transition-timing-function: var(--ease-out-quad);
 }
 .composer textarea::placeholder {
   color: var(--color-placeholder);
   opacity: 1;
+}
+.composer--paused textarea::placeholder {
+  color: #64748b;
 }
 .composer textarea:focus-visible {
   outline: none;

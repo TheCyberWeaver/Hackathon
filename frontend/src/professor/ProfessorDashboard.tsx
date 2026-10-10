@@ -5,6 +5,16 @@ import { mockQuestions } from './mockQuestions'
 import type { CurrentUser } from '../lib/api'
 import { ThumbsUpIcon } from '../components/Icons'
 import SidePanel, { type SidePanelPage } from '../components/SidePanel'
+import {
+  readQuestionIntakePaused,
+  saveQuestionIntakePaused,
+  subscribeQuestionIntakePaused,
+} from '../lib/questionIntake'
+import {
+  clearLectureStart,
+  readLectureStart,
+  saveLectureStart,
+} from './lectureSession'
 import './professor.css'
 
 type Tab = 'open' | 'answered'
@@ -61,6 +71,12 @@ function ChevronIcon({ expanded }: { expanded: boolean }) {
 }
 
 export default function ProfessorDashboard({ user }: { user: CurrentUser }) {
+  const [lectureStartedAt, setLectureStartedAt] = useState<string | null>(() =>
+    readLectureStart(user.id),
+  )
+  const [questionsPaused, setQuestionsPaused] = useState(
+    readQuestionIntakePaused,
+  )
   const [questions, setQuestions] = useState<Question[]>(() => [
     ...mockQuestions,
   ])
@@ -70,8 +86,11 @@ export default function ProfessorDashboard({ user }: { user: CurrentUser }) {
   )
   const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set())
   const [deleteId, setDeleteId] = useState<string | null>(null)
+  const [endConfirmationOpen, setEndConfirmationOpen] = useState(false)
   const [notice, setNotice] = useState('')
   const dialogRef = useRef<HTMLDialogElement>(null)
+  const endDialogRef = useRef<HTMLDialogElement>(null)
+  const endTriggerRef = useRef<HTMLButtonElement>(null)
   const deleteTriggerRef = useRef<HTMLButtonElement | null>(null)
   const openTabRef = useRef<HTMLButtonElement>(null)
   const answeredTabRef = useRef<HTMLButtonElement>(null)
@@ -93,6 +112,8 @@ export default function ProfessorDashboard({ user }: { user: CurrentUser }) {
     return () => window.removeEventListener('popstate', handleLocationChange)
   }, [])
 
+  useEffect(() => subscribeQuestionIntakePaused(setQuestionsPaused), [])
+
   useEffect(() => {
     if (!deleteId) return
     const dialog = dialogRef.current
@@ -101,6 +122,15 @@ export default function ProfessorDashboard({ user }: { user: CurrentUser }) {
       if (dialog?.open) dialog.close()
     }
   }, [deleteId])
+
+  useEffect(() => {
+    if (!endConfirmationOpen) return
+    const dialog = endDialogRef.current
+    dialog?.showModal()
+    return () => {
+      if (dialog?.open) dialog.close()
+    }
+  }, [endConfirmationOpen])
 
   useEffect(() => {
     if (!notice) return
@@ -123,6 +153,59 @@ export default function ProfessorDashboard({ user }: { user: CurrentUser }) {
     setPage(nextPage)
     window.scrollTo(0, 0)
     window.requestAnimationFrame(() => mainHeadingRef.current?.focus())
+  }
+
+  function startLecture() {
+    const startedAt = new Date().toISOString()
+    setLectureStartedAt(startedAt)
+    setQuestionsPaused(false)
+    const saved = saveLectureStart(user.id, startedAt)
+    const intakeReset = saveQuestionIntakePaused(false)
+    if (!saved || !intakeReset) {
+      setNotice(
+        'Lecture started, but this browser may not remember its controls after a reload.',
+      )
+    }
+  }
+
+  function toggleQuestionIntake() {
+    const nextPaused = !questionsPaused
+    if (!saveQuestionIntakePaused(nextPaused)) {
+      setNotice('Could not update question submissions. Please try again.')
+      return
+    }
+    setQuestionsPaused(nextPaused)
+    setNotice(
+      nextPaused
+        ? 'Pool paused. A little thinking time never hurt.'
+        : 'Pool open. Let the questions roll in!',
+    )
+  }
+
+  function closeEndConfirmation(confirmed: boolean) {
+    setEndConfirmationOpen(false)
+    if (confirmed) {
+      const cleared = clearLectureStart(user.id)
+      const intakeReset = saveQuestionIntakePaused(false)
+      setLectureStartedAt(null)
+      setQuestionsPaused(false)
+      setQuestions([...mockQuestions])
+      setSelectedTab('open')
+      setExpandedIds(new Set())
+      setNotice(
+        cleared && intakeReset
+          ? ''
+          : 'The saved session controls could not be cleared and may reappear after a reload.',
+      )
+    }
+    window.requestAnimationFrame(() => {
+      if (confirmed) {
+        window.scrollTo(0, 0)
+        mainHeadingRef.current?.focus({ preventScroll: true })
+      } else {
+        endTriggerRef.current?.focus()
+      }
+    })
   }
 
   function changeStatus(question: Question) {
@@ -185,19 +268,135 @@ export default function ProfessorDashboard({ user }: { user: CurrentUser }) {
         </div>
       </header>
 
-      {page === 'questions' && (
+      {page === 'questions' && lectureStartedAt === null && (
+        <main className="professor-page-enter grid min-h-[calc(100dvh-5rem)] place-items-center bg-[#f7f8fc] px-5 py-16 sm:px-6">
+          <section className="w-full max-w-xl text-center">
+            <span
+              aria-hidden="true"
+              className="mx-auto grid size-20 place-items-center rounded-3xl border border-blue-100 bg-white text-blue-700 shadow-[0_12px_32px_rgba(15,23,42,0.07)]"
+            >
+              <svg
+                className="size-9"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth="1.7"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <rect x="3" y="4" width="18" height="12" rx="2" />
+                <path d="M12 16v4m-4 0h8" />
+              </svg>
+            </span>
+            <h1
+              ref={mainHeadingRef}
+              tabIndex={-1}
+              className="mt-8 text-3xl font-semibold tracking-tight text-slate-900 outline-none sm:text-4xl"
+            >
+              No session running
+            </h1>
+            <p className="mx-auto mt-4 max-w-md text-base leading-7 text-slate-600">
+              Start a lecture to open the question pool for this session.
+            </p>
+            <button
+              type="button"
+              onClick={startLecture}
+              className="mt-9 inline-flex min-h-12 items-center justify-center gap-3 rounded-xl bg-emerald-600 px-6 py-3 text-sm font-semibold text-white shadow-[0_8px_20px_rgba(5,150,105,0.2)] hover:bg-emerald-700 focus-visible:outline-2 focus-visible:outline-offset-3 focus-visible:outline-emerald-700 motion-safe:transition-[background,transform,box-shadow] motion-safe:duration-200 motion-safe:hover:-translate-y-0.5 motion-safe:hover:shadow-[0_12px_24px_rgba(5,150,105,0.24)] motion-safe:active:translate-y-0"
+            >
+              Start lecture
+              <svg
+                aria-hidden="true"
+                className="size-4"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M5 12h14m-6-6 6 6-6 6" />
+              </svg>
+            </button>
+          </section>
+        </main>
+      )}
+
+      {page === 'questions' && lectureStartedAt !== null && (
         <main className="professor-page-enter mx-auto max-w-[848px] px-5 pb-20 pt-10 sm:px-6 sm:pt-14">
-          <h1
-            ref={mainHeadingRef}
-            tabIndex={-1}
-            className="text-3xl font-semibold tracking-tight outline-none sm:text-4xl"
-          >
-            Lecture questions
-          </h1>
+          <div className="min-[720px]:flex min-[720px]:items-start min-[720px]:justify-between min-[720px]:gap-4 min-[720px]:border-b min-[720px]:border-slate-200 min-[720px]:pb-6">
+            <div className="border-b border-slate-200 pb-8 min-[720px]:min-w-0 min-[720px]:border-0 min-[720px]:pb-0">
+              <h1
+                ref={mainHeadingRef}
+                tabIndex={-1}
+                className="text-3xl font-semibold tracking-tight outline-none sm:text-4xl"
+              >
+                Lecture questions
+              </h1>
+              <p className="mt-3 text-sm text-slate-600">
+                Started{' '}
+                <time dateTime={lectureStartedAt}>
+                  {timestampFormatter.format(new Date(lectureStartedAt))}
+                </time>
+              </p>
+            </div>
+            <section
+              aria-labelledby="session-control-title"
+              className={`mt-6 flex flex-col gap-5 rounded-2xl border px-5 py-5 transition-colors min-[720px]:mt-0 min-[720px]:w-[328px] min-[720px]:shrink-0 min-[720px]:gap-3 min-[720px]:py-4 ${questionsPaused ? 'border-amber-200 bg-amber-50' : 'border-emerald-200 bg-emerald-50'}`}
+            >
+              <div className="flex min-w-0 flex-wrap items-center gap-3">
+                <h2
+                  id="session-control-title"
+                  className="text-sm font-semibold text-slate-900"
+                >
+                  Session Control
+                </h2>
+                <span className="group relative inline-flex">
+                  <span
+                    tabIndex={0}
+                    aria-describedby="pool-status-description"
+                    className={`inline-flex cursor-help items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 ${questionsPaused ? 'border-amber-300 bg-amber-100 text-amber-900' : 'border-emerald-300 bg-emerald-100 text-emerald-900'}`}
+                  >
+                    <span
+                      aria-hidden="true"
+                      className={`size-1.5 rounded-full ${questionsPaused ? 'bg-amber-600' : 'bg-emerald-600'}`}
+                    />
+                    {questionsPaused ? 'Pool paused' : 'Pool open'}
+                  </span>
+                  <span
+                    id="pool-status-description"
+                    role="tooltip"
+                    className="pointer-events-none invisible absolute left-0 top-full z-30 mt-2 w-64 rounded-lg bg-slate-900 px-3 py-2 text-xs leading-5 font-medium text-white opacity-0 shadow-lg transition-opacity group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100"
+                  >
+                    {questionsPaused
+                      ? 'Students cannot submit new questions until you resume the pool.'
+                      : 'Students can submit new questions to this lecture.'}
+                  </span>
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-3 sm:shrink-0">
+                <button
+                  type="button"
+                  aria-pressed={questionsPaused}
+                  onClick={toggleQuestionIntake}
+                  className="min-h-11 rounded-lg border border-blue-300 bg-white px-4 py-2.5 text-sm font-semibold text-blue-700 transition-colors hover:border-blue-600 hover:bg-blue-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 min-[720px]:px-3"
+                >
+                  {questionsPaused ? 'Resume questions' : 'Pause questions'}
+                </button>
+                <button
+                  ref={endTriggerRef}
+                  type="button"
+                  onClick={() => setEndConfirmationOpen(true)}
+                  className="min-h-11 rounded-lg border border-rose-300 bg-white px-4 py-2.5 text-sm font-semibold text-rose-700 transition-colors hover:border-rose-700 hover:bg-rose-700 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-700 min-[720px]:px-3"
+                >
+                  End lecture
+                </button>
+              </div>
+            </section>
+          </div>
           <div
             role="tablist"
             aria-label="Question status"
-            className="mt-8 flex gap-6 border-b border-slate-200"
+            className="mt-8 flex gap-6 border-b border-slate-200 min-[720px]:mt-6"
           >
             {(['open', 'answered'] as const).map((tab) => (
               <button
@@ -430,7 +629,10 @@ export default function ProfessorDashboard({ user }: { user: CurrentUser }) {
         className="pointer-events-none fixed bottom-5 left-1/2 z-20 w-max max-w-[calc(100%-2rem)] -translate-x-1/2"
       >
         {notice && (
-          <p className="rounded-lg bg-slate-900 px-4 py-3 text-sm font-medium text-white shadow-lg">
+          <p
+            key={notice}
+            className="professor-toast rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-sm font-medium text-white shadow-xl"
+          >
             {notice}
           </p>
         )}
@@ -482,6 +684,57 @@ export default function ProfessorDashboard({ user }: { user: CurrentUser }) {
               className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-600"
             >
               Delete question
+            </button>
+          </div>
+        </dialog>
+      )}
+
+      {endConfirmationOpen && (
+        <dialog
+          ref={endDialogRef}
+          aria-labelledby="end-lecture-title"
+          aria-describedby="end-lecture-description"
+          onCancel={(event) => {
+            event.preventDefault()
+            closeEndConfirmation(false)
+          }}
+          onClick={(event) => {
+            if (event.target !== event.currentTarget) return
+            const bounds = event.currentTarget.getBoundingClientRect()
+            if (
+              event.clientX < bounds.left ||
+              event.clientX > bounds.right ||
+              event.clientY < bounds.top ||
+              event.clientY > bounds.bottom
+            )
+              closeEndConfirmation(false)
+          }}
+          className="m-auto w-[calc(100%-2rem)] max-w-md rounded-2xl border border-slate-200 bg-white p-6 text-slate-900 shadow-xl backdrop:bg-slate-900/40"
+        >
+          <h2 id="end-lecture-title" className="text-xl font-semibold">
+            End this lecture?
+          </h2>
+          <p
+            id="end-lecture-description"
+            className="mt-2 text-sm leading-6 text-slate-600"
+          >
+            This demo session and any question changes will be discarded.
+          </p>
+          <div className="mt-7 flex justify-end gap-3">
+            <button
+              type="button"
+              autoFocus
+              onClick={() => closeEndConfirmation(false)}
+              className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => closeEndConfirmation(true)}
+              className="rounded-lg bg-rose-700 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-700"
+            >
+              End lecture
             </button>
           </div>
         </dialog>
