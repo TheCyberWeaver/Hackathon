@@ -177,5 +177,7 @@ sed -i 's/^DATABASE_BASELINE=.*/DATABASE_BASELINE=false/' .env
 export DATABASE_BASELINE=false
 docker compose -p hackathon up -d --no-deps backend
 check_app 8080
+# Point recovery at this release only after the production check succeeds.
+ln -sfn "$release" "$HOME/hackathon-current"
 docker compose -p hackathon ps
 printf '\nDeployed successfully: https://08.hackathon.ethz.ch\nRelease: %s\nPrevious release: %s\nDatabase backup: %s/database-before.sql\n' "$release" "$previous" "$release"
