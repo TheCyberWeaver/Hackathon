@@ -51,6 +51,11 @@ class MigrationTests extends PostgresTestSupport {
                 () -> db.update("INSERT INTO lecture_history (user_id, lecture_id) VALUES (?, ?)", author, lecture));
             assertEquals(2L, db.queryForObject("SELECT count(*) FROM lecture_memberships", Long.class));
             assertEquals(2L, db.queryForObject("SELECT count(*) FROM questions", Long.class));
+            assertEquals(2L, db.queryForObject("""
+                SELECT count(*) FROM question_deletion_tokens t JOIN questions q
+                  ON q.id = t.question_id AND q.deletion_token_hash = t.token_hash
+                WHERE t.user_id = q.author_id AND octet_length(t.token_hash) = 32
+                """, Long.class));
             assertEquals(2L, db.queryForObject("SELECT count(*) FROM question_votes", Long.class));
             assertEquals(1L, db.queryForObject("SELECT count(*) FROM question_reports", Long.class));
             assertEquals(7L, db.queryForObject("SELECT revision FROM professor_profiles WHERE user_id = ?", Long.class, owner));

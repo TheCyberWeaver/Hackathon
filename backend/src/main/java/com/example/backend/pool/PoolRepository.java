@@ -93,9 +93,13 @@ public class PoolRepository {
     public void clearLectureMembers(long lecture) {
         jdbc.update("DELETE FROM lecture_memberships WHERE lecture_id = ?", lecture);
     }
-    public long createQuestion(long lecture, long author, String text) {
-        return jdbc.queryForObject("INSERT INTO questions (lecture_id, author_id, text) VALUES (?, ?, ?) RETURNING id",
-            Long.class, lecture, author, text);
+    public long createQuestion(long lecture, long author, String text, byte[] tokenHash) {
+        return jdbc.queryForObject("INSERT INTO questions (lecture_id, author_id, text, deletion_token_hash) VALUES (?, ?, ?, ?) RETURNING id",
+            Long.class, lecture, author, text, tokenHash);
+    }
+    public void createDeletionToken(long question, long user, byte[] tokenHash) {
+        jdbc.update("INSERT INTO question_deletion_tokens (question_id, user_id, token_hash) VALUES (?, ?, ?)",
+            question, user, tokenHash);
     }
     public long recordModerationWarning(long lecture, long user, String reason) {
         jdbc.update("INSERT INTO question_moderation_warnings (lecture_id, user_id, reason) VALUES (?, ?, ?)", lecture, user, reason);
@@ -133,8 +137,15 @@ public class PoolRepository {
         jdbc.update("UPDATE questions SET status = ?, selected = ?, answered_at = CASE WHEN ? THEN COALESCE(answered_at, CURRENT_TIMESTAMP) ELSE NULL END WHERE id = ?",
             status.equals("answered") ? "answered" : "unanswered", status.equals("selected"), status.equals("answered"), question);
     }
-    public void delete(long question) { jdbc.update("DELETE FROM questions WHERE id = ?", question); }
-    public List<String> clearOpen(long lecture, List<Long> ids) {
+    public int deleteToken(long question, long user) {
+        return jdbc.update("""
+            DELETE FROM question_deletion_tokens t USING questions q
+            WHERE t.question_id = q.id AND q.id = ? AND t.user_id = ?
+              AND t.token_hash = q.deletion_token_hash
+            """, question, user);
+    }
+    public int delete(long question) { return jdbc.update("DELETE FROM questions WHERE id = ?", question); }
+    public List<Long> lockOpenQuestions(long lecture, List<Long> ids) {
         if (ids.isEmpty()) return List.of();
         // Lock in a consistent order; recheck status after waiting for concurrent status changes.
         // Only the confirmed snapshot is eligible, so later submissions always survive.
@@ -142,7 +153,24 @@ public class PoolRepository {
         var args = new java.util.ArrayList<Object>();
         args.add(lecture);
         args.addAll(ids);
-        return jdbc.queryForList("DELETE FROM questions WHERE id IN (SELECT id FROM questions WHERE lecture_id = ? AND status = 'unanswered' AND id IN (" + placeholders + ") ORDER BY id FOR UPDATE) RETURNING id::text", String.class, args.toArray());
+        return jdbc.queryForList("SELECT id FROM questions WHERE lecture_id = ? AND status = 'unanswered' AND id IN (" + placeholders + ") ORDER BY id FOR UPDATE", Long.class, args.toArray());
+    }
+    public List<Long> deleteTokens(List<Long> ids, long user) {
+        if (ids.isEmpty()) return List.of();
+        var placeholders = String.join(",", java.util.Collections.nCopies(ids.size(), "?"));
+        var args = new java.util.ArrayList<Object>();
+        args.add(user);
+        args.addAll(ids);
+        return jdbc.queryForList("""
+            DELETE FROM question_deletion_tokens t USING questions q
+            WHERE t.question_id = q.id AND t.user_id = ?
+              AND t.token_hash = q.deletion_token_hash AND q.id IN (
+            """ + placeholders + ") RETURNING t.question_id", Long.class, args.toArray());
+    }
+    public List<Long> deleteQuestions(List<Long> ids) {
+        if (ids.isEmpty()) return List.of();
+        var placeholders = String.join(",", java.util.Collections.nCopies(ids.size(), "?"));
+        return jdbc.queryForList("DELETE FROM questions WHERE id IN (" + placeholders + ") RETURNING id", Long.class, ids.toArray());
     }
     public Summary summary(User user) {
         return jdbc.queryForObject("""

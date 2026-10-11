@@ -4,7 +4,7 @@ This initial contract can evolve. Java wire records in `ApiModels.java` are sepa
 
 Every pool route requires the trusted proxy's `X-User-Id`. That stable identity selects the user's account; switching between Student and Professor changes the view, not the account. Every signed-in user can create lectures, maintain their own professor profile/courses, join shared lectures, submit questions, vote and report. `users.role` remains legacy metadata and does not grant or restrict capabilities. The former `APP_TESTING_PERMISSIONS` bypass is removed; setting it has no effect.
 
-Lecture ownership is always enforced. Only the creator can manage a lecture or see question authors and reports through its professor API. Admin-labelled users have the same ownership rules. A question can be deleted by its author or its lecture's owner. Sign-in, validation, vote uniqueness and the self-vote restriction always apply. Multiple questions per lecture are allowed.
+Lecture ownership is always enforced. Only the creator can manage a lecture or see question authors and reports through its professor API. Admin-labelled users have the same ownership rules. A question can be deleted only when the signed-in account has its matching deletion-token record; lecture ownership alone does not permit deletion. Sign-in, validation, vote uniqueness and the self-vote restriction always apply. Multiple questions per lecture are allowed.
 
 `GET /api/lectures` lists only the caller's created lectures, saved student history and current membership; `canManage` is true only for owned lectures. Professor archives and summary counts include only that user's created lectures. Direct lecture and anonymous question lookups remain available to signed-in users with a lecture link or numeric ID, which is not a private access token. Keep Java behind the managed login proxy with no public port.
 
@@ -22,7 +22,7 @@ IDs in JSON are decimal strings, avoiding JavaScript BIGINT precision loss. Time
 | POST   | `/api/questions/{id}/report`                | 204                             | Signed in                            |
 | GET    | `/api/lectures/{id}/professor/questions`    | `ProfessorQuestion[]`           | Lecture owner                        |
 | PATCH  | `/api/questions/{id}/status`                | `ProfessorQuestion`             | Lecture owner                        |
-| DELETE | `/api/questions/{id}`                       | 204                             | Question author or lecture owner     |
+| DELETE | `/api/questions/{id}`                       | 204                             | Signed-in account with matching deletion token |
 
 | Method | Additional route                          | Success                                     | Permission                           |
 | ------ | ----------------------------------------- | ------------------------------------------- | ------------------------------------ |
@@ -30,7 +30,7 @@ IDs in JSON are decimal strings, avoiding JavaScript BIGINT precision loss. Time
 | GET    | `/api/professor/summary`                  | Counts                                      | Signed in, own created lectures only |
 | GET    | `/api/student/summary`                    | StudentSummary                              | Signed in, own questions only         |
 | GET    | `/api/professor/lectures/archive`         | Ended lectures and questions                | Signed in, own created lectures only |
-| POST   | `/api/lectures/{id}/questions/clear-open` | `{ "deletedIds": string[] }`                | Lecture owner                        |
+| POST   | `/api/lectures/{id}/questions/clear-open` | `{ "deletedIds": string[] }`                | Lecture owner with matching deletion tokens for every eligible question |
 | GET    | `/api/professor/profile`                  | Profile                                     | Signed in, own account only          |
 | POST   | `/api/professor/profile/initialize`       | Profile                                     | Signed in, own account only          |
 | PUT    | `/api/professor/profile`                  | Saved profile                               | Signed in, own account only          |
@@ -49,6 +49,8 @@ Joining a session or explicitly opening its shared link records an entry in `lec
 The student summary is `{ "submittedCount": 5, "answeredCount": 2 }` for the signed-in account's remaining questions across all lectures. `answeredCount` includes only questions currently marked answered; reopening or deleting a question updates the counts. Removing a lecture from personal history does not change them.
 
 V10 backfills history from surviving memberships, authored questions, votes and reports. Visits that were never saved cannot be reconstructed. Ownership and existing per-user profile/course records remain intact. See [current database structure](Database_State.md).
+
+V11 adds hashed deletion tokens to questions and account-associated token records. Creation and deletion of each pair occur in one transaction. Existing questions receive cryptographically generated hashes associated with their original authors. Plaintext tokens never appear in API requests or responses. Missing questions and accounts without a matching token receive the same deletion response (404). Bulk clear remains limited to the lecture owner and atomically refuses a snapshot containing an open question without that owner's token.
 
 New lectures are scheduled: create with `title`, `lectureTime`, and optional
 `course` (up to 200 characters), then start with `{ "action": "start" }`.

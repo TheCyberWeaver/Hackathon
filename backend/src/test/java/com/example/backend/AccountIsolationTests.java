@@ -38,17 +38,18 @@ class AccountIsolationTests extends AccountApiTestSupport {
             send("PATCH", "/questions/" + sharedQuestion + "/status", identity, "{\"status\":\"answered\"}", 403);
             // Authorship permits deleting one's question, but never controls another lecture.
             send("PATCH", "/questions/" + ownSharedQuestion + "/status", identity, "{\"status\":\"answered\"}", 403);
-            send("DELETE", "/questions/" + sharedQuestion, identity, null, 403);
+            send("DELETE", "/questions/" + sharedQuestion, identity, null, 404);
             for (String action : List.of("start", "pause", "resume", "end")) session(shared, identity, action, 403);
             send("POST", "/lectures/" + shared + "/questions/clear-open", identity,
                 "{\"questionIds\":[" + sharedQuestion + "," + ownSharedQuestion + "]}", 403);
             send("DELETE", "/questions/" + ownSharedQuestion, identity, null, 204);
-            String ownerRemoves = submit(shared, identity, "The lecture owner may delete this");
-            send("DELETE", "/questions/" + ownerRemoves, owner, null, 204);
+            String ownerCannotRemove = submit(shared, identity, "Only the token account may delete this");
+            send("DELETE", "/questions/" + ownerCannotRemove, owner, null, 404);
+            send("DELETE", "/questions/" + ownerCannotRemove, identity, null, 204);
 
             session(own, identity, "start", 200);
             String answered = submit(own, owner, "A question in your lecture");
-            String cleared = submit(own, owner, "Clear this open question");
+            String cleared = submit(own, identity, "Clear this open question");
             send("POST", "/questions/" + answered + "/report", owner, null, 204);
             send("PATCH", "/questions/" + answered + "/status", identity, "{\"status\":\"answered\"}", 200);
             session(own, identity, "pause", 200);
@@ -74,7 +75,7 @@ class AccountIsolationTests extends AccountApiTestSupport {
             assertEquals(account.getValue(), archive.get(0).get("lecture").get("id").asText());
             assertTrue(archive.get(0).get("lecture").get("canManage").asBoolean());
             assertEquals(1, archive.get(0).get("questions").size());
-            assertEquals(Set.of(shared), ids(send("GET", "/student/lectures/history", account.getKey(), null, 200)));
+            assertEquals(Set.of(shared, account.getValue()), ids(send("GET", "/student/lectures/history", account.getKey(), null, 200)));
         }
         assertEquals("student", jdbc.queryForObject("SELECT role FROM users WHERE eth_identity_ref = ?", String.class, owner));
     }

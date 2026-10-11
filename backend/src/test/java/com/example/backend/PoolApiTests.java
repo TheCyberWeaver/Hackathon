@@ -66,8 +66,9 @@ class PoolApiTests extends PostgresTestSupport {
             assertEquals(status.equals("answered"), !tree(updated).get("answeredAt").isNull());
         }
         assertEquals(0, tree(send("POST", "/questions/" + id + "/vote", peer, "{\"voted\":false}")).get("votes").asLong());
-        assertEquals(403, send("DELETE", "/questions/" + id, peer, null).statusCode());
-        assertEquals(204, send("DELETE", "/questions/" + id, professor, null).statusCode());
+        assertEquals(404, send("DELETE", "/questions/" + id, peer, null).statusCode());
+        assertEquals(404, send("DELETE", "/questions/" + id, professor, null).statusCode());
+        assertEquals(204, send("DELETE", "/questions/" + id, student, null).statusCode());
         assertEquals(1, tree(send("GET", path, student, null)).size());
         assertEquals(404, send("POST", "/questions/" + id + "/report", peer, null).statusCode());
         assertEquals(201, send("POST", path, student, "{\"text\":\"Another after deletion?\"}").statusCode());
@@ -148,7 +149,7 @@ class PoolApiTests extends PostgresTestSupport {
         assertEquals(201, send("POST", path, student, "{\"text\":\"My second question\"}").statusCode());
         assertEquals(2, tree(send("GET", path, student, null)).size());
         assertEquals(401, send("DELETE", "/questions/" + id, null, null).statusCode());
-        assertEquals(403, send("DELETE", "/questions/" + id, peer, null).statusCode());
+        assertEquals(404, send("DELETE", "/questions/" + id, peer, null).statusCode());
         assertEquals(200, send("POST", "/questions/" + id + "/vote", peer, "{\"voted\":true}").statusCode());
         assertEquals(204, send("POST", "/questions/" + id + "/report", peer, null).statusCode());
         assertEquals(200, send("PATCH", "/questions/" + id + "/status", professor, "{\"status\":\"answered\"}").statusCode());

@@ -263,20 +263,20 @@ for (const mobile of [false, true]) {
         .getByRole('button', { name: 'Mark answered', exact: true })
         .click()
       await expect(own.getByText('Answered', { exact: true })).toBeVisible()
-      for (let i = 0; i < 9; i++) {
+      for (let i = 0; i < 10; i++) {
         const q = await api(
-          student.context,
+          i < 8 ? professor.context : student.context,
           'POST',
           `/lectures/${code}/questions`,
           { text: `Additional question ${i}` },
         )
-        if (i < 2)
+        if (i >= 8)
           await api(professor.context, 'PATCH', `/questions/${q.id}/status`, {
             status: 'answered',
           })
       }
       await expect(
-        p.getByRole('tab', { name: 'Open 8', exact: true }),
+        p.getByRole('tab', { name: 'Open 9', exact: true }),
       ).toBeVisible()
       await p.getByLabel('Time filter').selectOption('5')
       await p.clock.install()
@@ -285,7 +285,7 @@ for (const mobile of [false, true]) {
         p.getByRole('tab', { name: 'Open 0', exact: true }),
       ).toBeVisible()
       await expect(
-        p.getByRole('button', { name: 'Clear all questions', exact: true }),
+        p.getByRole('button', { name: 'Clear your questions', exact: true }),
       ).toBeEnabled()
       await p.getByRole('tab', { name: 'Answered 3', exact: true }).click()
       await expect(p.getByLabel('Time filter')).toHaveCount(0)
@@ -295,10 +295,10 @@ for (const mobile of [false, true]) {
         .getByRole('button', { name: 'Pause questions', exact: true })
         .click()
       await p
-        .getByRole('button', { name: 'Clear all questions', exact: true })
+        .getByRole('button', { name: 'Clear your questions', exact: true })
         .click()
       await expect(p.getByRole('dialog')).toContainText(
-        `all 8 open questions from ${course}`,
+        `your 8 open questions from ${course}`,
       )
       await expect(p.getByRole('dialog')).toContainText(
         'outside the selected time range',
@@ -309,24 +309,24 @@ for (const mobile of [false, true]) {
         .click()
       expect(
         await api(student.context, 'GET', `/lectures/${code}/questions`),
-      ).toHaveLength(11)
+      ).toHaveLength(12)
       await p
-        .getByRole('button', { name: 'Clear all questions', exact: true })
+        .getByRole('button', { name: 'Clear your questions', exact: true })
         .click()
       await p
         .getByRole('dialog')
-        .getByRole('button', { name: 'Clear all questions', exact: true })
+        .getByRole('button', { name: 'Clear your questions', exact: true })
         .click()
       await expect(p.getByRole('dialog')).toHaveCount(0)
       expect(
         await api(student.context, 'GET', `/lectures/${code}/questions`),
-      ).toHaveLength(3)
+      ).toHaveLength(4)
       await expect(p.getByText('Pool paused', { exact: true })).toBeVisible()
       await p
         .getByRole('button', { name: 'Show all questions', exact: true })
         .click()
       await expect(
-        p.getByRole('button', { name: 'Clear all questions', exact: true }),
+        p.getByRole('button', { name: 'Clear your questions', exact: true }),
       ).toBeDisabled()
       // Course edits do not change the active session name.
       await device.page
@@ -361,7 +361,7 @@ for (const mobile of [false, true]) {
       const history = p.locator('details').filter({ hasText: course }).first()
       await expect(history).not.toHaveAttribute('open')
       await history.locator('summary').click()
-      await expect(history.locator('article')).toHaveCount(3)
+      await expect(history.locator('article')).toHaveCount(4)
       await expect(history).toContainText('3 answered')
       await p.screenshot({
         path: info.outputPath('history.png'),
@@ -372,11 +372,11 @@ for (const mobile of [false, true]) {
         .locator('.student-history-entry')
         .filter({ hasText: course })
         .first()
-      await expect(studentHistory).toContainText('3 questions')
+      await expect(studentHistory).toContainText('4 questions')
       await studentHistory.locator('.student-history-summary').click()
       await expect(
         student.page.locator('.student-history-question'),
-      ).toHaveCount(3)
+      ).toHaveCount(4)
       await expect(
         student.page.locator('.student-history-status.is-answered'),
       ).toHaveCount(3)
@@ -539,7 +539,7 @@ test('permanent deletion cancellation, failure, retry and post-confirmation subm
       action: 'start',
     })
     const question = await api(
-      student.context,
+      professor.context,
       'POST',
       `/lectures/${lecture.id}/questions`,
       { text: 'A long question '.repeat(12).trim() },
@@ -602,21 +602,21 @@ test('permanent deletion cancellation, failure, retry and post-confirmation subm
     await expect(
       p.getByRole('tab', { name: 'Answered 0', exact: true }),
     ).toBeVisible()
-    await api(student.context, 'POST', `/lectures/${lecture.id}/questions`, {
+    await api(professor.context, 'POST', `/lectures/${lecture.id}/questions`, {
       text: 'Before confirmation',
     })
     await expect(
       p.getByRole('tab', { name: 'Open 1', exact: true }),
     ).toBeVisible()
     await p
-      .getByRole('button', { name: 'Clear all questions', exact: true })
+      .getByRole('button', { name: 'Clear your questions', exact: true })
       .click()
     // Submit while the confirmed HTTP mutation is held: its snapshot must exclude this question.
     await p.route(
       `**/api/lectures/${lecture.id}/questions/clear-open`,
       async (route) => {
         await api(
-          student.context,
+          professor.context,
           'POST',
           `/lectures/${lecture.id}/questions`,
           { text: 'After confirmation' },
@@ -627,7 +627,7 @@ test('permanent deletion cancellation, failure, retry and post-confirmation subm
     )
     await p
       .getByRole('dialog')
-      .getByRole('button', { name: 'Clear all questions', exact: true })
+      .getByRole('button', { name: 'Clear your questions', exact: true })
       .click()
     await expect(p.getByRole('dialog')).toHaveCount(0)
     await expect(p.locator('article')).toContainText('After confirmation')
@@ -637,6 +637,65 @@ test('permanent deletion cancellation, failure, retry and post-confirmation subm
       ).map((q: { text: string }) => q.text),
     ).toEqual(['After confirmation'])
     await expect(p.getByText('Pool open', { exact: true })).toBeVisible()
+  } finally {
+    await professor.context.close()
+    await student.context.close()
+  }
+})
+
+test('student deletion waits for confirmation and cancellation preserves the question', async ({
+  browser,
+}) => {
+  const id = `student-delete-${Date.now()}`
+  const professor = await actor(browser, `professor-${id}`)
+  const student = await actor(browser, id)
+  try {
+    const lecture = await api(professor.context, 'POST', '/lectures', {
+      title: 'Student deletion confirmation',
+      lectureTime: new Date().toISOString(),
+    })
+    await api(professor.context, 'PATCH', `/lectures/${lecture.id}/session`, {
+      action: 'start',
+    })
+    await api(student.context, 'POST', '/sessions/join', { code: lecture.id })
+    const question = await api(
+      student.context,
+      'POST',
+      `/lectures/${lecture.id}/questions`,
+      {
+        text: 'Please keep this until I confirm',
+      },
+    )
+    const page = student.page
+    await page.goto(`/student?lecture=${lecture.id}`)
+    const card = page
+      .locator('.question-card:visible')
+      .filter({ hasText: question.text })
+    await expect(card).toBeVisible()
+    await card
+      .getByRole('button', { name: `More options for: ${question.text}` })
+      .click()
+    await card.getByRole('button', { name: 'Delete question' }).click()
+    const dialog = page.getByRole('dialog', {
+      name: 'Are you sure you want to delete this question?',
+    })
+    await expect(dialog).toBeVisible()
+    expect(
+      await api(student.context, 'GET', `/lectures/${lecture.id}/questions`),
+    ).toHaveLength(1)
+    await dialog.getByRole('button', { name: 'Cancel' }).click()
+    expect(
+      await api(student.context, 'GET', `/lectures/${lecture.id}/questions`),
+    ).toHaveLength(1)
+    await card
+      .getByRole('button', { name: `More options for: ${question.text}` })
+      .click()
+    await card.getByRole('button', { name: 'Delete question' }).click()
+    await dialog.getByRole('button', { name: 'Delete question' }).click()
+    await expect(dialog).toHaveCount(0)
+    expect(
+      await api(student.context, 'GET', `/lectures/${lecture.id}/questions`),
+    ).toHaveLength(0)
   } finally {
     await professor.context.close()
     await student.context.close()

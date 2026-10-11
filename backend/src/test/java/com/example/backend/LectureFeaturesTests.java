@@ -125,7 +125,8 @@ class LectureFeaturesTests extends PostgresTestSupport {
         session(lecture, owner, "end", 200);
         var archive = tree(send("GET", "/professor/lectures/archive", owner, null, 200));
         assertTrue(archive.get(0).get("questions").toString().contains("Explain this step"));
-        send("DELETE", "/questions/" + id, owner, null, 204);
+        send("DELETE", "/questions/" + id, owner, null, 404);
+        send("DELETE", "/questions/" + id, student, null, 204);
         assertEquals(0, tree(send("GET", "/professor/summary", owner, null, 200)).get("answeredCount").asInt());
         assertEquals(1, tree(send("GET", "/professor/lectures/archive", owner, null, 200)).get(0).get("questions").size());
     }
@@ -137,9 +138,10 @@ class LectureFeaturesTests extends PostgresTestSupport {
         send("POST", "/questions/" + id + "/vote", peer, "{\"voted\":true}", 200);
         send("POST", "/questions/" + id + "/report", peer, null, 204);
         send("PATCH", "/questions/" + id + "/status", owner, "{\"status\":\"answered\"}", 200);
-        send("DELETE", "/questions/" + id, other, null, 403);
-        send("DELETE", "/questions/" + id, peer, null, 403);
-        send("DELETE", "/questions/" + id, owner, null, 204);
+        send("DELETE", "/questions/" + id, other, null, 404);
+        send("DELETE", "/questions/" + id, peer, null, 404);
+        send("DELETE", "/questions/" + id, owner, null, 404);
+        send("DELETE", "/questions/" + id, student, null, 204);
         assertEquals(0, tree(send("GET", "/lectures/" + lecture + "/questions", student, null, 200)).size());
         assertEquals(0, tree(send("GET", "/lectures/" + lecture + "/professor/questions?includeDeleted=true", owner, null, 200)).size());
         send("GET", "/lectures/" + lecture + "/questions/" + id, student, null, 404);
@@ -158,7 +160,7 @@ class LectureFeaturesTests extends PostgresTestSupport {
         session(lecture, owner, "start", 200);
         session(independent, other, "start", 200);
         var ids = new java.util.ArrayList<String>();
-        for (int i = 0; i < 8; i++) ids.add(submit(lecture, student, "Open question " + i));
+        for (int i = 0; i < 8; i++) ids.add(submit(lecture, owner, "Open question " + i));
         for (String old : ids.subList(0, 6)) jdbc.update("UPDATE questions SET submitted_at = CURRENT_TIMESTAMP - INTERVAL '1 hour' WHERE id = ?", Long.parseLong(old));
         send("POST", "/questions/" + ids.getFirst() + "/vote", peer, "{\"voted\":true}", 200);
         send("POST", "/questions/" + ids.getFirst() + "/report", peer, null, 204);
@@ -173,7 +175,7 @@ class LectureFeaturesTests extends PostgresTestSupport {
         var snapshot = new java.util.ArrayList<>(ids);
         snapshot.addAll(answered);
         snapshot.add(otherQuestion);
-        String later = submit(lecture, student, "Submitted after confirmation");
+        String later = submit(lecture, owner, "Submitted after confirmation");
         session(lecture, owner, "pause", 200);
         var body = json.writeValueAsString(java.util.Map.of("questionIds", snapshot));
         var path = "/lectures/" + lecture + "/questions/clear-open";

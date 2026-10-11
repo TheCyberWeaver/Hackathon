@@ -16,20 +16,21 @@ class PoolServiceTests {
 
     @ParameterizedTest
     @ValueSource(strings = {"student", "professor", "admin"})
-    void authorsOfEveryStoredRoleCanDeleteTheirOwnQuestions(String role) {
+    void accountWithMatchingTokenCanDeleteRegardlessOfStoredRole(String role) {
         when(repository.lockQuestion(10)).thenReturn(new PoolRepository.QuestionAccess(10, 20, 30));
+        when(repository.deleteToken(10, 30)).thenReturn(1);
+        when(repository.delete(10)).thenReturn(1);
         service.delete(new PoolRepository.User(30, role), 10);
+        verify(repository).deleteToken(10, 30);
         verify(repository).delete(10);
         verify(repository, never()).lecture(anyLong());
     }
 
     @ParameterizedTest
     @ValueSource(strings = {"student", "professor", "admin"})
-    void noStoredRoleCanDeleteAnotherPersonsQuestionInAForeignLecture(String role) {
+    void noStoredRoleCanDeleteWithoutMatchingToken(String role) {
         when(repository.lockQuestion(10)).thenReturn(new PoolRepository.QuestionAccess(10, 20, 30));
-        when(repository.lecture(20)).thenReturn(new PoolRepository.LectureAccess(20, 40L,
-            new LectureSession.State(null, null, false)));
-        assertEquals(FORBIDDEN, assertThrows(ApiException.class,
+        assertEquals(NOT_FOUND, assertThrows(ApiException.class,
             () -> service.delete(new PoolRepository.User(31, role), 10)).status);
         verify(repository, never()).delete(anyLong());
     }
@@ -39,7 +40,7 @@ class PoolServiceTests {
             new LectureSession.State(OffsetDateTime.now(), null, true)));
         assertEquals(CONFLICT, assertThrows(ApiException.class,
             () -> service.submit(new PoolRepository.User(30, "professor"), 20, new ApiModels.NewQuestion("Question"))).status);
-        verify(repository, never()).createQuestion(anyLong(), anyLong(), anyString());
+        verify(repository, never()).createQuestion(anyLong(), anyLong(), anyString(), any());
     }
 
     @ParameterizedTest

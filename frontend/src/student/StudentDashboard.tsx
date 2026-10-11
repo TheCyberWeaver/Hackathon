@@ -122,6 +122,8 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
   const [votePendingCount, setVotePendingCount] = useState(0)
   const [mobileView, setMobileView] = useState<'other' | 'mine'>('other')
   const [reportTarget, setReportTarget] = useState<Question | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<Question | null>(null)
+  const [deleteError, setDeleteError] = useState('')
   const [toast, setToast] = useState('')
   const [moderationWarning, setModerationWarning] = useState<number | null>(
     null,
@@ -167,6 +169,7 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
     setQuestions([])
     setDraft('')
     setReportTarget(null)
+    setDeleteTarget(null)
     setModerationWarning(null)
     setFocused(false)
   }
@@ -669,7 +672,7 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
     }
   }
 
-  async function handleDelete(question: Question) {
+  function handleDelete(question: Question) {
     if (
       readOnly ||
       !question.mine ||
@@ -677,15 +680,23 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
       pendingDeletes.current.has(question.id)
     )
       return
+    setDeleteError('')
+    setDeleteTarget(question)
+  }
+
+  async function confirmDelete() {
+    const question = deleteTarget
+    if (!question || readOnly || pendingDeletes.current.has(question.id)) return
     pendingDeletes.current.add(question.id)
     setDeletingIds(new Set(pendingDeletes.current))
     mutationVersion.current++
     try {
       await deleteQuestion(question.id)
       setQuestions((items) => items.filter((item) => item.id !== question.id))
+      setDeleteTarget(null)
       showToast('Your question was deleted.')
     } catch (error) {
-      showToast(
+      setDeleteError(
         error instanceof Error
           ? error.message
           : 'Could not delete your question. Please try again.',
@@ -778,7 +789,7 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
             highlighted={question.id === newQuestionId}
             onVote={handleVote}
             onReport={setReportTarget}
-            onDelete={(question) => void handleDelete(question)}
+            onDelete={handleDelete}
             deleting={deletingIds.has(question.id)}
             readOnly={readOnly}
           />
@@ -1241,6 +1252,43 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
                 onClick={() => void confirmReport()}
               >
                 Report
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {deleteTarget && (
+        <div className="dialog-backdrop">
+          <div
+            className="report-sheet"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-question-title"
+            aria-describedby="delete-question-description"
+          >
+            <h2 id="delete-question-title">
+              Are you sure you want to delete this question?
+            </h2>
+            <p id="delete-question-description">{deleteTarget.text}</p>
+            {deleteError && <p role="alert">{deleteError}</p>}
+            <div className="report-sheet__actions">
+              <button
+                type="button"
+                className="secondary-button"
+                disabled={deletingIds.has(deleteTarget.id)}
+                onClick={() => setDeleteTarget(null)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="primary-button"
+                disabled={deletingIds.has(deleteTarget.id)}
+                onClick={() => void confirmDelete()}
+              >
+                {deletingIds.has(deleteTarget.id)
+                  ? 'Deleting…'
+                  : 'Delete question'}
               </button>
             </div>
           </div>

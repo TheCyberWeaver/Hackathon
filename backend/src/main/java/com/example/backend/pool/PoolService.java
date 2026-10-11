@@ -1,5 +1,9 @@
 package com.example.backend.pool;
 
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.security.SecureRandom;
+import java.util.Arrays;
 import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -9,6 +13,7 @@ import static org.springframework.http.HttpStatus.*;
 
 @Service
 public class PoolService {
+    private static final SecureRandom TOKEN_RANDOM = new SecureRandom();
     private final PoolRepository repository;
     private final QuestionModeration moderation;
     private final QuestionModerator moderator;
@@ -90,7 +95,9 @@ public class PoolService {
             throw new ModerationRejectedException(
                 repository.recordModerationWarning(lecture, user.id(), reason));
         }
-        var id = repository.createQuestion(lecture, user.id(), text);
+        var tokenHash = newDeletionTokenHash();
+        var id = repository.createQuestion(lecture, user.id(), text, tokenHash);
+        repository.createDeletionToken(id, user.id(), tokenHash);
         repository.recordVisit(user.id(), lecture);
         return repository.question(lecture, id, user.id());
     }
@@ -124,9 +131,11 @@ public class PoolService {
     }
     @Transactional
     public void delete(User user, long id) {
-        var question = repository.lockQuestion(id);
-        if (question.authorId() != user.id()) requireManage(user, question.lectureId());
-        repository.delete(id);
+        repository.lockQuestion(id);
+        if (repository.deleteToken(id, user.id()) != 1)
+            throw new ApiException(NOT_FOUND, "Question not found.");
+        if (repository.delete(id) != 1)
+            throw new IllegalStateException("Question deletion failed.");
     }
     @Transactional
     public Lecture session(User user, long id, SessionAction request) {
@@ -155,7 +164,13 @@ public class PoolService {
         if (request == null || request.questionIds() == null || request.questionIds().size() > 30000
                 || request.questionIds().stream().anyMatch(id -> id == null || id <= 0))
             throw new ApiException(BAD_REQUEST, "A valid snapshot of Open questions is required.");
-        return new ClearedQuestions(repository.clearOpen(lecture, request.questionIds().stream().distinct().sorted().toList()));
+        var eligible = repository.lockOpenQuestions(lecture, request.questionIds().stream().distinct().sorted().toList());
+        if (eligible.isEmpty()) return new ClearedQuestions(List.of());
+        if (repository.deleteTokens(eligible, user.id()).size() != eligible.size())
+            throw new ApiException(NOT_FOUND, "Question not found.");
+        if (repository.deleteQuestions(eligible).size() != eligible.size())
+            throw new IllegalStateException("Question deletion failed.");
+        return new ClearedQuestions(eligible.stream().map(String::valueOf).toList());
     }
     private void requireManage(User user, long lecture) {
         var access = repository.lecture(lecture);
@@ -166,5 +181,16 @@ public class PoolService {
         if (value == null || value.isBlank() || value.trim().length() > max)
             throw new ApiException(BAD_REQUEST, label + " must be 1 to " + max + " characters.");
         return value.trim();
+    }
+    private static byte[] newDeletionTokenHash() {
+        byte[] token = new byte[32];
+        TOKEN_RANDOM.nextBytes(token);
+        try {
+            return MessageDigest.getInstance("SHA-256").digest(token);
+        } catch (NoSuchAlgorithmException error) {
+            throw new IllegalStateException("SHA-256 is unavailable.", error);
+        } finally {
+            Arrays.fill(token, (byte) 0);
+        }
     }
 }

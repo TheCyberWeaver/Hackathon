@@ -454,7 +454,7 @@ for (const width of [320, 430, 768, 1280]) {
         data = [0, 1, 2].map((i) => ({
           id: String(i),
           text: `Question ${i}: why does the dimension of the kernel plus the rank equal the number of columns?`,
-          authorId: 'anonymous',
+          authorId: 'professor-design',
           upvoteCount: 3 - i,
           createdAt: new Date().toISOString(),
           answered: false,
@@ -467,7 +467,7 @@ for (const width of [320, 430, 768, 1280]) {
     })
     await page.goto('/professor?lecture=90')
     const clear = page.getByRole('button', {
-      name: 'Clear all questions',
+      name: 'Clear your questions',
       exact: true,
     })
     const filter = page.getByLabel('Time filter')
