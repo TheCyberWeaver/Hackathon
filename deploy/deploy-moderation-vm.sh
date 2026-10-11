@@ -59,5 +59,7 @@ previous=$(docker inspect -f '{{index .Config.Labels "com.docker.compose.project
 switched=1
 docker compose -p askpool-moderation up -d --no-deps --no-build --force-recreate --wait --wait-timeout 180 moderation
 docker compose -p askpool-moderation exec -T moderation python check_model.py --url http://127.0.0.1:8090
+# Point recovery at this release only after the production check succeeds.
+ln -sfn "$release" "$HOME/moderation-current"
 docker compose -p askpool-moderation ps
 printf '\nModeration deployed: %s\nPrevious release: %s\n' "$release" "$previous"

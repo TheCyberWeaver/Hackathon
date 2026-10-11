@@ -37,6 +37,39 @@ Web deployment needs Node/npm, JDK 21, and tar locally. Moderation needs Python
 Both need OpenSSH for VM operations. The server needs Docker Compose with
 `--wait` support and the existing `askpool_shared` network.
 
+## Automatic recovery on the VM
+
+The production VM currently runs PostgreSQL, Java, Caddy/frontend, and moderation
+as Docker Compose services. Docker and containerd are enabled at boot, and every
+production container uses `restart: unless-stopped` to recover from process
+crashes and VM restarts. Install the additional watchdog once **after moderation
+has been deployed**:
+
+```bash
+scp deploy/askpool-watchdog.sh deploy/install-recovery-vm.sh viscon-2026:
+ssh viscon-2026 'bash ~/install-recovery-vm.sh ~/askpool-watchdog.sh'
+```
+
+The installer preserves other crontab entries. Cron runs the watchdog every
+minute as the deployment user. It restores stopped or missing production
+containers from the last successful release, checks PostgreSQL's health, and
+probes the web page, Java API, and moderation health endpoint. Two consecutive
+failed checks trigger a restart, with a three-minute cooldown. The watchdog
+skips checks while a deployment holds `.hackathon-deploy.lock`; the web and
+moderation deployment scripts update their current-release links only after
+successful production validation. No root access or extra package is required.
+
+```bash
+~/askpool-recovery/watchdog.sh check   # read-only status check
+crontab -l | grep askpool-watchdog     # confirm the recurring check
+journalctl -t askpool-watchdog -n 50 --no-pager
+docker ps --format 'table {{.Names}}\t{{.Status}}'
+```
+
+This recovers processes and unresponsive services on a running VM. It cannot
+recover a deleted VM, lost network/domain, full disk, or corrupted database;
+retain an off-VM database backup and a separate hosting option for those cases.
+
 Moderation deployment builds a release-tagged CPU image on the VM, baking in
 the pinned quantized model. Its candidate uses a distinct network alias so
 production Java cannot reach the candidate. It must become healthy and pass
