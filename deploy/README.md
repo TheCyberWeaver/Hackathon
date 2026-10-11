@@ -12,17 +12,17 @@ and `-SkipInstall`. These modes are mutually exclusive except `-SkipInstall`.
 .\deploy-webapp.ps1 -BuildOnly -SkipInstall
 .\deploy-moderation.ps1 -BuildOnly -SkipInstall
 
-# Deploy moderation first when moving from the old combined deployment.
-.\deploy-moderation.ps1 -SkipInstall
 .\deploy-webapp.ps1 -SkipInstall
 ```
 
-The web app stays in Compose project `hackathon`; moderation uses the independent
-`askpool-moderation` project. Java reaches `http://askpool-moderation:8090` on
-`askpool_shared`, without a public moderation port. Web releases include only
-frontend assets, the Java JAR, and web configuration. Moderation releases include
-only its source, Dockerfile, and service configuration. Updating moderation
-does not build or restart Java/frontend, run migrations, or touch PostgreSQL.
+The web app stays in Compose project `hackathon`; the optional moderation service
+uses the independent `askpool-moderation` project. Production currently leaves
+that service stopped and sets `MODERATION_URL` to empty. Java applies its bundled
+sensitive-word list to every submitted question without a remote request. Web
+releases include only frontend assets, the Java JAR, and web configuration.
+Moderation releases include only its source, Dockerfile, and service
+configuration. Updating moderation does not build or restart Java/frontend,
+run migrations, or touch PostgreSQL.
 Updating the web app does not build or restart independent moderation.
 
 The former `deploy-local.ps1` has been retired. Existing VM settings were moved
@@ -39,11 +39,11 @@ Both need OpenSSH for VM operations. The server needs Docker Compose with
 
 ## Automatic recovery on the VM
 
-The production VM currently runs PostgreSQL, Java, Caddy/frontend, and moderation
-as Docker Compose services. Docker and containerd are enabled at boot, and every
-production container uses `restart: unless-stopped` to recover from process
-crashes and VM restarts. Install the additional watchdog once **after moderation
-has been deployed**:
+The production VM currently runs PostgreSQL, Java, and Caddy/frontend as Docker
+Compose services. Docker and containerd are enabled at boot, and those containers
+use `restart: unless-stopped` to recover from process crashes and VM restarts.
+The moderation container is intentionally stopped. Install the additional
+watchdog:
 
 ```bash
 scp deploy/askpool-watchdog.sh deploy/install-recovery-vm.sh viscon-2026:
@@ -53,11 +53,11 @@ ssh viscon-2026 'bash ~/install-recovery-vm.sh ~/askpool-watchdog.sh'
 The installer preserves other crontab entries. Cron runs the watchdog every
 minute as the deployment user. It restores stopped or missing production
 containers from the last successful release, checks PostgreSQL's health, and
-probes the web page, Java API, and moderation health endpoint. Two consecutive
-failed checks trigger a restart, with a three-minute cooldown. The watchdog
-skips checks while a deployment holds `.hackathon-deploy.lock`; the web and
-moderation deployment scripts update their current-release links only after
-successful production validation. No root access or extra package is required.
+probes the web page and Java API. It does not start or probe moderation. Two
+consecutive failed checks trigger a restart, with a three-minute cooldown. The
+watchdog skips checks while a deployment holds `.hackathon-deploy.lock`; the web
+deployment script updates its current-release link only after successful
+production validation. No root access or extra package is required.
 
 ```bash
 ~/askpool-recovery/watchdog.sh check   # read-only status check
@@ -70,8 +70,11 @@ This recovers processes and unresponsive services on a running VM. It cannot
 recover a deleted VM, lost network/domain, full disk, or corrupted database;
 retain an off-VM database backup and a separate hosting option for those cases.
 
-Moderation deployment builds a release-tagged CPU image on the VM, baking in
-the pinned quantized model. Its candidate uses a distinct network alias so
+If moderation is deliberately re-enabled, its deployment builds a release-tagged
+CPU image on the VM, baking in the pinned quantized model. To use it for question
+submissions again, set `MODERATION_URL` in `deploy/compose.yaml`, deploy the web
+app, and restore moderation to the watchdog if it should recover automatically.
+Its candidate uses a distinct network alias so
 production Java cannot reach the candidate. It must become healthy and pass
 the real-model smoke checks before switching. `-ValidateOnly` stops there.
 Production is checked again; a failure restores the previous moderation image

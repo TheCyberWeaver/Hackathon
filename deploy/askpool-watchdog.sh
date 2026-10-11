@@ -47,10 +47,6 @@ ensure_running() {
 probe_database() {
     timeout 8 docker exec askpool-postgres pg_isready -U postgres -d askpool >/dev/null 2>&1
 }
-probe_moderation() {
-    timeout 8 docker exec askpool-moderation-moderation-1 python -c \
-        "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8090/health', timeout=3)" >/dev/null 2>&1
-}
 probe_frontend() { curl -fsS --max-time 6 -o /dev/null http://127.0.0.1:8080/; }
 probe_backend() { curl -fsS --max-time 6 -o /dev/null http://127.0.0.1:8080/api/hello; }
 
@@ -78,14 +74,13 @@ bad=0
 for spec in \
     "askpool-postgres|askpool-db|postgres|$HOME/askpool-db" \
     "hackathon-backend-1|hackathon|backend|$HOME/hackathon-current" \
-    "hackathon-frontend-1|hackathon|frontend|$HOME/hackathon-current" \
-    "askpool-moderation-moderation-1|askpool-moderation|moderation|$HOME/moderation-current"; do
+    "hackathon-frontend-1|hackathon|frontend|$HOME/hackathon-current"; do
     IFS='|' read -r name project service release <<< "$spec"
     if ! ensure_running "$name" "$project" "$service" "$release"; then bad=1; fi
 done
 
 if [ "$mode" = check ]; then
-    for probe in probe_database probe_frontend probe_backend probe_moderation; do
+    for probe in probe_database probe_frontend probe_backend; do
         if "$probe"; then printf '%s: healthy\n' "${probe#probe_}"
         else log "${probe#probe_}: unhealthy"; bad=1; fi
     done
@@ -102,8 +97,5 @@ if is_running hackathon-frontend-1; then
 fi
 if is_running hackathon-backend-1 && probe_database && probe_frontend; then
     if ! watch_probe hackathon-backend-1 probe_backend Backend; then bad=1; fi
-fi
-if is_running askpool-moderation-moderation-1; then
-    if ! watch_probe askpool-moderation-moderation-1 probe_moderation Moderation; then bad=1; fi
 fi
 exit "$bad"

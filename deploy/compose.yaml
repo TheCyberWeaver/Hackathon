@@ -9,8 +9,7 @@ services:
       DATABASE_URL: ${DATABASE_URL:-jdbc:postgresql://postgres:5432/askpool}
       DATABASE_USER: askpool_app
       DATABASE_BASELINE: ${DATABASE_BASELINE:-false}
-      MODERATION_URL: http://askpool-moderation:8090
-      MODERATION_TIMEOUT_MS: "800"
+      MODERATION_URL: ""
     secrets:
       - app_password
     networks:

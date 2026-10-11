@@ -19,10 +19,6 @@ web_release=$(docker inspect -f '{{index .Config.Labels "com.docker.compose.proj
 test -f "$web_release/compose.yaml"
 ln -sfn "$web_release" "$HOME/hackathon-current"
 
-moderation_release=$(docker inspect -f '{{index .Config.Labels "com.docker.compose.project.working_dir"}}' askpool-moderation-moderation-1)
-test -f "$moderation_release/compose.yaml"
-ln -sfn "$moderation_release" "$HOME/moderation-current"
-
 bash -n "$HOME/askpool-recovery/watchdog.sh"
 "$HOME/askpool-recovery/watchdog.sh" check
 
