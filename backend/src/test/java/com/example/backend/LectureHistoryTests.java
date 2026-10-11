@@ -84,7 +84,7 @@ class LectureHistoryTests extends AccountApiTestSupport {
         }
         assertEquals(Set.of(first), ids(send("GET", HISTORY, peer, null, 200)));
         assertEquals(Set.of(), ids(send("GET", HISTORY, owner, null, 200)));
-        send("POST", "/sessions/join", visitor, "{\"code\":\"" + first + "\"}", 404);
+        send("POST", "/sessions/join", visitor, "{\"code\":\"" + joinCode(first) + "\"}", 404);
     }
 
     @Test void removingHistoryOnlyForgetsTheCallerAndAnEndedLectureCanBeRevisited() throws Exception {

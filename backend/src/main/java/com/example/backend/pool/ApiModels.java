@@ -5,7 +5,7 @@ import java.time.OffsetDateTime;
 // Wire models are deliberately independent of the database schema.
 public final class ApiModels {
     private ApiModels() {}
-    public record Lecture(String id, String title, OffsetDateTime lectureTime, boolean canManage,
+    public record Lecture(String id, String joinCode, String title, OffsetDateTime lectureTime, boolean canManage,
                           String course, OffsetDateTime startedAt, OffsetDateTime endedAt, boolean questionsPaused) {}
     public record NewLecture(String title, OffsetDateTime lectureTime, String course) {}
     public record SessionAction(String action) {}

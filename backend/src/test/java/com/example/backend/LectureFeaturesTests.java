@@ -67,33 +67,35 @@ class LectureFeaturesTests extends PostgresTestSupport {
     @Test void selectedLecturePersistsPerStudentAndIsClearedOnLeaveOrEnd() throws Exception {
         String first = create(owner);
         String second = create(other);
+        String firstCode = tree(send("GET", "/lectures/" + first, owner, null, 200)).get("joinCode").asText();
+        String secondCode = tree(send("GET", "/lectures/" + second, other, null, 200)).get("joinCode").asText();
         String mine = "/sessions/mine";
-        send("POST", "/sessions/join", null, "{\"code\":\"" + first + "\"}", 401);
-        send("POST", "/sessions/join", owner, "{\"code\":\"" + first + "\"}", 404);
+        send("POST", "/sessions/join", null, "{\"code\":\"" + firstCode + "\"}", 401);
+        send("POST", "/sessions/join", owner, "{\"code\":\"" + firstCode + "\"}", 404);
         send("POST", "/sessions/join", student, "{\"code\":\"invalid\"}", 400);
-        send("POST", "/sessions/join", student, "{\"code\":\"" + first + "\"}", 404);
+        send("POST", "/sessions/join", student, "{\"code\":\"" + firstCode + "\"}", 404);
         assertTrue(tree(send("GET", mine, student, null, 200)).get("session").isNull());
 
         session(first, owner, "start", 200);
         session(second, other, "start", 200);
-        var joined = tree(send("POST", "/sessions/join", student, "{\"code\":\"" + first + "\"}", 200));
+        var joined = tree(send("POST", "/sessions/join", student, "{\"code\":\"" + firstCode + "\"}", 200));
         assertEquals(first, joined.get("id").asText());
-        assertEquals(first, joined.get("code").asText());
+        assertEquals(firstCode, joined.get("code").asText());
         assertEquals("Algorithms", joined.get("course").asText());
         assertEquals(first, tree(send("GET", mine, student, null, 200)).get("session").get("id").asText());
         assertTrue(tree(send("GET", mine, peer, null, 200)).get("session").isNull());
 
-        send("POST", "/sessions/join", peer, "{\"code\":\"" + first + "\"}", 200);
-        send("POST", "/sessions/join", student, "{\"code\":\"" + second + "\"}", 200);
+        send("POST", "/sessions/join", peer, "{\"code\":\"" + firstCode + "\"}", 200);
+        send("POST", "/sessions/join", student, "{\"code\":\"" + secondCode + "\"}", 200);
         assertEquals(second, tree(send("GET", mine, student, null, 200)).get("session").get("id").asText());
         assertEquals(first, tree(send("GET", mine, peer, null, 200)).get("session").get("id").asText());
         send("DELETE", mine, student, null, 204);
         assertTrue(tree(send("GET", mine, student, null, 200)).get("session").isNull());
-        send("POST", "/sessions/join", student, "{\"code\":\"" + first + "\"}", 200);
+        send("POST", "/sessions/join", student, "{\"code\":\"" + firstCode + "\"}", 200);
         session(first, owner, "end", 200);
         assertTrue(tree(send("GET", mine, student, null, 200)).get("session").isNull());
         assertTrue(tree(send("GET", mine, peer, null, 200)).get("session").isNull());
-        send("POST", "/sessions/join", student, "{\"code\":\"" + first + "\"}", 404);
+        send("POST", "/sessions/join", student, "{\"code\":\"" + firstCode + "\"}", 404);
         assertEquals(0L, jdbc.queryForObject("SELECT count(*) FROM lecture_memberships WHERE lecture_id = ?", Long.class, Long.parseLong(first)));
     }
 

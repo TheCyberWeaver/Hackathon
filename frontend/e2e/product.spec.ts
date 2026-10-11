@@ -171,6 +171,10 @@ for (const mobile of [false, true]) {
         p.getByRole('heading', { name: `Invite students to ${course}` }),
       ).toBeVisible()
       const code = (await p.locator('code').innerText()).trim()
+      expect(code).toMatch(/^[0-9A-F]{6}$/)
+      const lectureId = (await api(professor.context, 'GET', '/lectures')).find(
+        (lecture: { joinCode: string }) => lecture.joinCode === code,
+      ).id
       await p.getByRole('button', { name: 'Go to questions' }).click()
       await expect(
         p.getByRole('heading', { name: course, exact: true }),
@@ -205,14 +209,16 @@ for (const mobile of [false, true]) {
       await student.page
         .getByRole('button', { name: 'Close tutorial', exact: true })
         .click()
-      await student.page.route(`**/api/lectures/${code}/questions`, (route) =>
-        route.request().method() === 'POST'
-          ? route.fulfill({
-              status: 503,
-              contentType: 'application/json',
-              body: '{"error":"Submission failed"}',
-            })
-          : route.continue(),
+      await student.page.route(
+        `**/api/lectures/${lectureId}/questions`,
+        (route) =>
+          route.request().method() === 'POST'
+            ? route.fulfill({
+                status: 503,
+                contentType: 'application/json',
+                body: '{"error":"Submission failed"}',
+              })
+            : route.continue(),
       )
       await student.page.locator('textarea').fill('  Keep this draft exactly  ')
       await student.page
@@ -227,7 +233,7 @@ for (const mobile of [false, true]) {
       await expect(student.page.locator('.question-card:visible')).toHaveCount(
         0,
       )
-      await student.page.unroute(`**/api/lectures/${code}/questions`)
+      await student.page.unroute(`**/api/lectures/${lectureId}/questions`)
       await submit(student.page, 'How does induction work?')
       const own = student.page
         .locator('.question-card:visible')
@@ -255,14 +261,15 @@ for (const mobile of [false, true]) {
       if (mobile) await ownVote.tap()
       else await ownVote.click()
       expect(
-        (await api(student.context, 'GET', `/lectures/${code}/questions`))[0]
-          .votes,
+        (
+          await api(student.context, 'GET', `/lectures/${lectureId}/questions`)
+        )[0].votes,
       ).toBe(0)
       await submit(peer.page, 'What is the base case?')
       const initial = await api(
         professor.context,
         'GET',
-        `/lectures/${code}/professor/questions`,
+        `/lectures/${lectureId}/professor/questions`,
       )
       const firstId = initial.find(
         (q: { text: string }) => q.text === 'How does induction work?',
@@ -324,7 +331,7 @@ for (const mobile of [false, true]) {
         const q = await api(
           student.context,
           'POST',
-          `/lectures/${code}/questions`,
+          `/lectures/${lectureId}/questions`,
           { text: `Additional question ${i}` },
         )
         if (i < 2)
@@ -365,7 +372,7 @@ for (const mobile of [false, true]) {
         .getByRole('button', { name: 'Cancel', exact: true })
         .click()
       expect(
-        await api(student.context, 'GET', `/lectures/${code}/questions`),
+        await api(student.context, 'GET', `/lectures/${lectureId}/questions`),
       ).toHaveLength(11)
       await p
         .getByRole('button', { name: 'Clear all questions', exact: true })
@@ -376,7 +383,7 @@ for (const mobile of [false, true]) {
         .click()
       await expect(p.getByRole('dialog')).toHaveCount(0)
       expect(
-        await api(student.context, 'GET', `/lectures/${code}/questions`),
+        await api(student.context, 'GET', `/lectures/${lectureId}/questions`),
       ).toHaveLength(3)
       await expect(p.getByText('Pool paused', { exact: true })).toBeVisible()
       await p

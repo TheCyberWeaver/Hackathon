@@ -44,6 +44,7 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export type Lecture = {
   id: string
+  joinCode: string
   title: string
   lectureTime: string
   canManage: boolean

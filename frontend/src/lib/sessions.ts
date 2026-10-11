@@ -11,7 +11,7 @@ function activeSession(lecture: Lecture): SharedSession | null {
   if (!lecture.startedAt || lecture.endedAt) return null
   return {
     id: lecture.id,
-    code: lecture.id,
+    code: lecture.joinCode,
     course: lecture.course || lecture.title,
     startedAt: lecture.startedAt,
   }
@@ -40,11 +40,25 @@ export function leaveJoinedSession(): Promise<void> {
 }
 
 export function joinSession(code: string): Promise<SharedSession> {
-  const id = parseJoinCode(code)
-  if (!id) return Promise.reject(new Error('Enter a valid numeric lecture ID.'))
+  const parsed = parseJoinCode(code)
+  if (!parsed)
+    return Promise.reject(
+      new Error('Enter a 6-character lecture code (0–9 and A–F).'),
+    )
   return request<SharedSession>('/sessions/join', {
     method: 'POST',
-    body: JSON.stringify({ code: id }),
+    body: JSON.stringify({ code: parsed }),
+  })
+}
+
+export function visitLectureByCode(code: string): Promise<Lecture> {
+  const parsed = parseJoinCode(code)
+  if (!parsed)
+    return Promise.reject(
+      new Error('Enter a 6-character lecture code (0–9 and A–F).'),
+    )
+  return request<Lecture>(`/lectures/by-code/${parsed}/visits`, {
+    method: 'POST',
   })
 }
 
@@ -62,10 +76,10 @@ export function parseJoinCode(value: string): string | null {
       !['/student', '/student/join'].includes(url.pathname.replace(/\/$/, ''))
     )
       return null
-    candidate =
-      url.searchParams.get('code') || url.searchParams.get('lecture') || ''
+    candidate = url.searchParams.get('code') || ''
   } catch {
     // A typed code is not a URL.
   }
-  return /^[1-9]\d{0,18}$/.test(candidate) ? candidate : null
+  candidate = candidate.trim().toUpperCase()
+  return /^[0-9A-F]{6}$/.test(candidate) ? candidate : null
 }

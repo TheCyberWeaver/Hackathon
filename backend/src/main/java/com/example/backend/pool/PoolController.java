@@ -41,6 +41,10 @@ public class PoolController {
     public Lecture visit(@RequestHeader(value = "X-User-Id", required = false) String identity, @PathVariable long lecture) {
         return service.visit(service.identify(identity), lecture);
     }
+    @PostMapping("/lectures/by-code/{code}/visits")
+    public Lecture visitByCode(@RequestHeader(value = "X-User-Id", required = false) String identity, @PathVariable String code) {
+        return service.visitByCode(service.identify(identity), code);
+    }
     @DeleteMapping("/student/lectures/history/{lecture}")
     public ResponseEntity<Void> forget(@RequestHeader(value = "X-User-Id", required = false) String identity, @PathVariable long lecture) {
         service.forget(service.identify(identity), lecture);

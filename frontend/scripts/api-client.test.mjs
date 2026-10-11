@@ -42,7 +42,7 @@ async function clients(baseUrl = '') {
   }
 }
 
-test('QR join uses lecture IDs and saves the selected course through Java', async (t) => {
+test('QR join uses hex codes and saves the selected course through Java', async (t) => {
   const api = await clients()
   const requests = []
   let savedSession = null
@@ -65,7 +65,7 @@ test('QR join uses lecture IDs and saves the selected course through Java', asyn
     requests.push([init.method ?? 'GET', url, init.body ?? null, init])
     const session = {
       id: '42',
-      code: '42',
+      code: '00AB12',
       course: 'Algorithms',
       startedAt: '2026-10-10T10:00:00Z',
     }
@@ -84,6 +84,7 @@ test('QR join uses lecture IDs and saves the selected course through Java', asyn
     return new Response(
       JSON.stringify({
         ...session,
+        joinCode: session.code,
         title: 'Algorithms',
         endedAt: null,
         canManage: true,
@@ -91,19 +92,21 @@ test('QR join uses lecture IDs and saves the selected course through Java', asyn
       { status: 200 },
     )
   })
-  assert.equal(api.sessions.parseJoinCode('42'), '42')
+  assert.equal(api.sessions.parseJoinCode(' 00ab12 '), '00AB12')
+  assert.equal(api.sessions.parseJoinCode('123456'), '123456')
+  assert.equal(api.sessions.parseJoinCode('000000'), '000000')
   assert.equal(
-    api.sessions.parseJoinCode('https://example.org/student/join?code=42'),
-    '42',
+    api.sessions.parseJoinCode('https://example.org/student/join?code=00ab12'),
+    '00AB12',
   )
   assert.equal(
-    api.sessions.parseJoinCode('https://example.org/other?code=42'),
+    api.sessions.parseJoinCode('https://example.org/other?code=00AB12'),
     null,
   )
   assert.equal(api.sessions.parseJoinCode('ABC!-2345'), null)
-  assert.equal((await api.sessions.getSessionInvite('42')).code, '42')
+  assert.equal((await api.sessions.getSessionInvite('42')).code, '00AB12')
   assert.equal(await api.sessions.getJoinedSession(), null)
-  assert.equal((await api.sessions.joinSession('42')).id, '42')
+  assert.equal((await api.sessions.joinSession('00ab12')).id, '42')
   assert.equal((await api.sessions.getJoinedSession()).course, 'Algorithms')
   await api.sessions.leaveJoinedSession()
   assert.equal(await api.sessions.getJoinedSession(), null)
@@ -118,14 +121,14 @@ test('QR join uses lecture IDs and saves the selected course through Java', asyn
       ['GET', '/api/sessions/mine'],
     ],
   )
-  assert.deepEqual(JSON.parse(requests[2][2]), { code: '42' })
+  assert.deepEqual(JSON.parse(requests[2][2]), { code: '00AB12' })
   for (const [, , , init] of requests) {
     assert.equal(init.credentials, 'same-origin')
     assert.equal(new Headers(init.headers).has('X-User-Id'), false)
   }
 })
 
-test('onboarding course creates a backend lecture and uses its numeric ID for the QR invite', async (t) => {
+test('onboarding course creates a backend lecture and uses its hex code for the QR invite', async (t) => {
   const api = await clients()
   const calls = []
   let lecture
@@ -135,6 +138,7 @@ test('onboarding course creates a backend lecture and uses its numeric ID for th
       lecture = {
         ...JSON.parse(init.body),
         id: '51',
+        joinCode: 'A3F19C',
         canManage: true,
         startedAt: null,
         endedAt: null,
@@ -154,7 +158,7 @@ test('onboarding course creates a backend lecture and uses its numeric ID for th
   const invite = await api.sessions.getSessionInvite(started.id)
   assert.deepEqual(invite, {
     id: '51',
-    code: '51',
+    code: 'A3F19C',
     course: selected.title,
     startedAt: '2026-10-10T10:00:00Z',
   })
@@ -197,12 +201,12 @@ test('ended lectures are rejected by the backend without changing the selected l
     async () =>
       new Response(
         JSON.stringify({
-          error: 'This lecture ID is invalid or the lecture has ended.',
+          error: 'This lecture has not started or has ended.',
         }),
         { status: 404 },
       ),
   )
-  await assert.rejects(api.sessions.joinSession('42'), /ended/)
+  await assert.rejects(api.sessions.joinSession('A3F19C'), /ended/)
   assert.equal(api.sessions.parseJoinCode('042'), null)
   assert.equal(api.sessions.parseJoinCode('9'.repeat(20)), null)
 })
@@ -411,16 +415,44 @@ test('personal history uses account-backed visit and removal routes without leav
   ])
   assert.equal(
     api.sessions.parseJoinCode('https://example.org/student?lecture=42'),
-    '42',
+    null,
   )
   assert.equal(
     api.sessions.parseJoinCode('https://example.org/student/join?lecture=42'),
-    '42',
+    null,
   )
   assert.equal(
-    api.sessions.parseJoinCode('https://example.org/student?code=42'),
-    '42',
+    api.sessions.parseJoinCode('https://example.org/student?code=00AB12'),
+    '00AB12',
   )
+})
+
+test('hex-code visits resolve separately from numeric lecture routes', async (t) => {
+  const { sessions } = await clients()
+  const calls = []
+  t.mock.method(globalThis, 'fetch', async (url, init) => {
+    calls.push([init.method, url])
+    return new Response(JSON.stringify({ id: '42', joinCode: '00AB12' }))
+  })
+  assert.equal((await sessions.visitLectureByCode(' 00ab12 ')).id, '42')
+  assert.deepEqual(calls, [['POST', '/api/lectures/by-code/00AB12/visits']])
+  for (const code of [
+    '',
+    '1',
+    '42',
+    'ABCDE',
+    'ABCDEFG',
+    'ABCDEF0',
+    'ABCDEF01',
+    'AB12G4',
+    '0xAB12',
+    '１２３４５６',
+  ]) {
+    assert.equal(sessions.parseJoinCode(code), null)
+    await assert.rejects(sessions.joinSession(code), /6-character/)
+    await assert.rejects(sessions.visitLectureByCode(code), /6-character/)
+  }
+  assert.equal(calls.length, 1, 'Invalid input must not send a request')
 })
 
 test('history polling ignores a stale result after removal and never records visits', async (t) => {
