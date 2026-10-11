@@ -102,7 +102,7 @@ export default function StudentJoinPage({
 }) {
   const [code, setCode] = useState(() => {
     const params = new URLSearchParams(window.location.search)
-    return params.get('code') || params.get('lecture') || ''
+    return params.get('code') || ''
   })
   const [localError, setLocalError] = useState('')
   const [scannerOpen, setScannerOpen] = useState(false)
@@ -110,7 +110,9 @@ export default function StudentJoinPage({
   function submit(value: string) {
     const parsed = parseJoinCode(value)
     if (!parsed) {
-      setLocalError('Enter the numeric lecture ID shown by your professor.')
+      setLocalError(
+        'Enter the 6-character code shown by your professor (0–9 and A–F).',
+      )
       return
     }
     setLocalError('')
@@ -140,7 +142,8 @@ export default function StudentJoinPage({
             <input
               id="student-join-code"
               type="text"
-              inputMode="numeric"
+              inputMode="text"
+              autoCapitalize="characters"
               autoComplete="off"
               spellCheck={false}
               maxLength={256}
@@ -149,12 +152,12 @@ export default function StudentJoinPage({
                 setCode(event.target.value)
                 setLocalError('')
               }}
-              placeholder="e.g. 42"
+              placeholder="e.g. A3F19C"
               disabled={checking || busy}
               aria-describedby="student-join-help"
             />
             <p id="student-join-help" className="student-join-help">
-              Enter the numeric lecture ID shown by your professor.
+              Enter the 6-character code shown by your professor (0–9 and A–F).
             </p>
             {(localError || error) && (
               <p role="alert" className="student-join-error">

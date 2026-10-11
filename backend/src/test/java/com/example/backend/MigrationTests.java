@@ -11,6 +11,53 @@ import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import static org.junit.jupiter.api.Assertions.*;
 
 class MigrationTests extends PostgresTestSupport {
+    @Test void upgradesJoinCodesPreservesRelationshipsAndRetriesAllocationCollisions() {
+        String schema = "codes_" + UUID.randomUUID().toString().replace("-", "");
+        String url = POSTGRES.getJdbcUrl("postgres", "postgres");
+        var admin = new JdbcTemplate(new DriverManagerDataSource(url, "postgres", ""));
+        admin.execute("CREATE SCHEMA " + schema);
+        try {
+            var source = new DriverManagerDataSource(url + (url.contains("?") ? "&" : "?") + "currentSchema=" + schema, "postgres", "");
+            var db = new JdbcTemplate(source);
+            Flyway.configure().dataSource(source).schemas(schema).target("10").load().migrate();
+            long user = db.queryForObject("INSERT INTO users (eth_identity_ref) VALUES ('code-owner') RETURNING id", Long.class);
+            long lecture = db.queryForObject("INSERT INTO lectures (title, lecture_time, owner_id, join_code) VALUES ('Existing lecture', CURRENT_TIMESTAMP, ?, 'L0000001') RETURNING id", Long.class, user);
+            db.update("INSERT INTO lectures (title, lecture_time, join_code) VALUES ('Old random code', CURRENT_TIMESTAMP, 'A3F19C22'), ('Valid six-character code', CURRENT_TIMESTAMP, '000001')");
+            long question = db.queryForObject("INSERT INTO questions (lecture_id, author_id, text) VALUES (?, ?, 'Preserve me') RETURNING id", Long.class, lecture, user);
+            db.update("INSERT INTO lecture_memberships (user_id, lecture_id) VALUES (?, ?)", user, lecture);
+            db.update("INSERT INTO lecture_history (user_id, lecture_id) VALUES (?, ?)", user, lecture);
+
+            var flyway = Flyway.configure().dataSource(source).schemas(schema).load();
+            assertEquals(1, flyway.migrate().migrationsExecuted);
+            assertEquals(3L, db.queryForObject("SELECT count(*) FROM lectures WHERE join_code ~ '^[0-9A-F]{6}$'", Long.class));
+            assertEquals("000001", db.queryForObject("SELECT join_code FROM lectures WHERE title = 'Valid six-character code'", String.class));
+            assertEquals(lecture, db.queryForObject("SELECT lecture_id FROM questions WHERE id = ?", Long.class, question));
+            assertEquals(lecture, db.queryForObject("SELECT lecture_id FROM lecture_memberships WHERE user_id = ?", Long.class, user));
+            assertEquals(lecture, db.queryForObject("SELECT lecture_id FROM lecture_history WHERE user_id = ?", Long.class, user));
+            String code = db.queryForObject("SELECT join_code FROM lectures WHERE id = ?", String.class, lecture);
+            assertEquals(0, flyway.migrate().migrationsExecuted);
+            assertEquals(code, db.queryForObject("SELECT join_code FROM lectures WHERE id = ?", String.class, lecture));
+            for (String invalid : new String[]{"1", "ABCDEF0", "ABCDEF01", "abcdef", "AB12G4", code}) {
+                assertThrows(org.springframework.dao.DataIntegrityViolationException.class,
+                    () -> db.update("INSERT INTO lectures (title, lecture_time, join_code) VALUES ('Invalid', CURRENT_TIMESTAMP, ?)", invalid));
+            }
+            for (int i = 0; i < 20; i++) {
+                String generated = db.queryForObject("INSERT INTO lectures (title, lecture_time) VALUES ('Generated', CURRENT_TIMESTAMP) RETURNING join_code", String.class);
+                assertTrue(generated.matches("[0-9A-F]{6}"));
+            }
+
+            // Force the first allocation to collide, then verify the transaction can continue.
+            db.execute("CREATE SEQUENCE test_join_codes START 1");
+            db.execute("ALTER TABLE lectures ALTER COLUMN join_code SET DEFAULT upper(lpad(to_hex(nextval('test_join_codes')), 6, '0'))");
+            var repository = new com.example.backend.pool.PoolRepository(db);
+            var transaction = new org.springframework.transaction.support.TransactionTemplate(new org.springframework.jdbc.datasource.DataSourceTransactionManager(source));
+            long created = transaction.execute(status -> repository.createLecture("After collision", java.time.OffsetDateTime.now(), user, "Algorithms"));
+            assertNotEquals("000001", db.queryForObject("SELECT join_code FROM lectures WHERE id = ?", String.class, created));
+            assertTrue(db.queryForObject("SELECT last_value > 1 FROM test_join_codes", Boolean.class));
+            assertEquals(1L, db.queryForObject("SELECT count(*) FROM lectures WHERE title = 'After collision'", Long.class));
+        } finally { admin.execute("DROP SCHEMA " + schema + " CASCADE"); }
+    }
+
     @Test void backfillsOnlyRecordedLectureParticipationAndPreservesProfilesAndRoles() {
         String schema = "history_" + UUID.randomUUID().toString().replace("-", "");
         String url = POSTGRES.getJdbcUrl("postgres", "postgres");

@@ -57,7 +57,9 @@ for (const mobile of [false, true]) {
     try {
       const past = await lecture(owner.context, 'Visited past lecture')
       for (const person of [learner, peer])
-        await api(person.context, 'POST', '/sessions/join', { code: past.id })
+        await api(person.context, 'POST', '/sessions/join', {
+          code: past.joinCode,
+        })
       await api(learner.context, 'POST', `/lectures/${past.id}/questions`, {
         text: 'My saved question',
       })
@@ -78,7 +80,9 @@ for (const mobile of [false, true]) {
         action: 'end',
       })
       const current = await lecture(owner.context, 'Current joined lecture')
-      await api(learner.context, 'POST', '/sessions/join', { code: current.id })
+      await api(learner.context, 'POST', '/sessions/join', {
+        code: current.joinCode,
+      })
 
       // The same authenticated learner can also teach, with a separate archive.
       await api(learner.context, 'POST', '/professor/profile/initialize', {
@@ -179,7 +183,7 @@ for (const mobile of [false, true]) {
       expect(
         (await api(learner.context, 'GET', '/sessions/mine')).session.id,
       ).toBe(current.id)
-      await peer.page.goto(`/student/join?code=${past.id}`)
+      await peer.page.goto(`/student/join?code=${past.joinCode}`)
       await expect(peer.page.getByRole('heading', { level: 1 })).toHaveText(
         past.title,
       )
@@ -214,7 +218,7 @@ test('switching accounts clears student review and active-session state in the s
   const other = await actor(browser, `second-${id}`)
   try {
     const room = await lecture(first.context, 'First account lecture')
-    await first.page.goto(`/student/join?code=${room.id}`)
+    await first.page.goto(`/student/join?code=${room.joinCode}`)
     await expect(first.page.locator('textarea')).toBeEnabled()
     await first.page.locator('textarea').fill('Private unsent draft')
     await first.context.setExtraHTTPHeaders({

@@ -28,6 +28,7 @@ import {
   joinSession,
   leaveJoinedSession,
   parseJoinCode,
+  visitLectureByCode,
   type SharedSession,
 } from '../lib/sessions'
 import './student.css'
@@ -262,9 +263,9 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
 
   async function joinLecture(code: string) {
     if (selectionBusy || historyMutationPending.current) return
-    const id = parseJoinCode(code)
-    if (!id) {
-      setJoinError('Enter a valid numeric lecture ID.')
+    const parsed = parseJoinCode(code)
+    if (!parsed) {
+      setJoinError('Enter a 6-character lecture code (0–9 and A–F).')
       return
     }
     setJoinBusy(true)
@@ -273,10 +274,10 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
     historyMutationPending.current = true
     historyVersion.current++
     try {
-      const lecture = await visitLecture(id)
+      const lecture = await visitLectureByCode(parsed)
       rememberVisit(lecture)
       if (lecture.startedAt && !lecture.endedAt) {
-        const session = await joinSession(id)
+        const session = await joinSession(parsed)
         setJoinedSession(session)
         showToast(`Joined ${session.course || 'lecture'}.`)
       }
@@ -445,22 +446,21 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
   useEffect(() => {
     let active = true
     const params = new URLSearchParams(window.location.search)
-    const linkedCode =
-      currentPage() === 'questions'
-        ? params.get('code') || params.get('lecture')
-        : null
+    const linkedCode = currentPage() === 'questions' ? params.get('code') : null
+    const linkedLecture =
+      currentPage() === 'questions' ? params.get('lecture') : null
     async function loadSession() {
       const session = await getJoinedSession()
       if (!active) return
       setJoinedSession(session)
-      if (linkedCode) {
-        const id = parseJoinCode(linkedCode)
-        if (!id) throw new Error('Enter a valid numeric lecture ID.')
-        const lecture = await visitLecture(id)
+      if (linkedCode || linkedLecture) {
+        const lecture = linkedCode
+          ? await visitLectureByCode(linkedCode)
+          : await visitLecture(linkedLecture!)
         if (!active) return
         rememberVisit(lecture)
         if (lecture.startedAt && !lecture.endedAt) {
-          const joined = await joinSession(id)
+          const joined = await joinSession(lecture.joinCode)
           if (!active) return
           setJoinedSession(joined)
         }
@@ -836,7 +836,9 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
                       selectedLecture?.title ||
                       'Lecture'}
                   </span>
-                  <span className="student-session-code">Code {lectureId}</span>
+                  <span className="student-session-code">
+                    Code {selectedLecture?.joinCode}
+                  </span>
                 </div>
                 {!readOnly ? (
                   <button

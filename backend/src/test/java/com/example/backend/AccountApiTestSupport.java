@@ -33,8 +33,11 @@ abstract class AccountApiTestSupport extends PostgresTestSupport {
         return send("PATCH", "/lectures/" + lecture + "/session", identity,
             json.writeValueAsString(Map.of("action", action)), expected);
     }
+    String joinCode(String lecture) {
+        return jdbc.queryForObject("SELECT join_code FROM lectures WHERE id = ?", String.class, Long.parseLong(lecture));
+    }
     JsonNode join(String lecture, String identity) throws Exception {
-        return send("POST", "/sessions/join", identity, json.writeValueAsString(Map.of("code", lecture)), 200);
+        return send("POST", "/sessions/join", identity, json.writeValueAsString(Map.of("code", joinCode(lecture))), 200);
     }
     Set<String> ids(JsonNode lectures) {
         var ids = new HashSet<String>();

@@ -1,6 +1,7 @@
 package com.example.backend.pool;
 
 import java.util.List;
+import java.util.Locale;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import static com.example.backend.pool.ApiModels.*;
@@ -38,15 +39,10 @@ public class PoolService {
     }
     @Transactional
     public SharedSession join(User user, JoinRequest request) {
-        var code = request == null ? null : request.code();
-        if (code == null || !code.matches("[1-9][0-9]{0,18}"))
-            throw new ApiException(BAD_REQUEST, "Enter a valid numeric lecture ID.");
-        final long id;
-        try { id = Long.parseLong(code); }
-        catch (NumberFormatException error) { throw new ApiException(BAD_REQUEST, "Enter a valid numeric lecture ID."); }
+        var id = repository.lectureIdByCode(joinCode(request == null ? null : request.code()));
         var access = repository.lockLecture(id);
         if (access.session().startedAt() == null || access.session().endedAt() != null)
-            throw new ApiException(NOT_FOUND, "This lecture ID is invalid or the lecture has ended.");
+            throw new ApiException(NOT_FOUND, "This lecture has not started or has ended.");
         repository.joinSession(user.id(), id);
         repository.recordVisit(user.id(), id);
         return repository.joinedSession(user.id());
@@ -66,6 +62,16 @@ public class PoolService {
         var lecture = repository.lecture(user, id);
         repository.recordVisit(user.id(), id);
         return lecture;
+    }
+    @Transactional
+    public Lecture visitByCode(User user, String code) {
+        return visit(user, repository.lectureIdByCode(joinCode(code)));
+    }
+    private static String joinCode(String value) {
+        var code = value == null ? "" : value.trim().toUpperCase(Locale.ROOT);
+        if (!code.matches("[0-9A-F]{6}"))
+            throw new ApiException(BAD_REQUEST, "Enter a 6-character lecture code (0–9 and A–F).");
+        return code;
     }
     @Transactional
     public void forget(User user, long id) {

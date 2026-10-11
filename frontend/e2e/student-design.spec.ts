@@ -9,6 +9,7 @@ const lecture = (
   ended = true,
 ): Lecture => ({
   id,
+  joinCode: Number(id).toString(16).padStart(6, '0').toUpperCase(),
   title,
   startedAt: start,
   lectureTime: '2026-10-10T07:00:00Z',
@@ -79,7 +80,7 @@ async function fixture(
       data = {
         session: {
           id: live.id,
-          code: live.id,
+          code: live.joinCode,
           course: live.title,
           startedAt: live.startedAt,
         },

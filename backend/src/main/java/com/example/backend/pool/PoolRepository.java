@@ -26,6 +26,10 @@ public class PoolRepository {
         return lecture(id, false);
     }
     public LectureAccess lockLecture(long id) { return lecture(id, true); }
+    public long lectureIdByCode(String code) {
+        return jdbc.query("SELECT id FROM lectures WHERE join_code = ?", (rs, row) -> rs.getLong("id"), code)
+            .stream().findFirst().orElseThrow(() -> new ApiException(NOT_FOUND, "Lecture code not found."));
+    }
     private LectureAccess lecture(long id, boolean lock) {
         return jdbc.query("SELECT id, owner_id, started_at, ended_at, questions_paused FROM lectures WHERE id = ?" + (lock ? " FOR UPDATE" : ""),
             (rs, row) -> new LectureAccess(rs.getLong("id"), rs.getObject("owner_id", Long.class),
@@ -51,7 +55,7 @@ public class PoolRepository {
             .stream().findFirst().orElseThrow(() -> new ApiException(NOT_FOUND, "Lecture not found."));
     }
     private static Lecture lecture(ResultSet rs, long user) throws SQLException {
-        return new Lecture(Long.toString(rs.getLong("id")), rs.getString("title"), time(rs, "lecture_time"),
+        return new Lecture(Long.toString(rs.getLong("id")), rs.getString("join_code"), rs.getString("title"), time(rs, "lecture_time"),
             Long.valueOf(user).equals(rs.getObject("owner_id", Long.class)),
             rs.getString("course"), time(rs, "started_at"), time(rs, "ended_at"), rs.getBoolean("questions_paused"));
     }
@@ -72,7 +76,14 @@ public class PoolRepository {
         jdbc.update("DELETE FROM lecture_history WHERE user_id = ? AND lecture_id = ?", user, lecture);
     }
     public long createLecture(String title, OffsetDateTime time, long owner, String course) {
-        return jdbc.queryForObject("INSERT INTO lectures (title, lecture_time, owner_id, course) VALUES (?, ?, ?, ?) RETURNING id", Long.class, title, time, owner, course);
+        for (int attempt = 0; attempt < 100; attempt++) {
+            var ids = jdbc.query("""
+                INSERT INTO lectures (title, lecture_time, owner_id, course) VALUES (?, ?, ?, ?)
+                ON CONFLICT (join_code) DO NOTHING RETURNING id
+                """, (rs, row) -> rs.getLong("id"), title, time, owner, course);
+            if (!ids.isEmpty()) return ids.getFirst();
+        }
+        throw new ApiException(SERVICE_UNAVAILABLE, "Could not allocate a lecture code. Please try again.");
     }
     public void session(long id, LectureSession.State state) {
         jdbc.update("UPDATE lectures SET started_at = ?, ended_at = ?, questions_paused = ? WHERE id = ?",
@@ -82,8 +93,8 @@ public class PoolRepository {
         jdbc.update("INSERT INTO lecture_memberships (user_id, lecture_id) VALUES (?, ?) ON CONFLICT (user_id) DO UPDATE SET lecture_id = EXCLUDED.lecture_id, joined_at = CURRENT_TIMESTAMP", user, lecture);
     }
     public SharedSession joinedSession(long user) {
-        return jdbc.query("SELECT l.id, l.title, l.course, l.started_at FROM lecture_memberships m JOIN lectures l ON l.id = m.lecture_id WHERE m.user_id = ? AND l.started_at IS NOT NULL AND l.ended_at IS NULL",
-            (rs, row) -> new SharedSession(Long.toString(rs.getLong("id")), Long.toString(rs.getLong("id")),
+        return jdbc.query("SELECT l.id, l.join_code, l.title, l.course, l.started_at FROM lecture_memberships m JOIN lectures l ON l.id = m.lecture_id WHERE m.user_id = ? AND l.started_at IS NOT NULL AND l.ended_at IS NULL",
+            (rs, row) -> new SharedSession(Long.toString(rs.getLong("id")), rs.getString("join_code"),
                 rs.getString("course").isBlank() ? rs.getString("title") : rs.getString("course"), time(rs, "started_at")), user)
             .stream().findFirst().orElse(null);
     }
