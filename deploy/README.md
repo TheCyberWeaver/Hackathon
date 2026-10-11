@@ -118,6 +118,8 @@ Flyway baselines at V1 and applies pending migrations transactionally. Remove DA
 
 Every authenticated user can use both Student and Professor. Switching dashboards does not change identity or expose another user's data. Professor profiles, courses, lecture archives and summary counts are scoped to the signed-in account. Only a lecture's owner can manage it; students retain control of their own questions. The old `APP_TESTING_PERMISSIONS` setting is no longer used, including when present in an existing release environment.
 
+Question-author privacy depends on the managed login proxy replacing any client-supplied `X-User-Id` with the authenticated identity and preventing direct access to the app on port 8080. Caddy forwards that identity to Java; Java does not authenticate the header itself. Keep the VM port inaccessible to students outside the managed proxy.
+
 V10 adds permanent per-user student lecture history, separately from the current session membership. It preserves all existing lectures, questions, courses and ownership, and recovers attendance from surviving memberships and participation records. Unsaved historical visits cannot be recovered. See [database state](../docs/Database_State.md) for the schema and upgrade details.
 
 Legacy lectures without an owner are not assigned to every user. An administrator who knows the correct owner may assign that exact account through SQL:

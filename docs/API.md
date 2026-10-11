@@ -6,6 +6,8 @@ Every pool route requires the trusted proxy's `X-User-Id`. That stable identity 
 
 Lecture ownership is always enforced. Only the creator can manage a lecture or see question authors and reports through its professor API. Admin-labelled users have the same ownership rules. A question can be deleted by its author or its lecture's owner. Sign-in, validation, vote uniqueness and the self-vote restriction always apply. Multiple questions per lecture are allowed.
 
+Student-facing question reads select no account identity from the database and return only the caller-specific `mine` flag. Professor question reads also require lecture ownership in their database query. The owner may see authors of questions in a lecture they created; switching the dashboard view never grants ownership.
+
 `GET /api/lectures` lists only the caller's created lectures, saved student history and current membership; `canManage` is true only for owned lectures. Professor archives and summary counts include only that user's created lectures. Direct lecture and anonymous question lookups remain available to signed-in users with a lecture link or numeric ID, which is not a private access token. Keep Java behind the managed login proxy with no public port.
 
 IDs in JSON are decimal strings, avoiding JavaScript BIGINT precision loss. Times are ISO 8601 with an offset. Pool responses use `Cache-Control: no-store`.

@@ -112,24 +112,35 @@ public class PoolRepository {
         jdbc.update("INSERT INTO question_moderation_warnings (lecture_id, user_id, reason) VALUES (?, ?, ?)", lecture, user, reason);
         return jdbc.queryForObject("SELECT count(*) FROM question_moderation_warnings WHERE lecture_id = ? AND user_id = ?", Long.class, lecture, user);
     }
-    private static final String QUESTION_QUERY = """
-        SELECT q.*, u.eth_identity_ref,
+    // Student-facing reads must never fetch an author's account identity.
+    private static final String PUBLIC_QUESTION_QUERY = """
+        SELECT q.id, q.text, q.submitted_at, q.status, q.selected,
+            q.author_id = ? AS mine,
             (SELECT count(*) FROM question_votes v WHERE v.question_id = q.id) AS votes,
-            EXISTS (SELECT 1 FROM question_votes v WHERE v.question_id = q.id AND v.user_id = ?) AS voted_by_me,
+            EXISTS (SELECT 1 FROM question_votes v WHERE v.question_id = q.id AND v.user_id = ?) AS voted_by_me
+        FROM questions q
+        WHERE q.lecture_id = ?
+        """;
+    private static final String PROFESSOR_QUESTION_QUERY = """
+        SELECT q.id, q.text, q.submitted_at, q.status, q.selected, q.answered_at,
+            u.eth_identity_ref,
+            (SELECT count(*) FROM question_votes v WHERE v.question_id = q.id) AS votes,
             (SELECT count(*) FROM question_reports r WHERE r.question_id = q.id) AS reports
-        FROM questions q JOIN users u ON u.id = q.author_id
+        FROM questions q
+        JOIN lectures l ON l.id = q.lecture_id AND l.owner_id = ?
+        JOIN users u ON u.id = q.author_id
         WHERE q.lecture_id = ?
         """;
     private static final String ORDER = " ORDER BY (q.status = 'answered'), votes DESC, q.submitted_at, q.id";
     public List<Question> questions(long lecture, long user) {
-        return jdbc.query(QUESTION_QUERY + ORDER, (rs, row) -> publicQuestion(rs, user), user, lecture);
+        return jdbc.query(PUBLIC_QUESTION_QUERY + ORDER, (rs, row) -> publicQuestion(rs), user, user, lecture);
     }
     public Question question(long lecture, long id, long user) {
-        return jdbc.query(QUESTION_QUERY + " AND q.id = ?", (rs, row) -> publicQuestion(rs, user), user, lecture, id)
+        return jdbc.query(PUBLIC_QUESTION_QUERY + " AND q.id = ?", (rs, row) -> publicQuestion(rs), user, user, lecture, id)
             .stream().findFirst().orElseThrow(() -> new ApiException(NOT_FOUND, "Question not found."));
     }
     public List<ProfessorQuestion> professorQuestions(long lecture, long user) {
-        return jdbc.query(QUESTION_QUERY + ORDER, (rs, row) -> new ProfessorQuestion(
+        return jdbc.query(PROFESSOR_QUESTION_QUERY + ORDER, (rs, row) -> new ProfessorQuestion(
             Long.toString(rs.getLong("id")), rs.getString("text"), rs.getString("eth_identity_ref"), rs.getLong("votes"),
             time(rs, "submitted_at"), rs.getString("status").equals("answered"), status(rs), time(rs, "answered_at"), rs.getLong("reports")), user, lecture);
     }
@@ -172,9 +183,9 @@ public class PoolRepository {
             WHERE author_id = ?
             """, (rs, row) -> new StudentSummary(rs.getLong("submitted"), rs.getLong("answered")), user.id());
     }
-    private static Question publicQuestion(ResultSet rs, long user) throws SQLException {
+    private static Question publicQuestion(ResultSet rs) throws SQLException {
         return new Question(Long.toString(rs.getLong("id")), rs.getString("text"), rs.getLong("votes"),
-            time(rs, "submitted_at"), status(rs), rs.getLong("author_id") == user, rs.getBoolean("voted_by_me"));
+            time(rs, "submitted_at"), status(rs), rs.getBoolean("mine"), rs.getBoolean("voted_by_me"));
     }
     private static String status(ResultSet rs) throws SQLException {
         return rs.getString("status").equals("answered") ? "answered" : rs.getBoolean("selected") ? "selected" : "open";
