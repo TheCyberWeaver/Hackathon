@@ -1210,7 +1210,11 @@ export default function ProfessorDashboard({
           >
             Settings
           </h1>
-          <CourseSettings courses={courses} onSaveCourses={onSaveCourses} />
+          <CourseSettings
+            courses={courses}
+            onSaveCourses={onSaveCourses}
+            onNotify={setNotice}
+          />
         </main>
       )}
 

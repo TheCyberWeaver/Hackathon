@@ -68,6 +68,13 @@ function sleep(ms: number) {
   return new Promise((resolve) => window.setTimeout(resolve, ms))
 }
 
+// Ended sessions cannot reopen. A slower poll must not undo a known end state.
+function keepEndedLecture(previous: Lecture | null | undefined, next: Lecture) {
+  return previous?.id === next.id && previous.endedAt && !next.endedAt
+    ? previous
+    : next
+}
+
 export default function StudentDashboard({ user }: { user: CurrentUser }) {
   const [page, setPage] = useState<Page>(currentPage)
   const [locationVersion, setLocationVersion] = useState(0)
@@ -80,6 +87,7 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
   const [lectures, setLectures] = useState<Lecture[]>([])
   const [viewedLecture, setViewedLecture] = useState<Lecture | null>(null)
   const [lectureId, setLectureId] = useState('')
+  const [liveLectureId, setLiveLectureId] = useState('')
   const [historyLoading, setHistoryLoading] = useState(true)
   const [historyError, setHistoryError] = useState('')
   const [historyRetry, setHistoryRetry] = useState(0)
@@ -98,11 +106,27 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
   const [removingHistoryId, setRemovingHistoryId] = useState<string | null>(
     null,
   )
-  const selectedLecture = viewedLecture
+  const savedSelection = lectures.find((lecture) => lecture.id === lectureId)
+  const selectedLecture =
+    viewedLecture && savedSelection?.endedAt
+      ? keepEndedLecture(viewedLecture, savedSelection)
+      : viewedLecture
+  const savedLecture = lectures.find(
+    (lecture) => lecture.id === requestedLectureId,
+  )
   const requestedLecture =
-    lectures.find((lecture) => lecture.id === requestedLectureId) ??
-    (viewedLecture?.id === requestedLectureId ? viewedLecture : undefined)
-  const readingLecture = page === 'questions' && !!requestedLecture?.endedAt
+    viewedLecture?.id === requestedLectureId
+      ? savedLecture
+        ? keepEndedLecture(viewedLecture, savedLecture)
+        : viewedLecture
+      : savedLecture
+  const showingLectureEnded =
+    page === 'questions' &&
+    !!selectedLecture?.endedAt &&
+    liveLectureId === lectureId &&
+    requestedLectureId === lectureId
+  const readingLecture =
+    page === 'questions' && !!requestedLecture?.endedAt && !showingLectureEnded
   const history = useStudentHistory(
     page === 'pastLectures'
       ? lectures
@@ -163,6 +187,12 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
     mutationVersion.current++
     setViewedLecture(lecture)
     setLectureId(lecture?.id || '')
+    setLiveLectureId(
+      lecture?.startedAt &&
+        (!lecture.endedAt || window.location.pathname === `${basePath}/ended`)
+        ? lecture.id
+        : '',
+    )
     setRequestedLectureId(lecture?.id || '')
     setQuestions([])
     setDraft('')
@@ -194,6 +224,15 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
   async function returnToCurrentLecture() {
     if (selectionBusy) return
     if (
+      selectedLecture?.endedAt &&
+      liveLectureId === lectureId &&
+      (!joinedSession || joinedSession.id === lectureId)
+    ) {
+      setRequestedLectureId(lectureId)
+      setPage('questions')
+      return
+    }
+    if (
       !joinedSession ||
       (joinedSession.id === lectureId && selectedLecture?.endedAt)
     ) {
@@ -207,6 +246,7 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
       selectedLecture &&
       !selectedLecture.endedAt
     ) {
+      setLiveLectureId(lectureId)
       setRequestedLectureId(lectureId)
       window.history.pushState(null, '', basePath)
       setPage('questions')
@@ -354,12 +394,21 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
   }
 
   function openPastLecture(id: string) {
+    setLiveLectureId('')
     window.history.pushState(
       null,
       '',
       `${basePath}?lecture=${encodeURIComponent(id)}`,
     )
     setRequestedLectureId(id)
+    setPage('questions')
+    window.scrollTo(0, 0)
+  }
+
+  function joinAnotherLecture() {
+    selectLecture(null)
+    setJoinError('')
+    window.history.pushState(null, '', `${basePath}/join`)
     setPage('questions')
     window.scrollTo(0, 0)
   }
@@ -394,10 +443,31 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
   }, [questionsPaused])
 
   useEffect(() => {
+    if (!showingLectureEnded) return
+    // Keep this explicit choice screen on reload as well as subsequent polls.
+    window.history.replaceState(
+      null,
+      '',
+      `${basePath}/ended?lecture=${encodeURIComponent(lectureId)}`,
+    )
+  }, [showingLectureEnded, lectureId])
+
+  useEffect(() => {
     return watchLectureHistory(
       (items) => {
         if (historyMutationPending.current) return
-        setLectures(items)
+        setLectures((previous) =>
+          items.map((item) =>
+            keepEndedLecture(
+              previous.find((lecture) => lecture.id === item.id),
+              item,
+            ),
+          ),
+        )
+        setViewedLecture((previous) => {
+          const update = items.find((item) => item.id === previous?.id)
+          return update ? keepEndedLecture(previous, update) : previous
+        })
         setHistoryLoading(false)
         setHistoryError('')
       },
@@ -512,13 +582,23 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
   useEffect(() => {
     if (!lectureId) return
     let active = true
+    let lecturePending = false
+    const loadLecture = async () => {
+      if (lecturePending) return
+      lecturePending = true
+      try {
+        const lecture = await getLecture(lectureId)
+        if (active && selectedIdRef.current === lectureId)
+          setViewedLecture((previous) => keepEndedLecture(previous, lecture))
+      } catch {
+        // Keep the current screen during a transient network failure.
+      } finally {
+        lecturePending = false
+      }
+    }
     const load = () => {
       const version = mutationVersion.current
-      void getLecture(lectureId)
-        .then((lecture) => {
-          if (active) setViewedLecture(lecture)
-        })
-        .catch(() => {})
+      void loadLecture()
       return listQuestions(lectureId)
         .then((items) => {
           if (
@@ -541,10 +621,20 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
     const timer = window.setInterval(() => {
       void load()
     }, 5000)
+    const refreshOnFocus = () => {
+      void loadLecture()
+    }
+    const refreshOnVisibility = () => {
+      if (document.visibilityState === 'visible') void loadLecture()
+    }
+    window.addEventListener('focus', refreshOnFocus)
+    document.addEventListener('visibilitychange', refreshOnVisibility)
     return () => {
       active = false
       window.clearInterval(timer)
       window.clearTimeout(toastTimer.current)
+      window.removeEventListener('focus', refreshOnFocus)
+      document.removeEventListener('visibilitychange', refreshOnVisibility)
     }
   }, [lectureId])
 
@@ -871,9 +961,14 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
                       type="button"
                       className="student-session-leave"
                       disabled={selectionBusy}
-                      onClick={() => void returnToCurrentLecture()}
+                      onClick={() => {
+                        if (showingLectureEnded) joinAnotherLecture()
+                        else void returnToCurrentLecture()
+                      }}
                     >
-                      {joinedSession && joinedSession.id !== lectureId
+                      {!showingLectureEnded &&
+                      joinedSession &&
+                      joinedSession.id !== lectureId
                         ? 'Return to current lecture'
                         : 'Join another lecture'}
                     </button>

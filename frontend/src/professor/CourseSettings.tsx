@@ -4,27 +4,32 @@ import { courseTitleError, type ProfessorCourse } from './professorProfile'
 export default function CourseSettings({
   courses,
   onSaveCourses,
+  onNotify,
 }: {
   courses: ProfessorCourse[]
   onSaveCourses: (courses: ProfessorCourse[]) => Promise<void>
+  onNotify: (message: string) => void
 }) {
   const [draft, setDraft] = useState('')
   const [editingId, setEditingId] = useState<string | null>(null)
   const [rename, setRename] = useState('')
   const [error, setError] = useState('')
-  const [notice, setNotice] = useState('')
   const [saving, setSaving] = useState(false)
   const pending = useRef(false)
-  async function save(next: ProfessorCourse[], success?: () => void) {
+  async function save(
+    next: ProfessorCourse[],
+    message: string,
+    success?: () => void,
+  ) {
     if (pending.current) return
     pending.current = true
     setSaving(true)
     setError('')
-    setNotice('')
+    onNotify('')
     try {
       await onSaveCourses(next)
       success?.()
-      setNotice('Courses saved.')
+      onNotify(message)
     } catch (cause) {
       setError(
         cause instanceof Error
@@ -44,6 +49,7 @@ export default function CourseSettings({
     }
     void save(
       [...courses, { id: crypto.randomUUID(), title: draft.trim() }],
+      'Course added.',
       () => setDraft(''),
     )
   }
@@ -55,6 +61,7 @@ export default function CourseSettings({
     }
     void save(
       courses.map((c) => (c.id === id ? { ...c, title: rename.trim() } : c)),
+      'Course renamed.',
       () => setEditingId(null),
     )
   }
@@ -64,7 +71,7 @@ export default function CourseSettings({
       next[index + direction],
       next[index],
     ]
-    void save(next)
+    void save(next, 'Course order updated.')
   }
   return (
     <section className="course-manager mt-8" aria-labelledby="settings-courses">
@@ -166,7 +173,10 @@ export default function CourseSettings({
                     disabled={saving}
                     aria-label={`Remove ${course.title}`}
                     onClick={() =>
-                      void save(courses.filter((c) => c.id !== course.id))
+                      void save(
+                        courses.filter((c) => c.id !== course.id),
+                        'Course removed.',
+                      )
                     }
                   >
                     Remove
@@ -182,7 +192,9 @@ export default function CourseSettings({
           {error}
         </p>
       )}
-      <p role="status">{saving ? 'Saving…' : notice}</p>
+      <p role="status" className="sr-only">
+        {saving ? 'Saving…' : ''}
+      </p>
     </section>
   )
 }
