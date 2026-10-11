@@ -41,6 +41,61 @@ async function submit(page: Page, text: string) {
   await expect(page.locator('textarea')).toHaveValue('')
 }
 
+test('course picker saves inline entry and starts the selected course', async ({
+  browser,
+}) => {
+  const professor = await actor(browser, `course-picker-${Date.now()}`)
+  const p = professor.page
+  try {
+    await api(professor.context, 'POST', '/professor/profile/initialize', {
+      onboardingCompleted: true,
+      courses: [],
+    })
+    await p.goto('/professor/start')
+    await expect(
+      p.getByRole('button', { name: 'Start session' }),
+    ).toBeDisabled()
+    await p.locator('#lecture-course').press('ArrowDown')
+    await p.getByRole('menuitem', { name: 'Add course' }).press('Enter')
+
+    await p.route(
+      '**/api/professor/profile',
+      (route) =>
+        route.fulfill({
+          status: 503,
+          contentType: 'application/json',
+          body: '{"error":"Temporary save failure"}',
+        }),
+      { times: 1 },
+    )
+    const title = 'Linear Algebra'
+    const input = p.getByRole('textbox', { name: 'Course' })
+    await input.fill(title)
+    await expect(p.getByRole('alert')).toContainText('Temporary save failure')
+    await expect(input).toHaveValue(title)
+    await input.press('Enter')
+    await expect(p.getByText('Saved automatically')).toBeVisible()
+    expect(
+      (await api(professor.context, 'GET', '/professor/profile')).courses.map(
+        (course: { title: string }) => course.title,
+      ),
+    ).toEqual([title])
+    await p.getByRole('button', { name: 'Close course entry' }).click()
+    await expect(p.locator('#lecture-course')).toContainText(title)
+    await expect(p.getByRole('button', { name: 'Start session' })).toBeEnabled()
+
+    await p.reload()
+    await p.locator('#lecture-course').click()
+    await p.getByRole('menuitemradio', { name: title }).click()
+    await p.getByRole('button', { name: 'Start session' }).click()
+    await expect(
+      p.getByRole('heading', { name: `Invite students to ${title}` }),
+    ).toBeVisible()
+  } finally {
+    await professor.context.close()
+  }
+})
+
 for (const mobile of [false, true]) {
   test(`combined lecture workflow and persistence (${mobile ? 'mobile' : 'desktop'})`, async ({
     browser,
@@ -71,9 +126,9 @@ for (const mobile of [false, true]) {
       await expect(
         p.getByRole('button', { name: 'Start session', exact: true }),
       ).toBeDisabled()
-      await p.getByRole('button', { name: 'Add course', exact: true }).click()
+      await p.locator('#lecture-course').click()
+      await p.getByRole('menuitem', { name: 'Add course' }).click()
       const course = 'HS26 Linear Algebra'
-      await p.getByLabel('Course title', { exact: true }).fill(course)
       await p.route(
         '**/api/professor/profile',
         (route) =>
@@ -84,13 +139,15 @@ for (const mobile of [false, true]) {
           }),
         { times: 1 },
       )
-      await p.getByRole('button', { name: 'Add', exact: true }).click()
-      await expect(p.getByRole('alert')).toHaveText('Temporary save failure')
-      await expect(p.getByLabel('Course title', { exact: true })).toHaveValue(
+      await p.getByRole('textbox', { name: 'Course' }).fill(course)
+      await expect(p.getByRole('alert')).toContainText('Temporary save failure')
+      await expect(p.getByRole('textbox', { name: 'Course' })).toHaveValue(
         course,
       )
-      await p.getByRole('button', { name: 'Add', exact: true }).click()
-      await expect(p.getByLabel('Course', { exact: true })).toHaveValue(/.+/)
+      await p.getByRole('textbox', { name: 'Course' }).press('Enter')
+      await expect(p.getByText('Saved automatically')).toBeVisible()
+      await p.getByRole('button', { name: 'Close course entry' }).click()
+      await expect(p.locator('#lecture-course')).toContainText(course)
       const persisted = await api(
         professor.context,
         'GET',

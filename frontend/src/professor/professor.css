@@ -165,6 +165,193 @@
   background: #059669;
   color: white;
 }
+.course-chooser {
+  gap: 22px;
+}
+.course-picker {
+  position: relative;
+  min-width: 0;
+}
+.course-picker-label {
+  display: block;
+  margin-bottom: 10px;
+  color: #334155;
+  font-size: 14px;
+  font-weight: 600;
+}
+.course-manager .course-picker-field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-height: 54px;
+  padding: 0 16px;
+  border: 1px solid #cbd5e1;
+  border-radius: 11px;
+  background: #fff;
+  color: #0f172a;
+  font-size: 15px;
+  font-weight: 500;
+  text-align: left;
+  box-shadow: 0 1px 2px rgb(15 23 42 / 4%);
+  transition:
+    border-color 150ms ease,
+    box-shadow 150ms ease;
+}
+.course-manager .course-picker-trigger:hover,
+.course-manager .course-picker-trigger[aria-expanded='true'] {
+  border-color: #94a3b8;
+  background: #fff;
+}
+.course-manager .course-picker-trigger:focus-visible,
+.course-manager .course-picker-field--editing:focus-within {
+  border-color: #2563eb;
+  outline: 2px solid #bfdbfe;
+  outline-offset: 2px;
+}
+.course-manager .course-picker-field--invalid,
+.course-manager .course-picker-field--invalid:focus-within {
+  border-color: #dc2626;
+  outline-color: #fecaca;
+}
+.course-picker-value,
+.course-picker-placeholder {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.course-picker-placeholder {
+  color: #475569;
+}
+.course-picker-chevron {
+  flex: 0 0 19px;
+  width: 19px;
+  height: 19px;
+  margin-left: 14px;
+  color: #64748b;
+  transition: transform 150ms ease;
+}
+.course-picker-trigger[aria-expanded='true'] .course-picker-chevron {
+  transform: rotate(180deg);
+}
+.course-picker-menu {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 7px);
+  right: 0;
+  left: 0;
+  max-height: min(18rem, 50dvh);
+  overflow-y: auto;
+  padding: 6px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 12px 28px rgb(15 23 42 / 13%);
+}
+.course-manager .course-picker-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: #fff;
+  color: #1e293b;
+  font-size: 14px;
+  font-weight: 500;
+  text-align: left;
+}
+.course-picker-option span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.course-picker-option svg {
+  flex: 0 0 18px;
+  width: 18px;
+  height: 18px;
+}
+.course-manager .course-picker-option:hover,
+.course-manager .course-picker-option:focus-visible {
+  background: #f1f5f9;
+}
+.course-manager .course-picker-option:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: -2px;
+}
+.course-picker-option[aria-checked='true'] {
+  color: #1d4ed8;
+}
+.course-manager .course-picker-add {
+  margin-top: 4px;
+  border-top: 1px solid #e2e8f0;
+  border-radius: 0 0 8px 8px;
+  color: #1d4ed8;
+  font-weight: 600;
+}
+.course-manager .course-picker-field--editing {
+  gap: 8px;
+  padding-left: 0;
+  padding-right: 4px;
+}
+.course-manager .course-picker-input {
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+  min-height: 52px;
+  padding: 0 0 0 15px;
+  border: 0;
+  border-radius: 10px;
+  outline: 0;
+  background: transparent;
+  color: #0f172a;
+  font-size: 15px;
+  font-weight: 500;
+}
+.course-picker-input::placeholder {
+  color: #64748b;
+  opacity: 1;
+}
+.course-manager .course-picker-clear {
+  display: grid;
+  place-items: center;
+  flex: 0 0 44px;
+  width: 44px;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #64748b;
+}
+.course-picker-clear svg {
+  width: 17px;
+  height: 17px;
+}
+.course-manager .course-picker-clear:hover {
+  background: #f1f5f9;
+  color: #0f172a;
+}
+.course-picker-status {
+  margin: 8px 2px 0;
+  color: #475569;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.course-picker-status[role='alert'] {
+  color: #b91c1c;
+}
+.course-chooser .course-primary {
+  min-height: 48px;
+  padding-inline: 20px;
+  border-color: #059669;
+  border-radius: 10px;
+}
+.course-chooser .course-primary:hover:not(:disabled) {
+  border-color: #047857;
+  background: #047857;
+}
 .course-actions,
 .course-input-row {
   display: flex;
