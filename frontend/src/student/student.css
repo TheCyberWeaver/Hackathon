@@ -746,8 +746,10 @@ html:has(.student-settings-card) {
   color: var(--color-accent);
   border-bottom-color: var(--color-accent);
 }
-.mobile-question-tabs [role='tab']:hover {
-  color: var(--color-accent);
+@media (hover: hover) and (pointer: fine) {
+  .mobile-question-tabs [role='tab']:hover {
+    color: var(--color-accent);
+  }
 }
 .mobile-questions [role='tabpanel']:focus-visible {
   outline: 2px solid var(--color-accent);

@@ -1,5 +1,9 @@
 import { useRef, useState } from 'react'
-import { courseTitleError, type ProfessorCourse } from './professorProfile'
+import {
+  courseTitleError,
+  newCourseId,
+  type ProfessorCourse,
+} from './professorProfile'
 
 export default function CourseSettings({
   courses,
@@ -48,7 +52,7 @@ export default function CourseSettings({
       return
     }
     void save(
-      [...courses, { id: crypto.randomUUID(), title: draft.trim() }],
+      [...courses, { id: newCourseId(), title: draft.trim() }],
       'Course added.',
       () => setDraft(''),
     )

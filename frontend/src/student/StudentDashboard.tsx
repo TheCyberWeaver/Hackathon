@@ -125,14 +125,16 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
     viewedLecture && savedSelection?.endedAt
       ? keepEndedLecture(viewedLecture, savedSelection)
       : viewedLecture
-  const savedLecture = lectures.find((lecture) => lecture.id === requestedLectureId)
+  const savedLecture = lectures.find(
+    (lecture) => lecture.id === requestedLectureId,
+  )
   const previousRequestedLecture =
     (linkedPastLecture?.id === requestedLectureId ? linkedPastLecture : null) ??
     (selectedLecture?.id === requestedLectureId ? selectedLecture : null)
   const requestedLecture =
     savedLecture && previousRequestedLecture
       ? keepEndedLecture(previousRequestedLecture, savedLecture)
-      : savedLecture ?? previousRequestedLecture ?? undefined
+      : (savedLecture ?? previousRequestedLecture ?? undefined)
   const showingLectureEnded =
     page === 'questions' &&
     !!selectedLecture?.endedAt &&
@@ -901,17 +903,14 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
 
   async function switchMobileView(next: 'mine' | 'other') {
     if (next === mobileView) return
-    const previousScroll = window.scrollY
     const section = mobileListRef.current
     if (section) {
-      const sectionTop = previousScroll + section.getBoundingClientRect().top
       section.style.minHeight = `${Math.max(
         Number.parseFloat(section.style.minHeight) || 0,
-        Math.ceil(previousScroll + window.innerHeight - sectionTop + 2),
+        Math.ceil(section.getBoundingClientRect().height),
       )}px`
     }
-    flushSync(() => setMobileView(next))
-    window.scrollTo({ top: previousScroll, behavior: 'instant' })
+    setMobileView(next)
 
     try {
       if (
@@ -1168,7 +1167,7 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
                     >
                       {questionsPaused
                         ? 'Submissions are closed right now.'
-                        : "Your name stays anonymous."}
+                        : 'Your name stays anonymous.'}
                     </span>
                     <div className="composer__send">
                       {draft.length > 160 && (

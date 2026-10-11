@@ -44,9 +44,16 @@ async function submit(page: Page, text: string) {
 test('course picker saves inline entry and starts the selected course', async ({
   browser,
 }) => {
-  const professor = await actor(browser, `course-picker-${Date.now()}`)
+  const professor = await actor(browser, `course-picker-${Date.now()}`, true)
   const p = professor.page
   try {
+    // An HTTP LAN preview or older mobile browser may not expose randomUUID.
+    await p.addInitScript(() => {
+      Object.defineProperty(window.crypto, 'randomUUID', {
+        configurable: true,
+        value: undefined,
+      })
+    })
     await api(professor.context, 'POST', '/professor/profile/initialize', {
       onboardingCompleted: true,
       courses: [],

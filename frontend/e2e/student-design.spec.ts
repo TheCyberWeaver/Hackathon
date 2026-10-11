@@ -413,6 +413,12 @@ test('switching a long mobile list retains exact scroll depth in both directions
   await expect(page.getByRole('tabpanel')).toHaveText(
     'No questions from other students yet.',
   )
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+      ),
+  )
   expect(await page.evaluate(() => scrollY)).toBe(scroll)
   expect(
     await page
@@ -422,6 +428,52 @@ test('switching a long mobile list retains exact scroll depth in both directions
   await other.press('Home')
   await expect(mine).toHaveAttribute('aria-selected', 'true')
   expect(await page.evaluate(() => scrollY)).toBe(scroll)
+})
+
+test('touch tab switches keep the viewport steady without a sticky hover state', async ({
+  browser,
+}) => {
+  const context = await browser.newContext({
+    baseURL: 'http://127.0.0.1:5186',
+    viewport: { width: 390, height: 844 },
+    hasTouch: true,
+  })
+  try {
+    const page = await context.newPage()
+    const data = await fixture(page)
+    data.setItems(
+      Array.from({ length: 16 }, (_, index) => question(`own-${index}`, true)),
+    )
+    await page.goto('/student')
+    const mine = page.getByRole('tab', { name: 'Your questions', exact: true })
+    const other = page.getByRole('tab', {
+      name: 'Other questions',
+      exact: true,
+    })
+    await mine.tap()
+    await page.evaluate(() => {
+      const tabs = document.querySelector('.mobile-question-tabs')!
+      window.scrollTo(0, Math.max(0, tabs.getBoundingClientRect().top + scrollY - 100))
+    })
+    const scroll = await page.evaluate(() => scrollY)
+    await other.tap()
+    await expect(other).toHaveAttribute('aria-selected', 'true')
+    await page.evaluate(
+      () =>
+        new Promise<void>((resolve) =>
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+        ),
+    )
+    expect(await page.evaluate(() => scrollY)).toBe(scroll)
+    const colors = await page.evaluate(() => {
+      const mine = document.querySelector('#questions-tab-mine')!
+      const other = document.querySelector('#questions-tab-other')!
+      return [getComputedStyle(mine).color, getComputedStyle(other).color]
+    })
+    expect(colors[0]).not.toBe(colors[1])
+  } finally {
+    await context.close()
+  }
 })
 
 test('a past lecture link works with no joined session and survives live-session polling', async ({

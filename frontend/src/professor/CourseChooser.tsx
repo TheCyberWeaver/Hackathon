@@ -1,6 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import type { KeyboardEvent } from 'react'
-import { courseTitleError, type ProfessorCourse } from './professorProfile'
+import {
+  courseTitleError,
+  newCourseId,
+  type ProfessorCourse,
+} from './professorProfile'
 
 const saveDelay = 500
 
@@ -106,7 +110,7 @@ export default function CourseChooser({
   ])
 
   function startAdding() {
-    setEditorId(crypto.randomUUID())
+    setEditorId(newCourseId())
     lastSavedTitle.current = ''
     failedTitle.current = ''
     setDraft('')
