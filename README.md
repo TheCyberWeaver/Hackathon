@@ -116,8 +116,9 @@ Verify with backend `./gradlew.bat test bootJar` (Windows) or
 without Docker or VM credentials. The first run downloads platform binaries.
 See the [API contract](docs/API.md) for routes, errors, and permissions.
 
-Abusive-language moderation runs as a separate CPU service on the deployment
-VM. See [moderation](moderation/README.md) for its minimal API and local setup.
+Production currently uses Java's bundled sensitive-word list. The separate CPU
+moderation service is optional and stopped on the VM. See
+[moderation](moderation/README.md) for its API and local setup.
 Use [deploy-webapp.ps1](deploy-webapp.ps1) for the web app and
 [deploy-moderation.ps1](deploy-moderation.ps1) for the moderation service.
 For a temporary local testing page, run `./test-moderation.ps1` and open

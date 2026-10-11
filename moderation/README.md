@@ -23,15 +23,17 @@ A successful check returns exactly one field:
 The other possible decision is `reject`. No reason or score is returned.
 Extra fields, including `courseTitle`, and invalid questions return HTTP 422.
 Inference failures return 503. `GET /health` responds after loading and warmup.
-There is no public production port; Java uses `http://askpool-moderation:8090` over the
-shared private Docker network.
+There is no public production port. The VM service is currently stopped, and Java
+uses its bundled sensitive-word list. If enabled, Java can reach
+`http://askpool-moderation:8090` over the shared private Docker network.
 
-Spring Boot sends only the trimmed question before storing it. An explicit
+When `MODERATION_URL` is configured, Spring Boot sends only the trimmed question
+before storing it. An explicit
 rejection returns HTTP 422 with "Please avoid abusive language." and saves
 nothing. The existing student UI displays that error. Timeouts, connection
 failures, invalid responses, and service errors allow submissions. The backend
-timeout defaults to 800 ms. Outside deployment the check is disabled unless
-`MODERATION_URL` is configured.
+timeout defaults to 800 ms. The service check is disabled whenever
+`MODERATION_URL` is empty.
 
 ## Policy
 
