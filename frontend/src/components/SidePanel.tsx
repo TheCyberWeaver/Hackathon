@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { CurrentUser } from '../lib/api'
 import { GearIcon, PanelIcon, ProfileIcon } from './Icons'
+import { courseUrl, type HistoryCourse } from '../lib/courseHistory'
 import './side-panel.css'
 
 export type SidePanelPage =
@@ -11,6 +12,11 @@ type SidePanelProps = {
   role: 'student' | 'professor'
   page: SidePanelPage | null
   onNavigate: (page: SidePanelPage) => void
+  courses?: HistoryCourse[]
+  selectedCourse?: string
+  historyLoading?: boolean
+  historyError?: string
+  onCourseNavigate?: (url: string) => void
   launcherClassName?: string
 }
 
@@ -20,7 +26,13 @@ export default function SidePanel({
   page,
   onNavigate,
   launcherClassName = '',
+  courses = [],
+  selectedCourse = '',
+  historyLoading = false,
+  historyError = '',
+  onCourseNavigate,
 }: SidePanelProps) {
+  const [coursesOpen, setCoursesOpen] = useState(false)
   const [open, setOpen] = useState(false)
   const [closing, setClosing] = useState(false)
   const dialogRef = useRef<HTMLDialogElement>(null)
@@ -32,7 +44,13 @@ export default function SidePanel({
     if (!open) return
     const dialog = dialogRef.current
     dialog?.showModal()
+    const frame = window.requestAnimationFrame(() => {
+      dialog
+        ?.querySelector('.side-panel-course[aria-current="page"]')
+        ?.scrollIntoView({ block: 'nearest' })
+    })
     return () => {
+      window.cancelAnimationFrame(frame)
       if (dialog?.open) dialog.close()
     }
   }, [open])
@@ -53,7 +71,7 @@ export default function SidePanel({
     }
   }, [])
 
-  function close(nextPage?: SidePanelPage) {
+  function close(nextPage?: SidePanelPage, courseLink?: string) {
     if (closeTimerRef.current !== null) return
     setClosing(true)
     const delay = window.matchMedia('(prefers-reduced-motion: reduce)').matches
@@ -63,7 +81,8 @@ export default function SidePanel({
       closeTimerRef.current = null
       setOpen(false)
       setClosing(false)
-      if (nextPage) onNavigate(nextPage)
+      if (courseLink) onCourseNavigate?.(courseLink)
+      else if (nextPage) onNavigate(nextPage)
       else window.requestAnimationFrame(() => triggerRef.current?.focus())
     }, delay)
   }
@@ -77,7 +96,10 @@ export default function SidePanel({
           aria-label="Open navigation"
           aria-expanded={open}
           aria-controls={dialogId}
-          onClick={() => setOpen(true)}
+          onClick={() => {
+            if (selectedCourse) setCoursesOpen(true)
+            setOpen(true)
+          }}
           className="side-panel-toggle"
         >
           <PanelIcon className="size-5" />
@@ -127,14 +149,86 @@ export default function SidePanel({
             >
               Current Lecture
             </button>
-            <button
-              type="button"
-              onClick={() => close('pastLectures')}
-              aria-current={page === 'pastLectures' ? 'page' : undefined}
-              className="side-panel-link"
-            >
-              Past Lectures
-            </button>
+            <div className="side-panel-history-heading">
+              <button
+                type="button"
+                onClick={() => close('pastLectures')}
+                aria-current={
+                  page === 'pastLectures' && !selectedCourse
+                    ? 'page'
+                    : undefined
+                }
+                className="side-panel-link"
+              >
+                Past Lectures
+              </button>
+              <button
+                type="button"
+                className="side-panel-course-toggle"
+                aria-label={coursesOpen ? 'Collapse courses' : 'Expand courses'}
+                aria-expanded={coursesOpen}
+                aria-controls={`${dialogId}-courses`}
+                onClick={() => setCoursesOpen((value) => !value)}
+              >
+                <svg
+                  aria-hidden="true"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  style={{
+                    transform: coursesOpen ? 'rotate(180deg)' : undefined,
+                  }}
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="m6 9 6 6 6-6"
+                  />
+                </svg>
+              </button>
+            </div>
+            {coursesOpen && (
+              <div id={`${dialogId}-courses`} className="side-panel-courses">
+                {courses.map((course) => (
+                  <a
+                    key={course.key}
+                    href={courseUrl(role, course)}
+                    aria-current={
+                      selectedCourse === course.key ? 'page' : undefined
+                    }
+                    className="side-panel-course"
+                    onClick={(event) => {
+                      if (
+                        event.button ||
+                        event.metaKey ||
+                        event.ctrlKey ||
+                        event.shiftKey ||
+                        event.altKey
+                      )
+                        return
+                      event.preventDefault()
+                      close(undefined, courseUrl(role, course))
+                    }}
+                  >
+                    <span>{course.title}</span>
+                    {course.context && <small>{course.context}</small>}
+                    {course.archived && <small>Archived</small>}
+                  </a>
+                ))}
+                {!courses.length && (
+                  <p className="side-panel-course-note">
+                    {historyLoading
+                      ? 'Loading courses…'
+                      : historyError
+                        ? 'History unavailable. Open Past Lectures to retry.'
+                        : role === 'student'
+                          ? 'Your saved past sessions will appear here.'
+                          : 'Add courses in Settings to get started.'}
+                  </p>
+                )}
+              </div>
+            )}
           </nav>
 
           <div className="side-panel-footer">

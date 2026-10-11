@@ -18,8 +18,8 @@ public class ProfessorProfileService {
     public ProfessorProfile get(User user) {
         return jdbc.query("SELECT onboarding_completed, revision FROM professor_profiles WHERE user_id = ?",
             (rs, row) -> new ProfessorProfile(rs.getBoolean(1), rs.getLong(2),
-                jdbc.query("SELECT id, title FROM professor_courses WHERE user_id = ? ORDER BY position",
-                    (course, index) -> new Course(course.getString(1), course.getString(2)), user.id())), user.id())
+                jdbc.query("SELECT id, title FROM professor_courses WHERE user_id = ? AND NOT archived ORDER BY position",
+                    (course, index) -> new Course(course.getString(1), course.getString(2), user.id() + ":" + course.getString(1)), user.id())), user.id())
             .stream().findFirst().orElse(null);
     }
     @Transactional
@@ -43,8 +43,20 @@ public class ProfessorProfileService {
         if (update.revision() == null || !update.revision().equals(revision.getFirst()))
             throw new ApiException(CONFLICT, "Your courses changed in another browser. The latest list has been loaded; review it and retry.");
         jdbc.update("UPDATE professor_profiles SET onboarding_completed = onboarding_completed OR ?, revision = revision + 1 WHERE user_id = ?", update.onboardingCompleted(), user.id());
-        jdbc.update("DELETE FROM professor_courses WHERE user_id = ?", user.id());
-        insertCourses(user, courses);
+        var archivedIds = new HashSet<>(jdbc.queryForList("SELECT id FROM professor_courses WHERE user_id = ? AND archived", String.class, user.id()));
+        if (courses.stream().anyMatch(course -> archivedIds.contains(course.id())))
+            throw new ApiException(CONFLICT, "A removed course cannot reuse its old identity. Add it as a new course.");
+        // Temporarily archive the list so swaps of positions or names cannot hit
+        // active-only uniqueness constraints. No course row is ever replaced.
+        jdbc.update("UPDATE professor_courses SET archived = TRUE WHERE user_id = ?", user.id());
+        for (int i = 0; i < courses.size(); i++) {
+            var course = courses.get(i);
+            jdbc.update("""
+                INSERT INTO professor_courses (user_id, id, title, position) VALUES (?, ?, ?, ?)
+                ON CONFLICT (user_id, id) DO UPDATE
+                SET title = EXCLUDED.title, position = EXCLUDED.position, archived = FALSE
+                """, user.id(), course.id(), course.title(), i);
+        }
         return get(user);
     }
     private List<Course> validate(ProfileUpdate update) {

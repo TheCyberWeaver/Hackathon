@@ -2,6 +2,14 @@ import { useEffect, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
 import { QuestionCard } from './components/QuestionCard'
 import StudentHistory from './components/StudentHistory'
+import CourseHistory from '../components/CourseHistory'
+import SessionRemovalDialog from '../components/SessionRemovalDialog'
+import { historyCourses, lectureCourseKey } from '../lib/courseHistory'
+import {
+  useHistoryRoute,
+  notifyHistoryRoute,
+  saveHistoryPosition,
+} from '../lib/useHistoryRoute'
 import StudentLecturePage from './components/StudentLecturePage'
 import StudentJoinPage from './StudentJoinPage'
 import { SendIcon } from './components/Icons'
@@ -84,8 +92,10 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
   const [historyLoading, setHistoryLoading] = useState(true)
   const [historyError, setHistoryError] = useState('')
   const [historyRetry, setHistoryRetry] = useState(0)
-  const [historyOrder, setHistoryOrder] = useState<'newest' | 'oldest'>(
-    'newest',
+  const route = useHistoryRoute()
+  const [historyLoaded, setHistoryLoaded] = useState(false)
+  const [linkedPastLecture, setLinkedPastLecture] = useState<Lecture | null>(
+    null,
   )
   const [requestedLectureId, setRequestedLectureId] = useState(initialLectureId)
   const [studentSummary, setStudentSummary] = useState<{
@@ -99,11 +109,22 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
   const [removingHistoryId, setRemovingHistoryId] = useState<string | null>(
     null,
   )
+  const [historyRemovalTarget, setHistoryRemovalTarget] =
+    useState<Lecture | null>(null)
+  const [historyRemovalError, setHistoryRemovalError] = useState('')
   const selectedLecture = viewedLecture
   const requestedLecture =
     lectures.find((lecture) => lecture.id === requestedLectureId) ??
+    (linkedPastLecture?.id === requestedLectureId
+      ? linkedPastLecture
+      : undefined) ??
     (viewedLecture?.id === requestedLectureId ? viewedLecture : undefined)
-  const readingLecture = page === 'questions' && !!requestedLecture?.endedAt
+  const unresolvedLink =
+    !!new URLSearchParams(window.location.search).get('lecture') &&
+    !!requestedLectureId &&
+    !requestedLecture
+  const readingLecture =
+    page === 'questions' && (!!requestedLecture?.endedAt || unresolvedLink)
   const history = useStudentHistory(
     page === 'pastLectures'
       ? lectures
@@ -111,7 +132,32 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
         ? [requestedLecture]
         : [],
     page === 'pastLectures' || readingLecture,
+    readingLecture ? 5000 : 30_000,
   )
+  const courses = historyCourses(lectures)
+  const selectedCourseKey =
+    readingLecture && requestedLecture
+      ? lectureCourseKey(requestedLecture)
+      : page === 'pastLectures'
+        ? route.courseKey
+        : ''
+  const parentCourse = courses.find(
+    (course) => course.key === selectedCourseKey,
+  )
+  const backParams = new URLSearchParams(window.location.search)
+  backParams.delete('lecture')
+  backParams.delete('code')
+  if (selectedCourseKey) backParams.set('course', selectedCourseKey)
+  if (parentCourse || requestedLecture)
+    backParams.set(
+      'name',
+      parentCourse?.title ||
+        requestedLecture?.courseName ||
+        requestedLecture?.course ||
+        requestedLecture?.title ||
+        '',
+    )
+  const historyBackUrl = `${basePath}/past-lectures?${backParams}`
   const readOnly =
     !selectedLecture?.startedAt ||
     !!selectedLecture.endedAt ||
@@ -300,12 +346,14 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
     historyMutationPending.current = true
     historyVersion.current++
     setRemovingHistoryId(lecture.id)
+    setHistoryRemovalError('')
     try {
       await removeLectureFromHistory(lecture.id)
       setLectures((items) => items.filter((item) => item.id !== lecture.id))
+      setHistoryRemovalTarget(null)
       showToast('Lecture removed from your history.')
     } catch (error) {
-      showToast(
+      setHistoryRemovalError(
         error instanceof Error
           ? error.message
           : 'Could not remove this lecture from your history.',
@@ -346,19 +394,38 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
       return
     }
     const path = `${basePath}/${nextPage === 'pastLectures' ? 'past-lectures' : nextPage}`
-    if (window.location.pathname !== path) {
+    if (window.location.pathname !== path || window.location.search) {
       window.history.pushState(null, '', path)
     }
+    notifyHistoryRoute()
+    if (nextPage === 'pastLectures') setHistoryRetry((attempt) => attempt + 1)
     setPage(nextPage)
     setFocused(false)
     window.scrollTo(0, 0)
   }
 
+  function navigateHistory(url: string) {
+    saveHistoryPosition()
+    const state = readingLecture
+      ? { historyScroll: window.history.state?.returnScroll || 0 }
+      : null
+    window.history.pushState(state, '', url)
+    notifyHistoryRoute()
+    setPage('pastLectures')
+    setHistoryRetry((attempt) => attempt + 1)
+    window.scrollTo(0, state?.historyScroll || 0)
+  }
+  function lectureHref(id: string) {
+    const params = new URLSearchParams(window.location.search)
+    params.set('lecture', id)
+    return `${basePath}?${params}`
+  }
   function openPastLecture(id: string) {
+    saveHistoryPosition()
     window.history.pushState(
-      null,
+      { returnScroll: window.scrollY },
       '',
-      `${basePath}?lecture=${encodeURIComponent(id)}`,
+      lectureHref(id),
     )
     setRequestedLectureId(id)
     setPage('questions')
@@ -399,6 +466,7 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
       (items) => {
         if (historyMutationPending.current) return
         setLectures(items)
+        setHistoryLoaded(true)
         setHistoryLoading(false)
         setHistoryError('')
       },
@@ -454,9 +522,24 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
       if (!active) return
       setJoinedSession(session)
       if (linkedCode || linkedLecture) {
-        const lecture = linkedCode
-          ? await visitLectureByCode(linkedCode)
-          : await visitLecture(linkedLecture!)
+        let lecture: Lecture
+        if (linkedCode) {
+          lecture = await visitLectureByCode(linkedCode)
+        } else {
+          const preview = await getLecture(linkedLecture!)
+          if (!active) return
+          if (preview.endedAt) {
+            if (session) {
+              const live = await getLecture(session.id)
+              if (!active) return
+              selectLecture(live)
+            }
+            setLinkedPastLecture(preview)
+            setRequestedLectureId(preview.id)
+            return
+          }
+          lecture = await visitLecture(linkedLecture!)
+        }
         if (!active) return
         rememberVisit(lecture)
         if (lecture.startedAt && !lecture.endedAt) {
@@ -518,7 +601,34 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
         .then((lecture) => {
           if (active) setViewedLecture(lecture)
         })
-        .catch(() => {})
+        .catch((error: unknown) => {
+          if (
+            !active ||
+            !(error instanceof ApiRequestError) ||
+            error.status !== 404
+          )
+            return
+          // The session may have ended and been deleted between live polls.
+          // Clear its cached pool as well as history, preserving any other live membership.
+          active = false
+          mutationVersion.current++
+          historyVersion.current++
+          selectedIdRef.current = ''
+          setViewedLecture(null)
+          setLectureId('')
+          setQuestions([])
+          setDraft('')
+          setReportTarget(null)
+          setModerationWarning(null)
+          setJoinedSession((current) =>
+            current?.id === lectureId ? null : current,
+          )
+          setLectures((items) => items.filter((item) => item.id !== lectureId))
+          setLinkedPastLecture((current) =>
+            current?.id === lectureId ? null : current,
+          )
+          setJoinError('This session is no longer available.')
+        })
       return listQuestions(lectureId)
         .then((items) => {
           if (
@@ -792,7 +902,12 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
       <SidePanel
         user={user}
         role="student"
-        page={readingLecture ? null : page}
+        page={readingLecture ? 'pastLectures' : page}
+        courses={courses}
+        selectedCourse={selectedCourseKey}
+        historyLoading={historyLoading}
+        historyError={historyError}
+        onCourseNavigate={navigateHistory}
         onNavigate={navigate}
         launcherClassName="side-panel-launcher--student"
       />
@@ -800,13 +915,25 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
         <StudentLecturePage
           lecture={requestedLecture}
           loading={!requestedLecture && (historyLoading || sessionChecking)}
-          error={!requestedLecture && !!historyError}
+          error={!requestedLecture && !!(joinError || historyError)}
           entry={history.entries[requestedLectureId]}
           onRetry={() => {
-            if (!requestedLecture || historyError) retryHistory()
+            if (!requestedLecture) {
+              setJoinError('')
+              setSessionChecking(true)
+              setLocationVersion((version) => version + 1)
+            }
+            if (historyError) retryHistory()
             if (requestedLecture) void history.retry(requestedLectureId)
           }}
-          onBack={() => navigate('pastLectures')}
+          backHref={historyBackUrl}
+          backLabel={
+            parentCourse?.title ||
+            requestedLecture?.courseName ||
+            requestedLecture?.course ||
+            'Past Lectures'
+          }
+          onBack={() => navigateHistory(historyBackUrl)}
         />
       ) : page === 'questions' && !lectureId ? (
         <StudentJoinPage
@@ -1182,21 +1309,39 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
           }
         >
           <section className="placeholder-page__content page-column">
-            <h1>{page === 'pastLectures' ? 'Past Lectures' : 'Settings'}</h1>
+            {page !== 'pastLectures' && <h1>Settings</h1>}
             {page === 'pastLectures' ? (
-              <StudentHistory
-                lectures={lectures}
+              <CourseHistory
+                role="student"
+                courses={courses}
+                courseKey={route.courseKey}
+                courseName={route.courseName}
+                filters={route.filters}
                 loading={historyLoading}
-                error={!!historyError}
-                entries={history.entries}
-                removingId={removingHistoryId}
-                order={historyOrder}
-                onOrderChange={setHistoryOrder}
-                onRetryLectures={retryHistory}
-                onRetryQuestions={(id) => void history.retry(id)}
-                onOpenLecture={openPastLecture}
-                onRemoveLecture={(lecture) => void removeFromHistory(lecture)}
-              />
+                loaded={historyLoaded}
+                error={historyError}
+                onRetry={retryHistory}
+                onNavigate={navigateHistory}
+              >
+                {(sessions, title) => (
+                  <StudentHistory
+                    lectures={sessions}
+                    loading={false}
+                    error={false}
+                    entries={history.entries}
+                    removingId={removingHistoryId}
+                    courseTitle={title}
+                    lectureHref={lectureHref}
+                    onRetryLectures={retryHistory}
+                    onRetryQuestions={(id) => void history.retry(id)}
+                    onOpenLecture={openPastLecture}
+                    onRemoveLecture={(lecture) => {
+                      setHistoryRemovalError('')
+                      setHistoryRemovalTarget(lecture)
+                    }}
+                  />
+                )}
+              </CourseHistory>
             ) : (
               <div className="placeholder-page__card student-settings-card">
                 <div>
@@ -1218,6 +1363,15 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
         </main>
       )}
 
+      {historyRemovalTarget && (
+        <SessionRemovalDialog
+          lecture={historyRemovalTarget}
+          busy={removingHistoryId !== null}
+          error={historyRemovalError}
+          onCancel={() => setHistoryRemovalTarget(null)}
+          onConfirm={() => void removeFromHistory(historyRemovalTarget)}
+        />
+      )}
       {reportTarget && (
         <div className="dialog-backdrop" onClick={() => setReportTarget(null)}>
           <div

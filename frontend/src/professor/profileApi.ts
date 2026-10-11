@@ -31,3 +31,7 @@ export function saveProfessorProfile(
     }),
   })
 }
+
+export function getProfessorProfile() {
+  return request<SavedProfessorProfile | null>('/professor/profile')
+}

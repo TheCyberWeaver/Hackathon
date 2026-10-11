@@ -12,6 +12,7 @@ export async function startCourseSession(course: ProfessorCourse) {
     course.title,
     new Date().toISOString(),
     course.title,
+    course.id,
   )
   return changeLectureSession(created.id, 'start')
 }
@@ -61,6 +62,12 @@ export function listArchive() {
 }
 export function deleteQuestion(id: string) {
   return request<void>(`/questions/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  })
+}
+
+export function deleteLecture(id: string) {
+  return request<void>(`/lectures/${encodeURIComponent(id)}`, {
     method: 'DELETE',
   })
 }

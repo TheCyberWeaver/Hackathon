@@ -49,6 +49,9 @@ export type Lecture = {
   lectureTime: string
   canManage: boolean
   course: string
+  courseKey?: string | null
+  courseName?: string | null
+  courseArchived?: boolean
   startedAt: string | null
   endedAt: string | null
   questionsPaused: boolean
@@ -93,10 +96,15 @@ export function watchLectures(
       window.removeEventListener('focus', refresh)
   }
 }
-export function createLecture(title: string, lectureTime: string, course = '') {
+export function createLecture(
+  title: string,
+  lectureTime: string,
+  course = '',
+  courseId?: string,
+) {
   return request<Lecture>('/lectures', {
     method: 'POST',
-    body: JSON.stringify({ title, lectureTime, course }),
+    body: JSON.stringify({ title, lectureTime, course, courseId }),
   })
 }
 export function changeLectureSession(

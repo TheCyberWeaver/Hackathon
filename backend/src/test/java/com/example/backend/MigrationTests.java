@@ -28,7 +28,7 @@ class MigrationTests extends PostgresTestSupport {
             db.update("INSERT INTO lecture_history (user_id, lecture_id) VALUES (?, ?)", user, lecture);
 
             var flyway = Flyway.configure().dataSource(source).schemas(schema).load();
-            assertEquals(1, flyway.migrate().migrationsExecuted);
+            assertEquals(2, flyway.migrate().migrationsExecuted);
             assertEquals(3L, db.queryForObject("SELECT count(*) FROM lectures WHERE join_code ~ '^[0-9A-F]{6}$'", Long.class));
             assertEquals("000001", db.queryForObject("SELECT join_code FROM lectures WHERE title = 'Valid six-character code'", String.class));
             assertEquals(lecture, db.queryForObject("SELECT lecture_id FROM questions WHERE id = ?", Long.class, question));
@@ -51,10 +51,40 @@ class MigrationTests extends PostgresTestSupport {
             db.execute("ALTER TABLE lectures ALTER COLUMN join_code SET DEFAULT upper(lpad(to_hex(nextval('test_join_codes')), 6, '0'))");
             var repository = new com.example.backend.pool.PoolRepository(db);
             var transaction = new org.springframework.transaction.support.TransactionTemplate(new org.springframework.jdbc.datasource.DataSourceTransactionManager(source));
-            long created = transaction.execute(status -> repository.createLecture("After collision", java.time.OffsetDateTime.now(), user, "Algorithms"));
+            long created = transaction.execute(status -> repository.createLecture("After collision", java.time.OffsetDateTime.now(), user, "Algorithms", null));
             assertNotEquals("000001", db.queryForObject("SELECT join_code FROM lectures WHERE id = ?", String.class, created));
             assertTrue(db.queryForObject("SELECT last_value > 1 FROM test_join_codes", Boolean.class));
             assertEquals(1L, db.queryForObject("SELECT count(*) FROM lectures WHERE title = 'After collision'", Long.class));
+        } finally { admin.execute("DROP SCHEMA " + schema + " CASCADE"); }
+    }
+
+    @Test void courseMigrationRetainsLegacyRecordsWithoutGuessingTheirIdentity() {
+        String schema = "courses_" + UUID.randomUUID().toString().replace("-", "");
+        String url = POSTGRES.getJdbcUrl("postgres", "postgres");
+        var admin = new JdbcTemplate(new DriverManagerDataSource(url, "postgres", ""));
+        admin.execute("CREATE SCHEMA " + schema);
+        try {
+            var source = new DriverManagerDataSource(url + (url.contains("?") ? "&" : "?") + "currentSchema=" + schema, "postgres", "");
+            var db = new JdbcTemplate(source);
+            Flyway.configure().dataSource(source).schemas(schema).target("11").load().migrate();
+            long owner = db.queryForObject("INSERT INTO users (eth_identity_ref) VALUES ('owner') RETURNING id", Long.class);
+            db.update("INSERT INTO professor_profiles (user_id, onboarding_completed, revision) VALUES (?, TRUE, 4)", owner);
+            db.update("INSERT INTO professor_courses (user_id, id, title, position) VALUES (?, 'a', 'Algebra', 0)", owner);
+            long lecture = db.queryForObject("INSERT INTO lectures (title, course, lecture_time, owner_id) VALUES ('Old title', 'Algebra', CURRENT_TIMESTAMP, ?) RETURNING id", Long.class, owner);
+            db.update("INSERT INTO lecture_history (user_id, lecture_id) VALUES (?, ?)", owner, lecture);
+            var flyway = Flyway.configure().dataSource(source).schemas(schema).load();
+            assertEquals(1, flyway.migrate().migrationsExecuted);
+            assertNull(db.queryForObject("SELECT course_id FROM lectures WHERE id = ?", String.class, lecture));
+            assertEquals("Old title", db.queryForObject("SELECT title FROM lectures WHERE id = ?", String.class, lecture));
+            assertEquals(1L, db.queryForObject("SELECT count(*) FROM lecture_history", Long.class));
+            assertEquals(4L, db.queryForObject("SELECT revision FROM professor_profiles", Long.class));
+            assertFalse(db.queryForObject("SELECT archived FROM professor_courses", Boolean.class));
+            db.update("UPDATE lectures SET course_id = 'a' WHERE id = ?", lecture);
+            assertThrows(org.springframework.dao.DataIntegrityViolationException.class, () -> db.update("DELETE FROM professor_courses WHERE user_id = ?", owner));
+            db.update("UPDATE professor_courses SET archived = TRUE WHERE user_id = ?", owner);
+            db.update("INSERT INTO professor_courses (user_id, id, title, position) VALUES (?, 'new-a', 'Algebra', 0)", owner);
+            assertEquals("a", db.queryForObject("SELECT course_id FROM lectures WHERE id = ?", String.class, lecture));
+            assertEquals(0, flyway.migrate().migrationsExecuted);
         } finally { admin.execute("DROP SCHEMA " + schema + " CASCADE"); }
     }
 

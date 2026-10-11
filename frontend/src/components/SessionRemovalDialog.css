@@ -1,0 +1,99 @@
+.session-removal-dialog {
+  width: min(440px, calc(100vw - 32px));
+  max-height: calc(100dvh - 48px);
+  margin: auto;
+  padding: 24px;
+  overflow-y: auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  background: #fff;
+  color: #172033;
+  box-shadow: 0 24px 70px #0f172a30;
+}
+.session-removal-dialog::backdrop {
+  background: #0f172a66;
+}
+.session-removal-dialog h2 {
+  margin: 0;
+  font-size: 21px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+.session-removal-dialog p {
+  margin: 16px 0 0;
+  font-size: 14px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.session-removal-context {
+  display: grid;
+  gap: 2px;
+  padding: 12px;
+  border-radius: 8px;
+  background: #f5f7fb;
+}
+.session-removal-context span {
+  color: #64748b;
+  font-size: 12px;
+}
+.session-removal-dialog .session-removal-error {
+  color: #b91c1c;
+}
+.session-removal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 24px;
+}
+.session-removal-actions button {
+  min-height: 44px;
+  padding: 10px 16px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: white;
+  color: #334155;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.session-removal-actions .session-removal-confirm {
+  border-color: #b91c1c;
+  background: #b91c1c;
+  color: white;
+}
+.session-removal-actions button:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+.session-removal-actions button:focus-visible,
+.professor-history-remove:focus-visible {
+  outline: 2px solid #2458ff;
+  outline-offset: 3px;
+}
+.professor-history-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0 8px 2px;
+}
+.professor-history-remove {
+  min-height: 44px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #64748b;
+  font: inherit;
+  font-size: 12px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.professor-history-remove:hover {
+  color: #2458ff;
+}
+.professor-history-remove:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}

@@ -1,15 +1,20 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { listQuestions, type Question } from './studentApi'
-import type { Lecture } from '../../lib/poolApi'
+import { ApiRequestError, type Lecture } from '../../lib/poolApi'
 
 export type HistoryQuestions = {
   questions?: Question[]
   loading: boolean
   error: boolean
+  unavailable?: boolean
 }
 
 // Archive reads never touch the joined session or the live question pool.
-export function useStudentHistory(lectures: Lecture[], enabled: boolean) {
+export function useStudentHistory(
+  lectures: Lecture[],
+  enabled: boolean,
+  refreshMs = 30_000,
+) {
   const [entries, setEntries] = useState<Record<string, HistoryQuestions>>({})
   const pending = useRef(new Set<string>())
   const archiveIds = JSON.stringify(
@@ -31,10 +36,14 @@ export function useStudentHistory(lectures: Lecture[], enabled: boolean) {
         ...current,
         [id]: { questions, loading: false, error: false },
       }))
-    } catch {
+    } catch (error) {
       setEntries((current) => ({
         ...current,
-        [id]: { ...current[id], loading: false, error: true },
+        // A deleted session must not keep displaying cached questions.
+        [id]:
+          error instanceof ApiRequestError && error.status === 404
+            ? { loading: false, error: false, unavailable: true }
+            : { ...current[id], loading: false, error: true },
       }))
     } finally {
       pending.current.delete(id)
@@ -46,13 +55,13 @@ export function useStudentHistory(lectures: Lecture[], enabled: boolean) {
     const ids: string[] = JSON.parse(archiveIds)
     const refresh = () => ids.forEach((id) => void load(id))
     refresh()
-    const timer = window.setInterval(refresh, 30_000)
+    const timer = window.setInterval(refresh, refreshMs)
     window.addEventListener('focus', refresh)
     return () => {
       window.clearInterval(timer)
       window.removeEventListener('focus', refresh)
     }
-  }, [archiveIds, enabled, load])
+  }, [archiveIds, enabled, load, refreshMs])
 
   return { entries, retry: load }
 }

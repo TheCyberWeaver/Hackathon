@@ -96,10 +96,12 @@ for (const mobile of [false, true]) {
 
       await p.clock.install()
       await p.goto('/student/past-lectures')
+      await expect(p.locator('.course-card')).toHaveCount(1)
+      await p.locator('.course-card').click()
       await expect(p.locator('.student-history-entry')).toHaveCount(1)
       await expect(p.getByText(unseen.title)).toHaveCount(0)
       await expect(p.getByText(taught.title)).toHaveCount(0)
-      await p.getByRole('link', { name: new RegExp(past.title) }).click()
+      await p.locator('.student-history-summary').click()
       await expect(p.getByRole('heading', { level: 1 })).toHaveText(past.title)
       await expect(p.locator('.student-history-question')).toHaveCount(2)
       await expect(p.locator('textarea')).toHaveCount(0)
@@ -131,6 +133,7 @@ for (const mobile of [false, true]) {
       )
       await expect(p.locator('textarea')).toBeEnabled()
       await nav(p, 'Past Lectures')
+      await p.locator('.course-card').click()
       await expect(p.locator('.student-history-entry')).toHaveCount(1)
       expect(
         (await api(learner.context, 'GET', '/sessions/mine')).session.id,
@@ -145,6 +148,7 @@ for (const mobile of [false, true]) {
       await nav(p, 'Current Lecture')
       await expect(p.locator('textarea')).toBeEnabled()
       await nav(p, 'Past Lectures')
+      await p.locator('.course-card').click()
       await p.clock.fastForward(6_000)
       await expect(p.locator('.student-history-entry')).toHaveCount(1)
       expect(
@@ -159,6 +163,10 @@ for (const mobile of [false, true]) {
           exact: true,
         })
         .click()
+      await p
+        .getByRole('dialog')
+        .getByRole('button', { name: 'Remove from history', exact: true })
+        .click()
       await expect(p.locator('.student-history-entry')).toHaveCount(0)
       expect(
         (await api(peer.context, 'GET', '/student/lectures/history')).map(
@@ -169,7 +177,11 @@ for (const mobile of [false, true]) {
         await api(peer.context, 'GET', `/lectures/${past.id}/questions`),
       ).toHaveLength(2)
       await p.reload()
-      await expect(p.getByText('No past lectures yet.')).toBeVisible()
+      await expect(
+        p.getByText(
+          'No saved sessions are available for this course in your history.',
+        ),
+      ).toBeVisible()
 
       // Both shared-link formats open ended pools without replacing active membership.
       await p.goto(`/student?lecture=${past.id}`)
@@ -179,7 +191,7 @@ for (const mobile of [false, true]) {
         (await api(learner.context, 'GET', '/student/lectures/history')).map(
           (item: { id: string }) => item.id,
         ),
-      ).toEqual([past.id])
+      ).toEqual([])
       expect(
         (await api(learner.context, 'GET', '/sessions/mine')).session.id,
       ).toBe(current.id)
@@ -197,8 +209,11 @@ for (const mobile of [false, true]) {
         p.getByRole('heading', { name: 'No session running' }),
       ).toBeVisible()
       await nav(p, 'Past Lectures')
+      await p.locator('.course-card').click()
       await expect(p.locator('details')).toHaveCount(1)
-      await expect(p.locator('details')).toContainText(taught.title)
+      await expect(p.getByRole('heading', { level: 1 })).toHaveText(
+        taught.title,
+      )
       await expect(p.locator('details')).not.toContainText(past.title)
     } finally {
       await Promise.all([
@@ -232,7 +247,9 @@ test('switching accounts clears student review and active-session state in the s
     await expect(first.page.locator('textarea')).toHaveCount(0)
     await expect(first.page).not.toHaveURL(/lecture=|code=/)
     await nav(first.page, 'Past Lectures')
-    await expect(first.page.getByText('No past lectures yet.')).toBeVisible()
+    await expect(
+      first.page.getByText(/No saved past sessions yet/),
+    ).toBeVisible()
     expect(
       await api(other.context, 'GET', '/student/lectures/history'),
     ).toEqual([])

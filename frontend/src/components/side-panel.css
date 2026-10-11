@@ -120,7 +120,9 @@
   background: transparent;
   color: #0f172a;
   text-align: left;
-  transition: background-color 160ms ease, color 160ms ease;
+  transition:
+    background-color 160ms ease,
+    color 160ms ease;
 }
 @media (hover: hover) {
   .side-panel-account-action:hover {
@@ -223,4 +225,79 @@
   .side-panel[open]::backdrop {
     animation: none;
   }
+}
+
+.side-panel-heading,
+.side-panel-footer {
+  flex-shrink: 0;
+}
+.side-panel-nav {
+  min-height: 0;
+  overflow: hidden;
+  padding: 3px;
+  margin-bottom: 20px;
+}
+.side-panel-nav > .side-panel-link {
+  flex-shrink: 0;
+}
+.side-panel-history-heading {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+}
+.side-panel-history-heading > .side-panel-link {
+  flex: 1;
+}
+.side-panel-course-toggle {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  min-height: 44px;
+  border: 0;
+  border-radius: 8px;
+  color: #64748b;
+  background: #f1f5f9;
+}
+.side-panel-course-toggle svg {
+  width: 20px;
+  height: 20px;
+}
+.side-panel-courses {
+  min-height: 0;
+  overflow-y: auto;
+  margin: 4px 0 4px 16px;
+  padding-left: 8px;
+  border-left: 1px solid #cbd5e1;
+}
+.side-panel-course {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 44px;
+  padding: 10px;
+  border-radius: 8px;
+  color: #475569;
+  font-size: 13px;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+.side-panel-course small {
+  margin-top: 3px;
+  font-size: 10px;
+  color: #64748b;
+}
+.side-panel-course:hover,
+.side-panel-course[aria-current='page'] {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+.side-panel-course:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: -2px;
+}
+.side-panel-course-note {
+  padding: 8px;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.6;
 }
