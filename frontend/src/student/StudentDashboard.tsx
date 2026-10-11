@@ -1168,7 +1168,7 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
                     >
                       {questionsPaused
                         ? 'Submissions are closed right now.'
-                        : "Your name isn't shown on cards."}
+                        : "Your name stays anonymous."}
                     </span>
                     <div className="composer__send">
                       {draft.length > 160 && (
