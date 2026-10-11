@@ -215,7 +215,9 @@ test('professor ending a live lecture presents the student with an explicit next
   const p = learner.page
   try {
     const current = await lecture(owner.context, 'Ending together')
-    await api(learner.context, 'POST', '/sessions/join', { code: current.id })
+    await api(learner.context, 'POST', '/sessions/join', {
+      code: current.joinCode ?? current.id,
+    })
     await p.clock.install()
     await p.goto('/student')
     await expect(p.locator('textarea')).toBeEnabled()

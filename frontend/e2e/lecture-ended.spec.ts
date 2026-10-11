@@ -3,6 +3,7 @@ import { test, expect, type Page } from '@playwright/test'
 async function fixture(page: Page, withPastLecture = false) {
   const lecture = {
     id: '41',
+    joinCode: 'A1B2C3',
     title: 'Algorithms',
     course: 'Algorithms',
     lectureTime: '2026-10-11T09:00:00Z',
@@ -38,7 +39,7 @@ async function fixture(page: Page, withPastLecture = false) {
           ? null
           : {
               id: '41',
-              code: '41',
+              code: lecture.joinCode,
               course: lecture.course,
               startedAt: lecture.startedAt,
             },
@@ -46,7 +47,7 @@ async function fixture(page: Page, withPastLecture = false) {
     else if (path === '/api/sessions/join')
       data = {
         id: '41',
-        code: '41',
+        code: lecture.joinCode,
         course: lecture.course,
         startedAt: lecture.startedAt,
       }
@@ -85,6 +86,9 @@ for (const first of ['history', 'detail', 'membership'] as const) {
     await page.clock.install()
     await page.goto('/student?lecture=41')
     await expect(page.locator('textarea')).toBeEnabled()
+    const displayedCode = await page
+      .locator('.student-session-code')
+      .innerText()
     if (first === 'membership') {
       state.membershipCleared = true
       await page.clock.fastForward(11_000)
@@ -140,7 +144,9 @@ for (const first of ['history', 'detail', 'membership'] as const) {
     await expect(page.locator('.student-session-course')).toHaveText(
       'Algorithms',
     )
-    await expect(page.locator('.student-session-code')).toHaveText('Code 41')
+    await expect(page.locator('.student-session-code')).toHaveText(
+      displayedCode,
+    )
     await expect(page.locator('.question-card:visible')).toContainText(
       'Why is this algorithm linear?',
     )
