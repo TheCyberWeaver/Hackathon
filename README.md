@@ -19,3 +19,5 @@ From `backend/`, run `./gradlew.bat test bootJar` on Windows (`./gradlew test bo
 Use `./deploy-webapp.ps1` for the frontend and Java backend. The optional moderation service has its own `./deploy-moderation.ps1`; the web app always checks its bundled sensitive-word list, including when moderation is stopped. See the [deployment and recovery guide](deploy/README.md) before operating the VM.
 
 Documentation: [API and permissions](docs/API.md), [database schema](docs/Database_State.md), and [moderation service](moderation/README.md).
+
+Test?
