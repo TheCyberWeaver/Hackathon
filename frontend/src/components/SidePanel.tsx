@@ -143,9 +143,9 @@ export default function SidePanel({
                 type="button"
                 onClick={() => close('profile')}
                 aria-current={page === 'profile' ? 'page' : undefined}
-                className="side-panel-profile"
+                className="side-panel-account-action"
               >
-                <span className="side-panel-avatar">
+                <span className="side-panel-account-icon">
                   <ProfileIcon className="size-5" />
                 </span>
                 <span className="side-panel-person">
@@ -158,9 +158,12 @@ export default function SidePanel({
                 aria-label="Settings"
                 aria-current={page === 'settings' ? 'page' : undefined}
                 onClick={() => close('settings')}
-                className="side-panel-settings"
+                className="side-panel-account-action"
               >
-                <GearIcon className="size-5" />
+                <span className="side-panel-account-icon">
+                  <GearIcon className="size-5" />
+                </span>
+                <span className="side-panel-account-label">Settings</span>
               </button>
             </div>
             <button
