@@ -12,6 +12,7 @@ public final class ApiModels {
     public record JoinRequest(String code) {}
     public record SharedSession(String id, String code, String course, OffsetDateTime startedAt) {}
     public record JoinedSession(SharedSession session) {}
+    public record SessionStats(long studentCount) {}
     public record Summary(long lectureCount, long unansweredCount, long answeredCount) {}
     public record StudentSummary(long submittedCount, long answeredCount) {}
     public record ArchivedLecture(Lecture lecture, java.util.List<ProfessorQuestion> questions) {}

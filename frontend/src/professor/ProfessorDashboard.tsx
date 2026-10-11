@@ -22,6 +22,7 @@ import type { CurrentUser } from '../lib/api'
 import type { ProfessorCourse } from './professorProfile'
 import CourseChooser from './CourseChooser'
 import CourseSettings from './CourseSettings'
+import LectureSessionStats from './LectureSessionStats'
 import {
   filterOpenQuestions,
   sortQuestions,
@@ -843,6 +844,12 @@ export default function ProfessorDashboard({
                         : 'Students can submit new questions to this lecture.'}
                     </span>
                   </span>
+                  <LectureSessionStats
+                    key={lectureId}
+                    lectureId={lectureId}
+                    startedAt={lectureStartedAt}
+                    now={now}
+                  />
                 </div>
               </div>
               <div

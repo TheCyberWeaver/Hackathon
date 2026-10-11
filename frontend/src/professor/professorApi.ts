@@ -32,6 +32,11 @@ export function listProfessorQuestions(lectureId: string) {
     `/lectures/${encodeURIComponent(lectureId)}/professor/questions`,
   )
 }
+export function getSessionStats(lectureId: string) {
+  return request<{ studentCount: number }>(
+    `/lectures/${encodeURIComponent(lectureId)}/professor/session-stats`,
+  )
+}
 export function changeQuestionStatus(id: string, status: QuestionStatus) {
   return request<Question>(`/questions/${encodeURIComponent(id)}/status`, {
     method: 'PATCH',
