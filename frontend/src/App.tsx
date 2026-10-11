@@ -6,6 +6,7 @@ import type { ProfessorCourse } from './professor/professorProfile'
 import {
   loadProfessorProfile,
   saveProfessorProfile,
+  getProfessorProfile,
   type SavedProfessorProfile,
 } from './professor/profileApi'
 import { ApiRequestError } from './lib/poolApi'
@@ -47,6 +48,42 @@ function ProfessorSpace({
       active = false
     }
   }, [user.id, attempt])
+
+  useEffect(() => {
+    let active = true
+    const refresh = () => {
+      // Keep an editor's revision fixed so stale edits still receive a conflict.
+      if (
+        ['/professor/settings', '/professor/start'].includes(
+          window.location.pathname,
+        )
+      )
+        return
+      void getProfessorProfile()
+        .then((saved) => {
+          if (
+            active &&
+            saved &&
+            !['/professor/settings', '/professor/start'].includes(
+              window.location.pathname,
+            )
+          )
+            setProfile((current) =>
+              !current || saved.revision > current.revision ? saved : current,
+            )
+        })
+        .catch(() => {
+          /* Keep the last saved profile on a recoverable refresh failure. */
+        })
+    }
+    const timer = window.setInterval(refresh, 5000)
+    window.addEventListener('focus', refresh)
+    return () => {
+      active = false
+      window.clearInterval(timer)
+      window.removeEventListener('focus', refresh)
+    }
+  }, [user.id])
 
   async function saveCourses(courses: ProfessorCourse[], completed?: boolean) {
     if (!profile) throw new Error('Your profile is still loading.')
@@ -140,8 +177,17 @@ export default function App() {
           if (requestController.signal.aborted) return
           if (signedInUserId.current && signedInUserId.current !== user.id) {
             const url = new URL(window.location.href)
-            url.searchParams.delete('lecture')
-            url.searchParams.delete('code')
+            for (const key of [
+              'lecture',
+              'code',
+              'course',
+              'name',
+              'order',
+              'dates',
+              'from',
+              'to',
+            ])
+              url.searchParams.delete(key)
             window.history.replaceState(null, '', url)
           }
           signedInUserId.current = user.id

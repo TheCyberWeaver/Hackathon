@@ -33,7 +33,9 @@ public class PoolService {
         if (request == null || request.lectureTime() == null) throw new ApiException(BAD_REQUEST, "Lecture time is required.");
         var title = text(request.title(), 200, "Lecture title");
         var course = request.course() == null || request.course().isBlank() ? "" : text(request.course(), 200, "Course");
-        var id = repository.createLecture(title, request.lectureTime(), user.id(), course);
+        // Legacy API clients may omit identity. Never infer it from a course label.
+        if (request.courseId() != null) course = repository.activeCourseTitle(user.id(), request.courseId());
+        var id = repository.createLecture(title, request.lectureTime(), user.id(), course, request.courseId());
         return lecture(user, id);
     }
     @Transactional

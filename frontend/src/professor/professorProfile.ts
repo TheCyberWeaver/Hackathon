@@ -1,4 +1,4 @@
-export type ProfessorCourse = { id: string; title: string }
+export type ProfessorCourse = { id: string; title: string; historyKey?: string }
 
 export type ProfessorProfile = {
   schemaVersion: 1

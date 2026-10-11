@@ -32,6 +32,13 @@ import { ThumbsUpIcon } from '../components/Icons'
 import JoinQrCode from '../components/JoinQrCode'
 import { getSessionInvite, joinUrl, type SharedSession } from '../lib/sessions'
 import SidePanel, { type SidePanelPage } from '../components/SidePanel'
+import CourseHistory from '../components/CourseHistory'
+import { historyCourses, sessionStart } from '../lib/courseHistory'
+import {
+  useHistoryRoute,
+  notifyHistoryRoute,
+  saveHistoryPosition,
+} from '../lib/useHistoryRoute'
 import './professor.css'
 
 const questionTabs = ['open', 'answered'] as const
@@ -62,12 +69,6 @@ const timestampFormatter = new Intl.DateTimeFormat('en-US', {
   dateStyle: 'medium',
   timeStyle: 'short',
 })
-function lectureTimeRange(lecture: Lecture) {
-  const start = new Date(lecture.startedAt || lecture.lectureTime)
-  if (!lecture.endedAt) return timestampFormatter.format(start)
-  const end = new Date(lecture.endedAt)
-  return timestampFormatter.formatRange(start, end)
-}
 
 function ChevronIcon({ expanded }: { expanded: boolean }) {
   return (
@@ -148,7 +149,14 @@ export default function ProfessorDashboard({
   const [lectures, setLectures] = useState<Lecture[]>([])
   const [lectureId, setLectureId] = useState(initialLectureId)
   const [questions, setQuestions] = useState<Question[]>([])
+  const route = useHistoryRoute()
+  const [archiveLoaded, setArchiveLoaded] = useState(false)
+  const [archiveError, setArchiveError] = useState('')
+  const [archiveRetry, setArchiveRetry] = useState(0)
+  const [lecturesLoaded, setLecturesLoaded] = useState(false)
+  const [lectureError, setLectureError] = useState('')
   const [archive, setArchive] = useState<ArchivedLecture[]>([])
+  const groupedCourses = historyCourses(lectures, courses)
   const [summary, setSummary] = useState<Summary>({
     lectureCount: 0,
     unansweredCount: 0,
@@ -253,6 +261,8 @@ export default function ProfessorDashboard({
           if (mutationPending.current) return
           const managed = items.filter((lecture) => lecture.canManage)
           setLectures(managed)
+          setLecturesLoaded(true)
+          setLectureError('')
           setApiError('')
           setLectureId(
             (id) =>
@@ -263,18 +273,21 @@ export default function ProfessorDashboard({
               '',
           )
         },
-        (error) =>
-          setApiError(
-            error instanceof Error ? error.message : 'Could not load lectures.',
-          ),
+        (error) => {
+          const message =
+            error instanceof Error ? error.message : 'Could not load lectures.'
+          setApiError(message)
+          setLectureError(message)
+        },
         () => mutationVersion.current,
       ),
-    [],
+    [archiveRetry],
   )
 
   useEffect(() => {
     if (!lectureId || !selectedLecture?.canManage) return
-    rememberLecture(lectureId)
+    if (pageFromPath(window.location.pathname) === 'questions')
+      rememberLecture(lectureId)
     let active = true
     const load = async () => {
       const version = mutationVersion.current
@@ -322,7 +335,8 @@ export default function ProfessorDashboard({
           const items = await listArchive()
           if (active) {
             setArchive(items.filter((item) => item.lecture.canManage))
-            setApiError('')
+            setArchiveLoaded(true)
+            setArchiveError('')
           }
         } else {
           const counts = await getSummary()
@@ -332,21 +346,25 @@ export default function ProfessorDashboard({
           }
         }
       } catch (error) {
-        if (active)
-          setApiError(
+        if (active) {
+          const message =
             error instanceof Error
               ? error.message
-              : 'Could not load saved lecture data.',
-          )
+              : 'Could not load saved lecture data.'
+          if (page === 'pastLectures') setArchiveError(message)
+          else setApiError(message)
+        }
       }
     }
     void load()
     const timer = window.setInterval(() => void load(), 5000)
+    window.addEventListener('focus', load)
     return () => {
+      window.removeEventListener('focus', load)
       active = false
       window.clearInterval(timer)
     }
-  }, [page])
+  }, [page, archiveRetry])
 
   useEffect(() => {
     if (!deleteDialogOpen) return
@@ -384,19 +402,29 @@ export default function ProfessorDashboard({
   function navigateTo(nextPage: SidePanelPage) {
     if (
       nextPage === page &&
-      window.location.pathname === professorRoutes[nextPage]
+      window.location.pathname === professorRoutes[nextPage] &&
+      !window.location.search
     )
       return
-    window.history.pushState(
-      null,
-      '',
-      `${professorRoutes[nextPage]}${window.location.search}`,
-    )
+    window.history.pushState(null, '', professorRoutes[nextPage])
+    notifyHistoryRoute()
+    if (nextPage === 'pastLectures') setArchiveRetry((n) => n + 1)
     setPage(nextPage)
     setCourseSelectionPage(false)
     setSessionSharePage(false)
     window.scrollTo(0, 0)
     window.requestAnimationFrame(() => mainHeadingRef.current?.focus())
+  }
+
+  function navigateHistory(url: string) {
+    saveHistoryPosition()
+    window.history.pushState(null, '', url)
+    notifyHistoryRoute()
+    setPage('pastLectures')
+    setCourseSelectionPage(false)
+    setSessionSharePage(false)
+    setArchiveRetry((n) => n + 1)
+    window.scrollTo(0, 0)
   }
 
   function openCourseSelectionPage() {
@@ -619,6 +647,11 @@ export default function ProfessorDashboard({
             role="professor"
             page={page}
             onNavigate={navigateTo}
+            courses={groupedCourses}
+            selectedCourse={page === 'pastLectures' ? route.courseKey : ''}
+            historyLoading={!lecturesLoaded && !lectureError}
+            historyError={lectureError}
+            onCourseNavigate={navigateHistory}
           />
         </div>
       </header>
@@ -1114,61 +1147,93 @@ export default function ProfessorDashboard({
 
       {page === 'pastLectures' && (
         <main className="professor-page-enter mx-auto max-w-[848px] px-5 pb-20 pt-10 sm:px-6 sm:pt-14">
-          <h1
-            ref={mainHeadingRef}
-            tabIndex={-1}
-            className="text-3xl font-semibold tracking-tight outline-none sm:text-4xl"
+          <CourseHistory
+            role="professor"
+            courses={groupedCourses}
+            courseKey={route.courseKey}
+            courseName={route.courseName}
+            filters={route.filters}
+            loading={!lecturesLoaded && !lectureError}
+            loaded={lecturesLoaded}
+            error={lectureError || archiveError}
+            onRetry={() => setArchiveRetry((n) => n + 1)}
+            onNavigate={navigateHistory}
           >
-            Past Lectures
-          </h1>
-          <div className="mt-6 space-y-2">
-            {archive.length === 0 && (
-              <p className="text-sm text-slate-600">No past lectures yet.</p>
-            )}
-            {archive.map(({ lecture, questions }) => (
-              <details
-                key={lecture.id}
-                className="rounded-lg border border-slate-200 bg-slate-50"
-              >
-                <summary className="cursor-pointer px-4 py-3 marker:text-blue-600 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-blue-600">
-                  <span className="font-semibold [overflow-wrap:anywhere]">
-                    {lecture.title}
-                  </span>
-                  {lecture.course && lecture.course !== lecture.title && (
-                    <span className="ml-2 text-sm text-slate-600">
-                      {lecture.course}
-                    </span>
-                  )}
-                  <span className="mt-1 block text-xs text-slate-600">
-                    {lectureTimeRange(lecture)} · {questions.length} questions ·{' '}
-                    {questions.filter((q) => q.answered).length} answered
-                  </span>
-                </summary>
-                <div className="space-y-2 border-t border-slate-200 p-3">
-                  {!questions.length && (
-                    <p className="px-1 text-sm text-slate-500">
-                      No questions in this lecture.
-                    </p>
-                  )}
-                  {questions.map((question) => (
-                    <article
-                      key={question.id}
-                      className="rounded-md border border-slate-200 bg-white px-3 py-2"
-                    >
-                      <p className="text-sm leading-6 [overflow-wrap:anywhere]">
-                        {question.text}
-                      </p>
-                      <span
-                        className={`text-xs ${question.answered ? 'text-emerald-700' : 'text-slate-500'}`}
+            {(sessions, courseTitle) => (
+              <div className="space-y-2">
+                {!archiveLoaded && !archiveError && sessions.length > 0 && (
+                  <p role="status">Loading session questions…</p>
+                )}
+                {sessions.map((lecture) => {
+                  const questions = archive.find(
+                    (entry) => entry.lecture.id === lecture.id,
+                  )?.questions
+                  if (!questions)
+                    return (
+                      <div
+                        key={lecture.id}
+                        className="rounded-lg border border-slate-200 bg-slate-50 p-4"
                       >
-                        {question.answered ? 'Answered' : 'Unanswered'}
-                      </span>
-                    </article>
-                  ))}
-                </div>
-              </details>
-            ))}
-          </div>
+                        <p>{sessionStart(lecture).toLocaleString('en-GB')}</p>
+                        <p className="text-sm text-slate-500">
+                          {archiveError
+                            ? 'Question count unavailable. Try again above.'
+                            : 'Loading question count…'}
+                        </p>
+                      </div>
+                    )
+                  return (
+                    <details
+                      key={lecture.id}
+                      className="rounded-lg border border-slate-200 bg-slate-50"
+                    >
+                      <summary className="cursor-pointer px-4 py-3 marker:text-blue-600 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-blue-600">
+                        <span className="font-semibold [overflow-wrap:anywhere]">
+                          {lecture.title !== courseTitle
+                            ? lecture.title
+                            : sessionStart(lecture).toLocaleDateString(
+                                'en-GB',
+                                { dateStyle: 'medium' },
+                              )}
+                        </span>
+                        <span className="mt-1 block text-xs text-slate-600">
+                          {sessionStart(lecture).toLocaleString('en-GB', {
+                            dateStyle: 'medium',
+                            timeStyle: 'short',
+                          })}{' '}
+                          · {questions.length}{' '}
+                          {questions.length === 1 ? 'question' : 'questions'} ·{' '}
+                          {questions.filter((q) => q.answered).length} answered
+                        </span>
+                      </summary>
+                      <div className="space-y-2 border-t border-slate-200 p-3">
+                        {!questions.length && (
+                          <p className="px-1 text-sm text-slate-500">
+                            No questions in this lecture.
+                          </p>
+                        )}
+                        {questions.map((question) => (
+                          <article
+                            key={question.id}
+                            className="rounded-md border border-slate-200 bg-white px-3 py-2"
+                          >
+                            <p className="text-sm leading-6 [overflow-wrap:anywhere]">
+                              {question.text}
+                            </p>
+                            <span
+                              className={`text-xs ${question.answered ? 'text-emerald-700' : 'text-slate-500'}`}
+                            >
+                              {question.answered ? 'Answered' : 'Unanswered'}
+                            </span>
+                          </article>
+                        ))}
+                      </div>
+                    </details>
+                  )
+                })}
+              </div>
+            )}
+          </CourseHistory>
         </main>
       )}
 

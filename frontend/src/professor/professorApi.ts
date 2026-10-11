@@ -12,6 +12,7 @@ export async function startCourseSession(course: ProfessorCourse) {
     course.title,
     new Date().toISOString(),
     course.title,
+    course.id,
   )
   return changeLectureSession(created.id, 'start')
 }

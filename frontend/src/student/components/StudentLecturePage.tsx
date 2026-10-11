@@ -8,6 +8,8 @@ type Props = {
   entry?: HistoryQuestions
   onRetry: () => void
   onBack: () => void
+  backHref: string
+  backLabel: string
 }
 
 export default function StudentLecturePage({
@@ -17,6 +19,8 @@ export default function StudentLecturePage({
   entry,
   onRetry,
   onBack,
+  backHref,
+  backLabel,
 }: Props) {
   const questions = entry?.questions
   const archived = !!lecture?.endedAt
@@ -25,7 +29,7 @@ export default function StudentLecturePage({
       <section className="page-column">
         <a
           className="student-lecture-back"
-          href="/student/past-lectures"
+          href={backHref}
           onClick={(event) => {
             if (
               event.button !== 0 ||
@@ -39,7 +43,7 @@ export default function StudentLecturePage({
             onBack()
           }}
         >
-          ← Past Lectures
+          ← {backLabel}
         </a>
         <h1>
           {lecture?.title ||

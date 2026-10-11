@@ -14,7 +14,9 @@ const lecture = (
   lectureTime: '2026-10-10T07:00:00Z',
   endedAt: ended ? '2026-10-11T12:00:00Z' : null,
   questionsPaused: ended,
-  course: title,
+  course: ended ? 'Course history sample' : title,
+  courseKey: '1:sample',
+  courseName: 'Course history sample',
   canManage: false,
 })
 const longTitle =
@@ -142,6 +144,7 @@ for (const width of [320, 430, 768, 1280]) {
     }
     await page.locator('textarea').fill('Keep this unsent draft')
     await navigate(page, 'Past Lectures')
+    await page.locator('.course-card').click()
     const titles = page.locator('.student-history-title')
     await expect(titles).toHaveText([
       longTitle,
@@ -153,17 +156,14 @@ for (const width of [320, 430, 768, 1280]) {
       .locator('.student-history-entry')
       .filter({ hasText: longTitle })
     await expect(row).toContainText('2 questions')
-    await expect(row.getByRole('link')).toHaveAttribute(
-      'href',
-      '/student?lecture=13',
-    )
+    await expect(row.getByRole('link')).toHaveAttribute('href', /lecture=13/)
     await expect(row.locator('time')).toHaveAttribute(
       'datetime',
       '2026-10-11T09:15:00.000Z',
     )
     await expect(page.locator('.student-history-question')).toHaveCount(0)
     const readsBefore = { ...data.reads }
-    await page.getByLabel('Sort lectures by date').selectOption('oldest')
+    await page.getByLabel('Sort sessions').selectOption('oldest')
     await expect(titles).toHaveText([
       'Earlier lecture',
       'Morning lecture',
@@ -178,17 +178,17 @@ for (const width of [320, 430, 768, 1280]) {
     await expect
       .poll(() => data.reads['/api/student/lectures/history'])
       .toBeGreaterThan(readsBefore['/api/student/lectures/history'])
-    await expect(page.getByLabel('Sort lectures by date')).toHaveValue('oldest')
+    await expect(page.getByLabel('Sort sessions')).toHaveValue('oldest')
     await row.getByRole('link').click()
-    await page.getByRole('link', { name: '← Past Lectures' }).click()
-    await expect(page.getByLabel('Sort lectures by date')).toHaveValue('oldest')
+    await page.getByRole('link', { name: '← Course history sample' }).click()
+    await expect(page.getByLabel('Sort sessions')).toHaveValue('oldest')
     await expect(titles).toHaveText([
       'Earlier lecture',
       'Morning lecture',
       longTitle,
       'Same start time',
     ])
-    await page.getByLabel('Sort lectures by date').selectOption('newest')
+    await page.getByLabel('Sort sessions').selectOption('newest')
     await expect(titles).toHaveText([
       longTitle,
       'Same start time',
@@ -201,7 +201,7 @@ for (const width of [320, 430, 768, 1280]) {
       fullPage: true,
     })
     await row.getByRole('link').press('Enter')
-    await expect(page).toHaveURL(/\/student\?lecture=13$/)
+    await expect(page).toHaveURL(/\/student\?.*lecture=13/)
     await expect(page.getByRole('heading', { level: 1 })).toHaveText(longTitle)
     await expect(page.locator('.student-history-question')).toHaveCount(2)
     await expect(page.getByText('Answered', { exact: true })).toBeVisible()
@@ -222,14 +222,14 @@ for (const width of [320, 430, 768, 1280]) {
     await expect(page.getByRole('heading', { level: 1 })).toHaveText(longTitle)
     await page.goBack()
     await expect(page.getByRole('heading', { level: 1 })).toHaveText(
-      'Past Lectures',
+      'Course history sample',
     )
     // Direct and reloaded URLs must also show the archive, never the joined pool.
     await page.goto('/student?lecture=13')
     await expect(page.locator('.student-history-question')).toHaveCount(2)
     await page.reload()
     await expect(page.getByRole('heading', { level: 1 })).toHaveText(longTitle)
-    await page.getByRole('link', { name: '← Past Lectures' }).click()
+    await page.getByRole('link', { name: '← Course history sample' }).click()
     const empty = page
       .locator('.student-history-entry')
       .filter({ hasText: 'Earlier lecture' })
@@ -334,7 +334,9 @@ test('history loading, failure, retry, stale data retention and empty history', 
         : { json: [question('recovered')] },
     )
   })
-  await page.goto('/student/past-lectures')
+  await page.goto(
+    '/student/past-lectures?course=1%3Asample&name=Course+history+sample',
+  )
   const row = page
     .locator('.student-history-entry')
     .filter({ hasText: longTitle })
@@ -359,19 +361,23 @@ test('history loading, failure, retry, stale data retention and empty history', 
     route.fulfill({ status: 503, json: { error: 'Unavailable' } }),
   )
   await page.evaluate(() => window.dispatchEvent(new Event('focus')))
-  await expect(page.getByText(/Could not refresh past lectures/)).toBeVisible()
+  await expect(page.getByText(/Unavailable/)).toBeVisible()
   await expect(page.locator('.student-history-summary')).toHaveCount(4)
   await page.unroute('**/api/student/lectures/history')
   await page
     .getByRole('button', { name: 'Try again', exact: true })
     .first()
     .click()
-  await expect(page.getByText(/Could not refresh past lectures/)).toHaveCount(0)
+  await expect(page.getByText(/Unavailable/)).toHaveCount(0)
   await page.route('**/api/student/lectures/history', (route) =>
     route.fulfill({ json: [live] }),
   )
   await page.evaluate(() => window.dispatchEvent(new Event('focus')))
-  await expect(page.getByText('No past lectures yet.')).toBeVisible()
+  await expect(
+    page.getByText(
+      'No saved sessions are available for this course in your history.',
+    ),
+  ).toBeVisible()
 })
 
 test('switching a long mobile list retains exact scroll depth in both directions', async ({
@@ -447,7 +453,10 @@ for (const width of [320, 430, 768, 1280]) {
       let data: unknown
       if (path === '/api/me')
         data = { id: 'professor-design', name: 'Professor' }
-      else if (path === '/api/professor/profile/initialize')
+      else if (
+        path === '/api/professor/profile/initialize' ||
+        path === '/api/professor/profile'
+      )
         data = { onboardingCompleted: true, revision: 1, courses: [] }
       else if (path === '/api/lectures') data = [{ ...live, canManage: true }]
       else if (path === '/api/lectures/90/professor/questions')
@@ -502,3 +511,54 @@ for (const width of [320, 430, 768, 1280]) {
     await noOverflow(page)
   })
 }
+
+test('long course names, many courses and sessions keep navigation usable and restore list position', async ({
+  page,
+}, info) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  const many = Array.from({ length: 36 }, (_, i) => ({
+    ...lecture(String(200 + i), `Session ${i + 1}`, '2026-10-11T09:15:00Z'),
+    courseName: longTitle,
+  }))
+  const others = Array.from({ length: 24 }, (_, i) => ({
+    ...lecture(String(300 + i), `Other ${i}`, '2026-10-11T09:15:00Z'),
+    courseKey: `1:other-${i}`,
+    courseName: `Course ${String(i).padStart(2, '0')} — Foundations and applications`,
+  }))
+  await fixture(page, [...many, ...others, live])
+  await page.goto('/student/past-lectures')
+  await expect(page.locator('.course-card')).toHaveCount(25)
+  await page.locator('.course-card').filter({ hasText: longTitle }).click()
+  await expect(page.locator('.student-history-entry')).toHaveCount(36)
+  await page.getByRole('button', { name: 'Open navigation' }).click()
+  await expect(
+    page.getByRole('button', { name: 'Settings', exact: true }),
+  ).toBeInViewport()
+  await expect(
+    page.getByRole('button', { name: 'Current Lecture', exact: true }),
+  ).toBeInViewport()
+  await expect(
+    page.getByRole('button', { name: 'Past Lectures', exact: true }),
+  ).toBeInViewport()
+  await expect(
+    page.locator('.side-panel-course[aria-current="page"]'),
+  ).toBeInViewport()
+  await page.screenshot({ path: info.outputPath('long-course-sidebar.png') })
+  await page.getByRole('button', { name: 'Close navigation' }).click()
+  const row = page.locator('.student-history-summary').nth(25)
+  await row.scrollIntoViewIfNeeded()
+  const scroll = await page.evaluate(() => scrollY)
+  await row.click()
+  await expect(page.getByText('No questions in this lecture.')).toBeVisible()
+  await page.locator('.student-lecture-back').click()
+  await expect(page.locator('.student-history-entry')).toHaveCount(36)
+  await expect.poll(() => page.evaluate(() => scrollY)).toBe(scroll)
+  await page.goBack()
+  await expect(page.getByText('No questions in this lecture.')).toBeVisible()
+  await page.goBack()
+  await expect(page.locator('.student-history-entry')).toHaveCount(36)
+  await expect.poll(() => page.evaluate(() => scrollY)).toBe(scroll)
+  await noOverflow(page)
+  await page.screenshot({ path: info.outputPath('many-sessions-mobile.png') })
+})
