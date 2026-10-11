@@ -19,15 +19,15 @@ const render = (courses, overrides = {}) =>
     }),
   )
 
-test('chooser retains persisted order and provides empty-list creation with no automatic session start', () => {
+test('chooser starts with one course field and no separate add form', () => {
   const html = render([
     { id: 'b', title: 'Algorithms' },
     { id: 'a', title: 'Algebra' },
   ])
-  assert.ok(html.indexOf('Algorithms') < html.indexOf('Algebra'))
-  assert.match(html, /Add course/)
+  assert.match(html, /aria-haspopup="menu"/)
+  assert.match(html, /Select a course/)
+  assert.doesNotMatch(html, /Add course|Course title|<select/)
   assert.match(html, /<button[^>]+disabled=""[^>]*>Start session/)
-  assert.doesNotMatch(html, /courses you added during setup/)
-  assert.match(render([]), /Add your first course/)
+  assert.match(render([]), /Select a course/)
   assert.match(render([], { error: 'Failed to save' }), /role="alert"/)
 })

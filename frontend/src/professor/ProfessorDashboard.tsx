@@ -657,7 +657,6 @@ export default function ProfessorDashboard({
                 busy={busyId === 'session'}
                 error={sessionError}
                 onChoose={chooseCourse}
-                onCancel={goToQuestions}
                 onSaveCourses={onSaveCourses}
               />
             </section>
