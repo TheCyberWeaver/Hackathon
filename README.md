@@ -1,128 +1,126 @@
-# Hackathon
+# AskPool
 
-This is to test my branch :)
+AskPool is a live classroom Q&A platform that gives every student a voice. Students join a lecture using a shared link, room code, or QR code, submit questions anonymously, and upvote the questions they want answered. Professors manage a live question queue, respond during class, and retain a history of their sessions.
 
-AskPool is a classroom Q&A app built with Vite React TypeScript and Tailwind CSS v4, with a Java 21 Spring Boot Gradle REST API. The entry page identifies the signed-in user and provides student and professor entry points.
+The project pairs a responsive React interface with a Spring Boot API and PostgreSQL. It is designed to make in-class questions easier to collect, prioritise, and revisit—without interrupting the flow of a lecture.
 
-## Prerequisites
+## Highlights
 
-- Node.js 24 LTS recommended. Use Node 20.19+ or 22.13+ if staying on an older LTS line; the lint tooling needs the newer Node 22 patch.
-- Java **JDK 21** and JAVA_HOME pointing to its installation folder.
-- Git and VS Code. Open this repository root and install the recommended extensions.
-- No global Gradle installation is required; the committed wrapper downloads it.
+- **Live lecture sessions** — create, share, pause, resume, and end lecture sessions.
+- **Student-first participation** — join by link or QR code, ask anonymous questions, vote, and manage personal lecture history.
+- **Professor workspace** — create courses, manage live queues, review session statistics, and access past lectures.
+- **Clear question prioritisation** — rank questions by votes and submission time so the most relevant questions rise to the top.
+- **Role-aware access** — each user can access both dashboards while ownership protects a professor's courses and lectures.
+- **Content moderation** — a separate local/production moderation service screens abusive language before questions enter the pool.
 
-Verify with `node --version`, `npm --version`, `java --version` and `javac --version`.
+## Technology
 
-## Run locally
+| Area | Stack |
+| --- | --- |
+| Frontend | React 19, TypeScript, Vite, Tailwind CSS |
+| Backend | Java 21, Spring Boot, Gradle |
+| Database | PostgreSQL, Flyway |
+| Testing | JUnit, Playwright, Node test runner |
+| Deployment | Docker Compose, Caddy |
 
-For the complete local app **without Docker or VM deployment**, run
-`./dev-local.ps1` from the repository root on Windows. It starts persistent
-PostgreSQL, Java, and Vite with testing permissions. Open
-http://localhost:5173 once Java reports `Started LocalApplication`.
-See [local development and database connection settings](docs/Local_Development.md).
-The steps below also describe the optional Docker/manual setup.
+## Getting started
 
-After cloning, each teammate follows these steps in VS Code.
+### Prerequisites
 
-### 1. Install prerequisites
+- Node.js 24 LTS recommended (Node 20.19+ or 22.13+ also supported)
+- Java JDK 21
+- Git and VS Code
 
-- **Node.js 24 LTS** — includes npm.
-- **Java JDK 21** — ensure `java --version` and `javac --version` show 21.
-- **Git** and **VS Code**.
+Verify your installation with:
 
-Gradle is downloaded automatically by the included wrapper.
-
-### 2. Open the repository
-
-In a terminal:
-
-```powershell
-git clone https://github.com/TheCyberWeaver/Hackathon.git
-cd Hackathon
-code .
+```sh
+node --version
+npm --version
+java --version
+javac --version
 ```
 
-Because the repository is private, teammates need GitHub access.
+### Run locally
 
-Open the **Hackathon root folder**, containing both `frontend` and `backend`. Install the workspace’s recommended extensions when VS Code prompts.
-
-### 3. Install frontend dependencies once
-
-In VS Code → **Terminal → New Terminal**:
+The quickest Windows setup needs no Docker or external database:
 
 ```powershell
+.\dev-local.ps1
+```
+
+The launcher starts PostgreSQL, the API, and the Vite development server. When Java reports `Started LocalApplication`, open [http://localhost:5173](http://localhost:5173).
+
+For macOS, Linux, or manual development, use two terminals:
+
+```sh
+# Terminal 1
+cd backend
+./gradlew localRun
+```
+
+```sh
+# Terminal 2
 cd frontend
-npm.cmd ci
+npm ci
+npm run dev
 ```
 
-On macOS/Linux, use `npm ci`. The committed Gradle wrapper is executable.
+The local runner creates a persistent PostgreSQL instance at `127.0.0.1:55432`, serves the API on port `8080`, and uses a local demo identity. No `.env` file is needed for this default setup.
 
-No `.env` file is required for the default local setup.
+> On Windows, replace `./gradlew` with `./gradlew.bat`. In VS Code, **Tasks: Run Task → Dev: start both** starts the same local environment.
 
-### 4. Local PostgreSQL
+## How it works
 
-The default **Backend: dev** task starts a persistent PostgreSQL database on
-`127.0.0.1:55432` automatically. It enables testing permissions so the same
-account can use both dashboards. No Docker, database password, or VM is required.
-Database files are retained in `backend/.local-postgres/` between runs.
+1. A professor creates a course and starts a lecture session.
+2. Students join the session from a shared link, numeric code, or QR code.
+3. Students submit anonymous questions and upvote questions that matter to them.
+4. The professor works through the prioritised queue, selecting or answering questions as the session progresses.
+5. When the lecture ends, both sides can review their relevant history.
 
-For an external database instead, use **Backend: external database**. This
-optional Docker setup uses port 5432:
+In local development, Vite provides the demo identity **Alex Morgan**. To test a second user, set `ASKPOOL_DEMO_USER_ID` and `ASKPOOL_DEMO_USER_NAME` in `frontend/.env.local`, then restart the frontend.
 
-
-```powershell
-$env:DATABASE_PASSWORD = 'choose-a-local-development-password'
-docker compose -f backend/compose.local.yaml up -d
-```
-
-Set `DATABASE_PASSWORD` in the terminal running Java too. Defaults are
-`DATABASE_URL=jdbc:postgresql://localhost:5432/askpool` and
-`DATABASE_USER=askpool_app`. Spring does not load `.env` files automatically.
-Flyway migrates an empty database on startup. For the existing VM database, see
-[deployment and schema adoption](deploy/README.md), including table ownership
-and the one-time baseline flag.
-
-Local demo accounts default to students. Assign the demo identity professor
-permissions through an administrator database session as documented in the
-deployment guide; use another `ASKPOOL_DEMO_USER_ID` in `frontend/.env.local`
-for student testing.
-
-### 5. Start development
-
-Press **Ctrl+Shift+P**, select **Tasks: Run Task**, then choose:
+## Project structure
 
 ```text
-Dev: start both
+.
+├── frontend/     React application for student and professor experiences
+├── backend/      Spring Boot REST API, Flyway migrations, and Java tests
+├── moderation/   Standalone abusive-language moderation service
+├── deploy/       VM deployment, reverse-proxy, and Docker Compose assets
+├── docs/         Product, API, setup, and local-development documentation
+└── dev-local.ps1 Windows local-development launcher
 ```
 
-This starts the frontend, backend, and local database in separate terminals. Wait for `Started LocalApplication`; the first run downloads Gradle, dependencies, and PostgreSQL binaries.
+## Quality checks
 
-Open **http://localhost:5173** to see the AskPool entry buttons. Vite supplies a sample identity (Alex Morgan) locally. Dashboard data requires Java on port 8080 and PostgreSQL. Professors create lectures and share student join links; both dashboards use the same persisted questions.
+Run the backend checks from `backend/`:
 
-Production uses the managed proxy's `X-User-Id` and `X-User-Name` headers via `GET /api/me`. Dashboard integration and local identity settings are documented in [docs/Entry_Page.md](docs/Entry_Page.md).
+```sh
+./gradlew test bootJar
+```
 
-### 6. Make changes
+Run the frontend checks from `frontend/`:
 
-- Frontend: edit `frontend/src/` — browser updates automatically.
-- Backend: edit `backend/src/main/java/` — restart **Backend: dev** after changes.
-- Stop services: **Tasks: Terminate Task**.
-- Debug Java with an external database: stop the backend task, start your configured PostgreSQL database, then select **Debug backend (external database)** in Run and Debug and press **F5**.
+```sh
+npm run build
+npm run lint
+npm run test:api
+```
 
-Full commands and troubleshooting are in the repository’s **README.md**.
+Backend tests use an isolated PostgreSQL process and do not change the persistent local development database.
 
-Verify with backend `./gradlew.bat test bootJar` (Windows) or
-`./gradlew test bootJar` (macOS/Linux), and frontend `npm run build` plus
-`npm run lint` and `npm run test:api`. Java tests start an isolated PostgreSQL process automatically,
-without Docker or VM credentials. The first run downloads platform binaries.
-See the [API contract](docs/API.md) for routes, errors, and permissions.
+## Documentation
 
-Production currently uses Java's bundled sensitive-word list. The separate CPU
-moderation service is optional and stopped on the VM. See
-[moderation](moderation/README.md) for its API and local setup.
-Use [deploy-webapp.ps1](deploy-webapp.ps1) for the web app and
-[deploy-moderation.ps1](deploy-moderation.ps1) for the moderation service.
-For a temporary local testing page, run `./test-moderation.ps1` and open
-http://127.0.0.1:8091. Its **Stop portal** button closes the test service;
-`./test-moderation.ps1 -Stop` also stops it from PowerShell.
+- [Local development](docs/Local_Development.md) — operating the local stack, database access, and troubleshooting.
+- [API contract](docs/API.md) — routes, permissions, and error behaviour.
+- [Entry page and identity integration](docs/Entry_Page.md) — local and production identity handling.
+- [Deployment guide](deploy/README.md) — production deployment and database adoption.
+- [Moderation service](moderation/README.md) — moderation API and local setup.
 
-Hello World
+## Deployment
+
+Production uses a managed identity proxy that supplies `X-User-Id` and `X-User-Name` headers. The web app and moderation service are deployed independently; use `deploy-webapp.ps1` and `deploy-moderation.ps1` respectively. See the [deployment guide](deploy/README.md) for environment configuration and release instructions.
+
+## License
+
+This project is released under the [MIT License](LICENSE).
