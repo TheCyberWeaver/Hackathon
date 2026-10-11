@@ -225,6 +225,48 @@ for (const mobile of [false, true]) {
   })
 }
 
+test('professor ending a live lecture presents the student with an explicit next step', async ({
+  browser,
+}) => {
+  const identity = `end-session-${Date.now()}`
+  const owner = await actor(browser, `owner-${identity}`)
+  const learner = await actor(browser, `learner-${identity}`)
+  const p = learner.page
+  try {
+    const current = await lecture(owner.context, 'Ending together')
+    await api(learner.context, 'POST', '/sessions/join', {
+      code: current.joinCode ?? current.id,
+    })
+    await p.clock.install()
+    await p.goto('/student')
+    await expect(p.locator('textarea')).toBeEnabled()
+    await api(owner.context, 'PATCH', `/lectures/${current.id}/session`, {
+      action: 'end',
+    })
+    await p.clock.fastForward(11_000)
+    await expect(
+      p.getByRole('heading', { name: 'This lecture has ended', exact: true }),
+    ).toBeVisible()
+    expect(
+      (await api(learner.context, 'GET', '/sessions/mine')).session,
+    ).toBeNull()
+    await p.reload()
+    await expect(
+      p.getByRole('heading', { name: 'This lecture has ended', exact: true }),
+    ).toBeVisible()
+    await p.getByRole('button', { name: 'Back to past lectures' }).click()
+    await p.locator('.course-card').click()
+    await p.locator('.student-history-summary').click()
+    await expect(p.getByRole('heading', { level: 1 })).toHaveText(
+      'Ending together',
+    )
+    await expect(p.getByText('No questions in this lecture.')).toBeVisible()
+  } finally {
+    await owner.context.close()
+    await learner.context.close()
+  }
+})
+
 test('switching accounts clears student review and active-session state in the same browser', async ({
   browser,
 }) => {
