@@ -34,7 +34,9 @@ public class PoolService {
         if (request == null || request.lectureTime() == null) throw new ApiException(BAD_REQUEST, "Lecture time is required.");
         var title = text(request.title(), 200, "Lecture title");
         var course = request.course() == null || request.course().isBlank() ? "" : text(request.course(), 200, "Course");
-        var id = repository.createLecture(title, request.lectureTime(), user.id(), course);
+        // Legacy API clients may omit identity. Never infer it from a course label.
+        if (request.courseId() != null) course = repository.activeCourseTitle(user.id(), request.courseId());
+        var id = repository.createLecture(title, request.lectureTime(), user.id(), course, request.courseId());
         return lecture(user, id);
     }
     @Transactional
@@ -133,6 +135,15 @@ public class PoolService {
         var question = repository.lockQuestion(id);
         if (question.authorId() != user.id()) requireManage(user, question.lectureId());
         repository.delete(id);
+    }
+    @Transactional
+    public void deleteLecture(User user, long id) {
+        var access = repository.lockLecture(id);
+        if (!Long.valueOf(user.id()).equals(access.ownerId()))
+            throw new ApiException(FORBIDDEN, "You do not manage this lecture.");
+        if (access.session().endedAt() == null)
+            throw new ApiException(CONFLICT, "Only completed sessions can be deleted.");
+        repository.deleteLecture(id);
     }
     @Transactional
     public Lecture session(User user, long id, SessionAction request) {

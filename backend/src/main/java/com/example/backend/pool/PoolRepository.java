@@ -43,7 +43,7 @@ public class PoolRepository {
     }
     public List<Lecture> lectures(User user) {
         return jdbc.query("""
-            SELECT l.* FROM lectures l
+            SELECT l.*, c.title AS course_name, COALESCE(c.archived, FALSE) AS course_archived FROM lectures l LEFT JOIN professor_courses c ON c.user_id = l.owner_id AND c.id = l.course_id
             WHERE l.owner_id = ?
                OR EXISTS (SELECT 1 FROM lecture_history h WHERE h.user_id = ? AND h.lecture_id = l.id)
                OR EXISTS (SELECT 1 FROM lecture_memberships m WHERE m.user_id = ? AND m.lecture_id = l.id)
@@ -51,17 +51,19 @@ public class PoolRepository {
             """, (rs, row) -> lecture(rs, user.id()), user.id(), user.id(), user.id());
     }
     public Lecture lecture(User user, long id) {
-        return jdbc.query("SELECT * FROM lectures WHERE id = ?", (rs, row) -> lecture(rs, user.id()), id)
+        return jdbc.query("SELECT l.*, c.title AS course_name, COALESCE(c.archived, FALSE) AS course_archived FROM lectures l LEFT JOIN professor_courses c ON c.user_id = l.owner_id AND c.id = l.course_id WHERE l.id = ?", (rs, row) -> lecture(rs, user.id()), id)
             .stream().findFirst().orElseThrow(() -> new ApiException(NOT_FOUND, "Lecture not found."));
     }
     private static Lecture lecture(ResultSet rs, long user) throws SQLException {
         return new Lecture(Long.toString(rs.getLong("id")), rs.getString("join_code"), rs.getString("title"), time(rs, "lecture_time"),
             Long.valueOf(user).equals(rs.getObject("owner_id", Long.class)),
-            rs.getString("course"), time(rs, "started_at"), time(rs, "ended_at"), rs.getBoolean("questions_paused"));
+            rs.getString("course"), time(rs, "started_at"), time(rs, "ended_at"), rs.getBoolean("questions_paused"),
+            rs.getString("course_id") == null ? null : rs.getLong("owner_id") + ":" + rs.getString("course_id"),
+            rs.getString("course_name"), rs.getBoolean("course_archived"));
     }
     public List<Lecture> history(User user) {
         return jdbc.query("""
-            SELECT l.* FROM lecture_history h JOIN lectures l ON l.id = h.lecture_id
+            SELECT l.*, c.title AS course_name, COALESCE(c.archived, FALSE) AS course_archived FROM lecture_history h JOIN lectures l ON l.id = h.lecture_id LEFT JOIN professor_courses c ON c.user_id = l.owner_id AND c.id = l.course_id
             WHERE h.user_id = ? ORDER BY h.last_visited_at DESC, l.id DESC
             """, (rs, row) -> lecture(rs, user.id()), user.id());
     }
@@ -75,12 +77,18 @@ public class PoolRepository {
     public void forgetVisit(long user, long lecture) {
         jdbc.update("DELETE FROM lecture_history WHERE user_id = ? AND lecture_id = ?", user, lecture);
     }
-    public long createLecture(String title, OffsetDateTime time, long owner, String course) {
+    public String activeCourseTitle(long owner, String id) {
+        // Same profile lock order as profile saves; deletion/rename cannot race creation.
+        jdbc.queryForList("SELECT user_id FROM professor_profiles WHERE user_id = ? FOR SHARE", Long.class, owner);
+        return jdbc.queryForList("SELECT title FROM professor_courses WHERE user_id = ? AND id = ? AND NOT archived", String.class, owner, id)
+            .stream().findFirst().orElseThrow(() -> new ApiException(BAD_REQUEST, "Choose an available course from your Settings."));
+    }
+    public long createLecture(String title, OffsetDateTime time, long owner, String course, String courseId) {
         for (int attempt = 0; attempt < 100; attempt++) {
             var ids = jdbc.query("""
-                INSERT INTO lectures (title, lecture_time, owner_id, course) VALUES (?, ?, ?, ?)
+                INSERT INTO lectures (title, lecture_time, owner_id, course, course_id) VALUES (?, ?, ?, ?, ?)
                 ON CONFLICT (join_code) DO NOTHING RETURNING id
-                """, (rs, row) -> rs.getLong("id"), title, time, owner, course);
+                """, (rs, row) -> rs.getLong("id"), title, time, owner, course, courseId);
             if (!ids.isEmpty()) return ids.getFirst();
         }
         throw new ApiException(SERVICE_UNAVAILABLE, "Could not allocate a lecture code. Please try again.");
@@ -154,6 +162,13 @@ public class PoolRepository {
     public void status(long question, String status) {
         jdbc.update("UPDATE questions SET status = ?, selected = ?, answered_at = CASE WHEN ? THEN COALESCE(answered_at, CURRENT_TIMESTAMP) ELSE NULL END WHERE id = ?",
             status.equals("answered") ? "answered" : "unanswered", status.equals("selected"), status.equals("answered"), question);
+    }
+    public void deleteLecture(long lecture) {
+        // Restrictive lecture FKs require explicit cleanup; question dependents and
+        // personal history/memberships cascade within the service transaction.
+        jdbc.update("DELETE FROM questions WHERE lecture_id = ?", lecture);
+        jdbc.update("DELETE FROM question_moderation_warnings WHERE lecture_id = ?", lecture);
+        jdbc.update("DELETE FROM lectures WHERE id = ?", lecture);
     }
     public void delete(long question) { jdbc.update("DELETE FROM questions WHERE id = ?", question); }
     public List<String> clearOpen(long lecture, List<Long> ids) {

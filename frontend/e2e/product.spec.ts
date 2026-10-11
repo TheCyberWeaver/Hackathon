@@ -422,6 +422,10 @@ for (const mobile of [false, true]) {
       await expect(
         p.getByRole('heading', { name: 'Past Lectures', exact: true }),
       ).toBeVisible()
+      await p
+        .locator('.course-card')
+        .filter({ hasText: 'Future course name' })
+        .click()
       const history = p.locator('details').filter({ hasText: course }).first()
       await expect(history).not.toHaveAttribute('open')
       await history.locator('summary').click()
@@ -432,6 +436,10 @@ for (const mobile of [false, true]) {
         fullPage: true,
       })
       await nav(student.page, 'Past Lectures')
+      await student.page
+        .locator('.course-card')
+        .filter({ hasText: 'Future course name' })
+        .click()
       const studentHistory = student.page
         .locator('.student-history-entry')
         .filter({ hasText: course })

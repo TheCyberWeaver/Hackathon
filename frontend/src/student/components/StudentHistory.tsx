@@ -7,8 +7,8 @@ type Props = {
   error: boolean
   entries: Record<string, HistoryQuestions>
   removingId: string | null
-  order: 'newest' | 'oldest'
-  onOrderChange: (order: 'newest' | 'oldest') => void
+  courseTitle: string
+  lectureHref: (id: string) => string
   onRetryLectures: () => void
   onRetryQuestions: (id: string) => void
   onOpenLecture: (id: string) => void
@@ -35,52 +35,16 @@ export default function StudentHistory({
   error,
   entries,
   removingId,
-  order,
-  onOrderChange,
+  courseTitle,
+  lectureHref,
   onRetryLectures,
   onRetryQuestions,
   onOpenLecture,
   onRemoveLecture,
 }: Props) {
   const archive = lectures
-    .filter((lecture) => lecture.endedAt)
-    .sort((a, b) => {
-      const difference = sessionTime(a).getTime() - sessionTime(b).getTime()
-      // IDs give equal timestamps a stable order even after a list refresh.
-      return (
-        (order === 'newest' ? -difference : difference) ||
-        a.id.localeCompare(b.id)
-      )
-    })
-
   return (
     <>
-      <div className="student-history-toolbar">
-        <span className="student-history-rule" aria-hidden="true" />
-        <label className="student-history-sort">
-          <svg
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.7"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            aria-hidden="true"
-          >
-            <path d="M7 4v16m-3-3 3 3 3-3M13 6h7M13 12h5M13 18h3" />
-          </svg>
-          <span className="sr-only">Sort lectures by date</span>
-          <select
-            value={order}
-            onChange={(event) =>
-              onOrderChange(event.target.value as typeof order)
-            }
-          >
-            <option value="newest">Newest first</option>
-            <option value="oldest">Oldest first</option>
-          </select>
-        </label>
-      </div>
       {error && (
         <div className="student-history-feedback" role="alert">
           <span>
@@ -97,9 +61,6 @@ export default function StudentHistory({
           Loading past lectures…
         </p>
       )}
-      {!loading && !error && archive.length === 0 && (
-        <p className="empty-message">No past lectures yet.</p>
-      )}
       <div className="student-history-list">
         {archive.map((lecture) => {
           const entry = entries[lecture.id]
@@ -112,7 +73,7 @@ export default function StudentHistory({
                 <h2>
                   <a
                     className="student-history-summary"
-                    href={`/student?lecture=${encodeURIComponent(lecture.id)}`}
+                    href={lectureHref(lecture.id)}
                     onClick={(event) => {
                       if (
                         event.button !== 0 ||
@@ -127,7 +88,11 @@ export default function StudentHistory({
                     }}
                   >
                     <span className="student-history-title">
-                      {lecture.title}
+                      {lecture.title !== courseTitle
+                        ? lecture.title
+                        : validDate
+                          ? dateFormat.format(start)
+                          : 'Session'}
                     </span>
                     <span className="student-history-meta">
                       <time
@@ -135,11 +100,11 @@ export default function StudentHistory({
                       >
                         <span>
                           {validDate
-                            ? dateFormat.format(start)
+                            ? timeFormat.format(start)
                             : 'Date unavailable'}
                         </span>
-                        {validDate && (
-                          <span> · {timeFormat.format(start)}</span>
+                        {validDate && lecture.title !== courseTitle && (
+                          <span> · {dateFormat.format(start)}</span>
                         )}
                       </time>
                       <span className="student-history-count">
