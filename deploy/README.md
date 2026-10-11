@@ -84,13 +84,13 @@ Use `-ModerationThreshold 0.98` to adjust filtering (default `0.95`).
 
 ## Application deployment
 
-Caddy serves the frontend and proxies all `/api/*` to Java. The QR/code UI uses existing lecture IDs, and Java stores each student's selected lecture in PostgreSQL. Java joins the external `askpool_shared` network. The managed address https://08.hackathon.ethz.ch provides TLS/login. Java and PostgreSQL must have no public ports. The Node demo API is no longer deployed; its old data volume is neither migrated nor removed.
+Caddy serves the frontend and proxies all `/api/*` to Java. The QR/code UI uses six-character hexadecimal invitation codes; Java stores each student's selected lecture in PostgreSQL. Java joins the external `askpool_shared` network. The managed address https://08.hackathon.ethz.ch provides TLS/login. Java and PostgreSQL must have no public ports. The Node demo API is no longer deployed; its old data volume is neither migrated nor removed.
 
 ## Adopt the supplied VM schema
 
 Back up the database. V1 matches the supplied schema; later migrations add ownership, moderation, lecture sessions, and student lecture selections. Do not run V1 again on the existing database.
 
-V8 adds lecture joining after the existing V6/V7 moderation migrations, preserving their checksums. The UI and join API use numeric lecture IDs; V8's generated `join_code` column is unused. Its `lecture_memberships` table stores the selected lecture per student.
+V8 adds lecture membership after the existing V6/V7 moderation migrations, preserving their checksums. V11 replaces the earlier join codes with six-character hexadecimal invitations. `lecture_memberships` stores the selected lecture per student.
 
 Verify the three tables match V1 and are owned by `askpool_app`. Changing the database owner does not transfer existing table ownership. If initial SQL ran as postgres, run this from the database Compose directory:
 
@@ -174,7 +174,7 @@ PostgreSQL client matching the server's major version, then switches and checks
 production. Baseline is disabled again after successful startup. Runtime
 configuration is saved in the release `.env` for later Compose commands.
 
-Retain PostgreSQL backups/volumes. V10 is additive; V9 removed written answers and old trash. The original status/time constraint remains. A rollback to the former Node deployment shows its separate demo store while PostgreSQL data remains intact. Do not remove either data volume during rollout or rollback.
+Retain PostgreSQL backups and volumes. V9 removed written answers and old trash; V10 added per-user history; V12 added durable course identities. Do not remove data volumes during rollout or rollback. Deploy matching frontend and backend versions together.
 
 V3 handles the older VM schema where `lectures.professor_id` is required.
 It backfills missing `owner_id` values and installs an insert trigger to populate
@@ -186,11 +186,10 @@ compatibility function belongs to the migration role. The subsequent Flyway
 migration safely repeats it. V4 removes the one-question-per-student constraint
 without deleting existing questions.
 
-V5 adds shared lecture start/end and intake state, course labels, and optional
-written answers. Existing pools become started sessions; new lectures must be
-started explicitly. The older VM `votes` foreign key is changed to cascade only
-when a question is permanently purged. Ordinary deletion still retains votes
-and reports for restoration. This frontend and backend must be released together.
+V5 added shared lecture start/end and intake state and course labels. Existing
+pools became started sessions; new lectures must be started explicitly. V9 later
+removed written answers and made question deletion permanent, including related
+votes and reports.
 
 The ignored `deploy.local.json` contains the VM SSH configuration;
 `dev-local.ps1` runs locally and does not connect to the VM.
