@@ -100,33 +100,48 @@
   border-top: 1px solid #e2e8f0;
 }
 .side-panel-account {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 6px;
+  display: grid;
+  gap: 2px;
+  padding: 4px;
   border: 1px solid #e2e8f0;
   border-radius: 12px;
   background: #fff;
 }
-.side-panel-profile {
+.side-panel-account-action {
   display: flex;
   align-items: center;
-  flex: 1;
+  width: 100%;
+  min-height: 60px;
   min-width: 0;
   gap: 10px;
   padding: 8px;
   border: 0;
   border-radius: 8px;
   background: transparent;
+  color: #0f172a;
   text-align: left;
+  transition: background-color 160ms ease, color 160ms ease;
 }
-.side-panel-profile:hover,
-.side-panel-profile[aria-current='page'],
-.side-panel-settings:hover,
-.side-panel-settings[aria-current='page'] {
-  background: #eff6ff;
+@media (hover: hover) {
+  .side-panel-account-action:hover {
+    background: #eff6ff;
+  }
 }
-.side-panel-avatar {
+.side-panel-account-action:active {
+  background: #dbeafe;
+}
+.side-panel-account-action[aria-current='page'] {
+  color: #1d4ed8;
+}
+.side-panel-account-action[aria-current='page']::after {
+  width: 6px;
+  height: 6px;
+  margin-left: auto;
+  border-radius: 50%;
+  background: #2563eb;
+  content: '';
+}
+.side-panel-account-icon {
   display: grid;
   place-items: center;
   flex: 0 0 36px;
@@ -144,7 +159,7 @@
 }
 .side-panel-name {
   overflow: hidden;
-  color: #0f172a;
+  color: inherit;
   font-size: 14px;
   font-weight: 600;
   text-overflow: ellipsis;
@@ -157,21 +172,9 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.side-panel-settings {
-  display: grid;
-  place-items: center;
-  flex: 0 0 40px;
-  width: 40px;
-  height: 40px;
-  padding: 0;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  color: #64748b;
-}
-.side-panel-settings:hover,
-.side-panel-settings[aria-current='page'] {
-  color: #1d4ed8;
+.side-panel-account-label {
+  font-size: 14px;
+  font-weight: 600;
 }
 .side-panel-logout {
   width: 100%;
