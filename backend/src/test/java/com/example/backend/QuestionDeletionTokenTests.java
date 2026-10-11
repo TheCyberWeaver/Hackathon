@@ -9,9 +9,10 @@ import static org.junit.jupiter.api.Assertions.*;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 class QuestionDeletionTokenTests extends AccountApiTestSupport {
-    @Test void creationStoresOnlyDistinctMatchingHashesAndDeletionRequiresTheAccountToken() throws Exception {
+    @Test void creationStoresDistinctMatchingHashesAndDeletionAllowsAuthorOrLectureOwner() throws Exception {
         String owner = account("professor");
         String author = account("student");
+        String stranger = account("student");
         String lecture = create(owner);
         session(lecture, owner, "start", 200);
         String path = "/lectures/" + lecture + "/questions";
@@ -34,16 +35,18 @@ class QuestionDeletionTokenTests extends AccountApiTestSupport {
             FROM questions a CROSS JOIN questions b WHERE a.id = ? AND b.id = ?
             """, Boolean.class, Long.parseLong(first), Long.parseLong(second)));
         send("DELETE", "/questions/" + first, null, null, 401);
-        var ownerDenied = send("DELETE", "/questions/" + first, owner, null, 404);
-        var strangerDenied = send("DELETE", "/questions/9223372036854775807", owner, null, 404);
-        assertEquals(ownerDenied.get("error").asText(), strangerDenied.get("error").asText());
+        var strangerDenied = send("DELETE", "/questions/" + first, stranger, null, 404);
+        var missingDenied = send("DELETE", "/questions/9223372036854775807", stranger, null, 404);
+        assertEquals(strangerDenied.get("error").asText(), missingDenied.get("error").asText());
         send("DELETE", "/questions/" + first, author, null, 204);
         assertEquals(0, jdbc.queryForObject("SELECT count(*) FROM question_deletion_tokens WHERE question_id = ?", Integer.class, Long.parseLong(first)));
         send("DELETE", "/questions/" + first, author, null, 404);
         send("GET", path + "/" + second, author, null, 200);
+        send("DELETE", "/questions/" + second, owner, null, 204);
+        assertEquals(0, jdbc.queryForObject("SELECT count(*) FROM question_deletion_tokens WHERE question_id = ?", Integer.class, Long.parseLong(second)));
     }
 
-    @Test void tokenMismatchAndBulkClearRollBackWithoutDeletingAnyQuestion() throws Exception {
+    @Test void bulkClearIncludesStudentQuestionsAndOwnerCanDeleteWhenTokenIsMissing() throws Exception {
         String owner = account("professor");
         String student = account("student");
         String lecture = create(owner);
@@ -53,16 +56,34 @@ class QuestionDeletionTokenTests extends AccountApiTestSupport {
         String clear = "/lectures/" + lecture + "/questions/clear-open";
         String both = json.writeValueAsString(Map.of("questionIds", new long[]{Long.parseLong(own), Long.parseLong(other)}));
         send("POST", clear, null, both, 401);
-        send("POST", clear, owner, both, 404);
-        assertEquals(2, jdbc.queryForObject("SELECT count(*) FROM questions WHERE id IN (?, ?)", Integer.class, Long.parseLong(own), Long.parseLong(other)));
-        assertEquals(2, jdbc.queryForObject("SELECT count(*) FROM question_deletion_tokens WHERE question_id IN (?, ?)", Integer.class, Long.parseLong(own), Long.parseLong(other)));
-        var cleared = send("POST", clear, owner, json.writeValueAsString(Map.of("questionIds", new long[]{Long.parseLong(own)})), 200);
-        assertEquals(own, cleared.get("deletedIds").get(0).asText());
-        send("GET", "/lectures/" + lecture + "/questions/" + other, student, null, 200);
-        jdbc.update("DELETE FROM question_deletion_tokens WHERE question_id = ?", Long.parseLong(other));
-        send("DELETE", "/questions/" + other, student, null, 404);
-        assertEquals(1, jdbc.queryForObject("SELECT count(*) FROM questions WHERE id = ?", Integer.class, Long.parseLong(other)));
-        jdbc.update("DELETE FROM questions WHERE id = ?", Long.parseLong(other));
+        var cleared = send("POST", clear, owner, both, 200);
+        assertEquals(java.util.Set.of(own, other), java.util.Set.of(
+            cleared.get("deletedIds").get(0).asText(), cleared.get("deletedIds").get(1).asText()));
+        assertEquals(0, jdbc.queryForObject("SELECT count(*) FROM questions WHERE id IN (?, ?)", Integer.class, Long.parseLong(own), Long.parseLong(other)));
+        assertEquals(0, jdbc.queryForObject("SELECT count(*) FROM question_deletion_tokens WHERE question_id IN (?, ?)", Integer.class, Long.parseLong(own), Long.parseLong(other)));
+        String third = submit(lecture, student, "Owner fallback when token is missing");
+        jdbc.update("DELETE FROM question_deletion_tokens WHERE question_id = ?", Long.parseLong(third));
+        send("DELETE", "/questions/" + third, student, null, 404);
+        send("DELETE", "/questions/" + third, owner, null, 204);
+        assertEquals(0, jdbc.queryForObject("SELECT count(*) FROM questions WHERE id = ?", Integer.class, Long.parseLong(third)));
+    }
+
+    @Test void legacyBackendInsertGetsDefaultHashAndMatchingToken() throws Exception {
+        String owner = account("professor");
+        String author = account("student");
+        String lecture = create(owner);
+        long id = jdbc.queryForObject("""
+            INSERT INTO questions (lecture_id, author_id, text)
+            VALUES (?, (SELECT id FROM users WHERE eth_identity_ref = ?), 'Legacy backend insert')
+            RETURNING id
+            """, Long.class, Long.parseLong(lecture), author);
+        assertEquals(1, jdbc.queryForObject("""
+            SELECT count(*) FROM questions q JOIN question_deletion_tokens t
+              ON t.question_id = q.id AND t.token_hash = q.deletion_token_hash
+            WHERE q.id = ? AND t.user_id = (SELECT id FROM users WHERE eth_identity_ref = ?)
+              AND octet_length(q.deletion_token_hash) = 32
+            """, Integer.class, id, author));
+        send("DELETE", "/questions/" + id, author, null, 204);
     }
 
     @Test void failedTokenInsertRollsBackQuestionCreation() throws Exception {

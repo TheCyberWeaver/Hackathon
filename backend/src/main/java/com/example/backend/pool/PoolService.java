@@ -97,7 +97,6 @@ public class PoolService {
         }
         var tokenHash = newDeletionTokenHash();
         var id = repository.createQuestion(lecture, user.id(), text, tokenHash);
-        repository.createDeletionToken(id, user.id(), tokenHash);
         repository.recordVisit(user.id(), lecture);
         return repository.question(lecture, id, user.id());
     }
@@ -131,9 +130,14 @@ public class PoolService {
     }
     @Transactional
     public void delete(User user, long id) {
-        repository.lockQuestion(id);
-        if (repository.deleteToken(id, user.id()) != 1)
-            throw new ApiException(NOT_FOUND, "Question not found.");
+        var question = repository.lockQuestion(id);
+        if (repository.deleteToken(id, user.id()) != 1) {
+            // The author needs the matching token; the lecture owner can
+            // moderate any question in their own lecture.
+            var ownerId = repository.lecture(question.lectureId()).ownerId();
+            if (!Long.valueOf(user.id()).equals(ownerId))
+                throw new ApiException(NOT_FOUND, "Question not found.");
+        }
         if (repository.delete(id) != 1)
             throw new IllegalStateException("Question deletion failed.");
     }
@@ -166,8 +170,6 @@ public class PoolService {
             throw new ApiException(BAD_REQUEST, "A valid snapshot of Open questions is required.");
         var eligible = repository.lockOpenQuestions(lecture, request.questionIds().stream().distinct().sorted().toList());
         if (eligible.isEmpty()) return new ClearedQuestions(List.of());
-        if (repository.deleteTokens(eligible, user.id()).size() != eligible.size())
-            throw new ApiException(NOT_FOUND, "Question not found.");
         if (repository.deleteQuestions(eligible).size() != eligible.size())
             throw new IllegalStateException("Question deletion failed.");
         return new ClearedQuestions(eligible.stream().map(String::valueOf).toList());

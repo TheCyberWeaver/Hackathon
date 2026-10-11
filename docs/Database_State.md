@@ -1,6 +1,6 @@
 # Database state: personal accounts and lecture history
 
-Last checked: 11 October 2026. This branch now includes Flyway **V11**. The shared VM was verified at **V9** before this change; this work does not deploy or migrate production. All existing VM lectures have an owner. The VM also retains the legacy `votes` table.
+Last checked: 11 October 2026. This branch now includes Flyway **V11**. The shared VM was verified at **V10** before this change; this work does not deploy or migrate production. All existing VM lectures have an owner. The VM also retains the legacy `votes` table.
 
 ## Account model
 
@@ -18,8 +18,8 @@ Professor history consists of lectures created by the caller (`lectures.owner_id
 | `lecture_memberships`          | Primary key `user_id`, selected `lecture_id`, `joined_at`                                                   | One current lecture per user; leaving/ending clears this selection only                        |
 | `professor_profiles`           | Primary key `user_id`, onboarding completion, revision                                                      | Own profile; revision detects concurrent edits                                                 |
 | `professor_courses`            | Primary key `(user_id, id)`, title, position; unique position and case-insensitive title per user           | Own ordered course list; same course name is allowed for different users                       |
-| `questions`                    | `id`, lecture/author references, text, status, and unique 32-byte deletion-token hash                       | Matching account token required for deletion; lecture owner can mark answered and see author/report data |
-| `question_deletion_tokens`     | One row per question with `user_id` and matching unique 32-byte token hash                                  | Account association checked for every deletion; removed with its question |
+| `questions`                    | `id`, lecture/author references, text, status, and unique 32-byte deletion-token hash                       | Author with matching token or lecture owner may delete; owner can mark answered and see author/report data |
+| `question_deletion_tokens`     | One row per question with `user_id` and matching unique 32-byte token hash                                  | Account association checked for author deletion; removed with its question |
 | `question_votes`               | Primary key `(question_id, user_id)`                                                                        | Own vote, one per question; self-votes rejected                                                |
 | `question_reports`             | Primary key `(question_id, user_id)`, report time                                                           | Own report; counts visible only to lecture owner                                               |
 | `question_moderation_warnings` | `id`, lecture/user references, reason, creation time                                                        | Warnings/counts linked to the submitting account and lecture                                   |
@@ -27,7 +27,7 @@ Professor history consists of lectures created by the caller (`lectures.owner_id
 
 The VM's older `votes` table is retained for compatibility. Some older installations also have `lectures.professor_id` and a trigger that fills it alongside `owner_id`; V3 preserves those installations. New empty databases use `owner_id` only. V10 and V11 do not rewrite earlier migrations or their checksums.
 
-V11 backfills existing questions with hashes of ephemeral cryptographically generated values and associates each hash with the original author. New questions use 256-bit random tokens hashed with SHA-256 before storage. The plaintext is never persisted or returned. A token table row cannot reference a different question hash, and both hashes are unique. Deletion checks the account-associated hash and removes the token row and question in one transaction. Professor bulk clear can only remove the lecture owner's own open questions and refuses a mixed-account snapshot without partial deletion.
+V11 backfills existing questions with hashes of ephemeral cryptographically generated values and associates each hash with the original author. New questions use 256-bit random tokens hashed with SHA-256 before storage. The plaintext is never persisted or returned. A token table row cannot reference a different question hash, and both hashes are unique. A database trigger creates the matching account record atomically with each question; the hash column has a default so the previous backend can still insert questions after an application rollback. Authors delete through their matching account record; the lecture owner may delete any question in that lecture. Deleting a question cascades to its token record. Professor bulk clear can remove any open questions in the confirmed lecture snapshot.
 
 This is an authorization boundary, not database anonymity. `questions.author_id` remains because public “mine” flags, self-vote checks, student summaries, and professor author views use it. Anyone with access to both tables can also recover account-to-question links through `question_deletion_tokens`.
 
@@ -41,4 +41,4 @@ Existing professor profiles, course order/revisions, questions, ownership and me
 
 V9 previously removed written-answer and soft-deletion columns and permanently deleted old trash. Questions now use permanent deletion, cascading to dependent votes/reports. V10 does not change that behavior or recover previously deleted content.
 
-Apply V11 through the usual web app deployment. `deploy-webapp.ps1 -ValidateOnly` tests a disposable database; an actual deployment backs up production before applying migrations. Deploy this backend and its matching frontend together so the professor UI reflects the token-based deletion rule.
+Apply V11 through the usual web app deployment. `deploy-webapp.ps1 -ValidateOnly` tests a disposable database; an actual deployment backs up production before applying migrations. Deploy this backend and its matching frontend together so the professor UI reflects both author and lecture-owner deletion.

@@ -201,9 +201,6 @@ export default function ProfessorDashboard({
   }
 
   const openQuestionPool = questions.filter((q) => !q.answered)
-  const deletableOpenQuestions = openQuestionPool.filter(
-    (q) => q.authorId === user.id,
-  )
   const openQuestions = filterOpenQuestions(questions, timeFilter, now)
   const answeredQuestions = sortQuestions(questions.filter((q) => q.answered))
   const topVotedRanks = new Map(
@@ -293,9 +290,7 @@ export default function ProfessorDashboard({
             target?.kind === 'allOpen' && target.lectureId === lectureId
               ? {
                   ...target,
-                  ids: items
-                    .filter((q) => !q.answered && q.authorId === user.id)
-                    .map((q) => q.id),
+                  ids: items.filter((q) => !q.answered).map((q) => q.id),
                 }
               : target,
           )
@@ -316,7 +311,7 @@ export default function ProfessorDashboard({
       active = false
       window.clearInterval(timer)
     }
-  }, [lectureId, selectedLecture?.canManage, user.id])
+  }, [lectureId, selectedLecture?.canManage])
 
   useEffect(() => {
     if (page !== 'pastLectures' && page !== 'profile') return
@@ -567,9 +562,7 @@ export default function ProfessorDashboard({
       async () => {
         const latest = await listProfessorQuestions(lectureId)
         setQuestions(latest)
-        const ids = latest
-          .filter((q) => !q.answered && q.authorId === user.id)
-          .map((q) => q.id)
+        const ids = latest.filter((q) => !q.answered).map((q) => q.id)
         if (ids.length)
           setDeleteTarget({
             kind: 'allOpen',
@@ -964,15 +957,11 @@ export default function ProfessorDashboard({
                   <div className="professor-question-clear">
                     <button
                       type="button"
-                      disabled={
-                        !deletableOpenQuestions.length || busyId !== null
-                      }
+                      disabled={!openQuestionPool.length || busyId !== null}
                       onClick={(e) => void prepareClear(e.currentTarget)}
                       className="min-h-11 rounded-lg border border-red-200 px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                      {busyId === 'clear'
-                        ? 'Clearing…'
-                        : 'Clear your questions'}
+                      {busyId === 'clear' ? 'Clearing…' : 'Clear all questions'}
                     </button>
                   </div>
                 )}
@@ -1095,26 +1084,24 @@ export default function ProfessorDashboard({
                               : 'Mark answered'}
                           </button>
 
-                          {question.authorId === user.id && (
-                            <button
-                              type="button"
-                              onClick={(event) => {
-                                setMutationError('')
-                                deleteTriggerRef.current = event.currentTarget
-                                setDeleteTarget({
-                                  kind: 'question',
-                                  id: question.id,
-                                  text: question.text,
-                                })
-                              }}
-                              disabled={busyId !== null}
-                              aria-label="Delete question"
-                              title="Delete question"
-                              className="professor-delete-button ml-auto inline-flex min-h-11 items-center justify-center rounded-md border px-3 text-sm"
-                            >
-                              Delete
-                            </button>
-                          )}
+                          <button
+                            type="button"
+                            onClick={(event) => {
+                              setMutationError('')
+                              deleteTriggerRef.current = event.currentTarget
+                              setDeleteTarget({
+                                kind: 'question',
+                                id: question.id,
+                                text: question.text,
+                              })
+                            }}
+                            disabled={busyId !== null}
+                            aria-label="Delete question"
+                            title="Delete question"
+                            className="professor-delete-button ml-auto inline-flex min-h-11 items-center justify-center rounded-md border px-3 text-sm"
+                          >
+                            Delete
+                          </button>
                         </div>
                       </article>
                     )
@@ -1266,7 +1253,7 @@ export default function ProfessorDashboard({
         >
           <h2 id="delete-title" className="text-xl font-semibold">
             {deleteTarget.kind === 'allOpen'
-              ? 'Clear your open questions?'
+              ? 'Clear all questions?'
               : 'Are you sure you want to delete this question?'}
           </h2>
           <p
@@ -1274,7 +1261,7 @@ export default function ProfessorDashboard({
             className="mt-2 text-sm leading-6 text-slate-600 [overflow-wrap:anywhere]"
           >
             {deleteTarget.kind === 'allOpen'
-              ? `Permanently delete your ${deleteTarget.ids.length} open questions from ${deleteTarget.title}? This includes your questions outside the selected time range. Answered questions and other accounts' questions will remain. This cannot be undone.`
+              ? `Permanently delete all ${deleteTarget.ids.length} open questions from ${deleteTarget.title}? This includes questions outside the selected time range. Answered questions will remain. This cannot be undone.`
               : `Permanently delete “${deleteTarget.text}”? This cannot be undone.`}
           </p>
           {(mutationError || apiError) && (
@@ -1305,7 +1292,7 @@ export default function ProfessorDashboard({
               {busyId !== null
                 ? 'Deleting…'
                 : deleteTarget.kind === 'allOpen'
-                  ? 'Clear your questions'
+                  ? 'Clear all questions'
                   : 'Delete permanently'}
             </button>
           </div>

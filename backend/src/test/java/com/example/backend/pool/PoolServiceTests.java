@@ -30,9 +30,22 @@ class PoolServiceTests {
     @ValueSource(strings = {"student", "professor", "admin"})
     void noStoredRoleCanDeleteWithoutMatchingToken(String role) {
         when(repository.lockQuestion(10)).thenReturn(new PoolRepository.QuestionAccess(10, 20, 30));
+        when(repository.lecture(20)).thenReturn(new PoolRepository.LectureAccess(20, 40L,
+            new LectureSession.State(null, null, false)));
         assertEquals(NOT_FOUND, assertThrows(ApiException.class,
             () -> service.delete(new PoolRepository.User(31, role), 10)).status);
         verify(repository, never()).delete(anyLong());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"student", "professor", "admin"})
+    void lectureOwnerCanDeleteWithoutMatchingToken(String role) {
+        when(repository.lockQuestion(10)).thenReturn(new PoolRepository.QuestionAccess(10, 20, 30));
+        when(repository.lecture(20)).thenReturn(new PoolRepository.LectureAccess(20, 40L,
+            new LectureSession.State(null, null, false)));
+        when(repository.delete(10)).thenReturn(1);
+        service.delete(new PoolRepository.User(40, role), 10);
+        verify(repository).delete(10);
     }
 
     @Test void pausedSessionsRejectSubmissions() {

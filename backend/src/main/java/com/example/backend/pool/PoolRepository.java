@@ -97,10 +97,6 @@ public class PoolRepository {
         return jdbc.queryForObject("INSERT INTO questions (lecture_id, author_id, text, deletion_token_hash) VALUES (?, ?, ?, ?) RETURNING id",
             Long.class, lecture, author, text, tokenHash);
     }
-    public void createDeletionToken(long question, long user, byte[] tokenHash) {
-        jdbc.update("INSERT INTO question_deletion_tokens (question_id, user_id, token_hash) VALUES (?, ?, ?)",
-            question, user, tokenHash);
-    }
     public long recordModerationWarning(long lecture, long user, String reason) {
         jdbc.update("INSERT INTO question_moderation_warnings (lecture_id, user_id, reason) VALUES (?, ?, ?)", lecture, user, reason);
         return jdbc.queryForObject("SELECT count(*) FROM question_moderation_warnings WHERE lecture_id = ? AND user_id = ?", Long.class, lecture, user);
@@ -154,18 +150,6 @@ public class PoolRepository {
         args.add(lecture);
         args.addAll(ids);
         return jdbc.queryForList("SELECT id FROM questions WHERE lecture_id = ? AND status = 'unanswered' AND id IN (" + placeholders + ") ORDER BY id FOR UPDATE", Long.class, args.toArray());
-    }
-    public List<Long> deleteTokens(List<Long> ids, long user) {
-        if (ids.isEmpty()) return List.of();
-        var placeholders = String.join(",", java.util.Collections.nCopies(ids.size(), "?"));
-        var args = new java.util.ArrayList<Object>();
-        args.add(user);
-        args.addAll(ids);
-        return jdbc.queryForList("""
-            DELETE FROM question_deletion_tokens t USING questions q
-            WHERE t.question_id = q.id AND t.user_id = ?
-              AND t.token_hash = q.deletion_token_hash AND q.id IN (
-            """ + placeholders + ") RETURNING t.question_id", Long.class, args.toArray());
     }
     public List<Long> deleteQuestions(List<Long> ids) {
         if (ids.isEmpty()) return List.of();

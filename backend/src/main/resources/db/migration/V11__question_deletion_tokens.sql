@@ -1,9 +1,11 @@
--- Legacy questions remain deletable by their authors. PostgreSQL's cryptographic
--- UUID generator supplies entropy for migration-only, ephemeral token material.
+-- PostgreSQL's cryptographic UUID generator supplies entropy for existing rows
+-- and for inserts from an older backend during a deployment rollback.
 ALTER TABLE questions ADD COLUMN deletion_token_hash BYTEA;
 UPDATE questions
 SET deletion_token_hash = sha256(convert_to(gen_random_uuid()::text || gen_random_uuid()::text, 'UTF8'));
 ALTER TABLE questions ALTER COLUMN deletion_token_hash SET NOT NULL;
+ALTER TABLE questions ALTER COLUMN deletion_token_hash SET DEFAULT
+    sha256(convert_to(gen_random_uuid()::text || gen_random_uuid()::text, 'UTF8'));
 ALTER TABLE questions ADD CONSTRAINT questions_deletion_token_hash_length
     CHECK (octet_length(deletion_token_hash) = 32);
 ALTER TABLE questions ADD CONSTRAINT questions_deletion_token_hash_unique UNIQUE (deletion_token_hash);
@@ -21,3 +23,17 @@ CREATE INDEX question_deletion_tokens_user_id_idx ON question_deletion_tokens (u
 
 INSERT INTO question_deletion_tokens (question_id, user_id, token_hash)
 SELECT id, author_id, deletion_token_hash FROM questions;
+
+-- The database inserts the matching account record in the same transaction as
+-- the question. This also covers an older application release after rollback.
+CREATE FUNCTION create_question_deletion_token() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+    INSERT INTO question_deletion_tokens (question_id, user_id, token_hash)
+    VALUES (NEW.id, NEW.author_id, NEW.deletion_token_hash);
+    RETURN NEW;
+END;
+$$;
+CREATE TRIGGER question_deletion_token_after_insert
+AFTER INSERT ON questions FOR EACH ROW
+EXECUTE FUNCTION create_question_deletion_token();
