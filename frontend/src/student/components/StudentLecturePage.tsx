@@ -23,7 +23,7 @@ export default function StudentLecturePage({
   backLabel,
 }: Props) {
   const questions = entry?.questions
-  const archived = !!lecture?.endedAt
+  const archived = !!lecture?.endedAt && !entry?.unavailable
   return (
     <main className="student-history-page student-lecture-page">
       <section className="page-column">
@@ -46,8 +46,10 @@ export default function StudentLecturePage({
           ← {backLabel}
         </a>
         <h1>
-          {lecture?.title ||
-            (loading ? 'Loading lecture…' : 'Lecture unavailable')}
+          {entry?.unavailable
+            ? 'Session unavailable'
+            : lecture?.title ||
+              (loading ? 'Loading lecture…' : 'Lecture unavailable')}
         </h1>
         {error && (
           <div className="student-history-feedback" role="alert">
@@ -57,7 +59,12 @@ export default function StudentLecturePage({
             </button>
           </div>
         )}
-        {!loading && !error && !archived && (
+        {entry?.unavailable && (
+          <p className="empty-message" role="status">
+            This session is no longer available.
+          </p>
+        )}
+        {!loading && !error && !archived && !entry?.unavailable && (
           <p className="empty-message">
             This past lecture is not available. Choose a lecture from Past
             Lectures.

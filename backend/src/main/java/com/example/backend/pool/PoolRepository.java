@@ -141,6 +141,13 @@ public class PoolRepository {
         jdbc.update("UPDATE questions SET status = ?, selected = ?, answered_at = CASE WHEN ? THEN COALESCE(answered_at, CURRENT_TIMESTAMP) ELSE NULL END WHERE id = ?",
             status.equals("answered") ? "answered" : "unanswered", status.equals("selected"), status.equals("answered"), question);
     }
+    public void deleteLecture(long lecture) {
+        // Restrictive lecture FKs require explicit cleanup; question dependents and
+        // personal history/memberships cascade within the service transaction.
+        jdbc.update("DELETE FROM questions WHERE lecture_id = ?", lecture);
+        jdbc.update("DELETE FROM question_moderation_warnings WHERE lecture_id = ?", lecture);
+        jdbc.update("DELETE FROM lectures WHERE id = ?", lecture);
+    }
     public void delete(long question) { jdbc.update("DELETE FROM questions WHERE id = ?", question); }
     public List<String> clearOpen(long lecture, List<Long> ids) {
         if (ids.isEmpty()) return List.of();

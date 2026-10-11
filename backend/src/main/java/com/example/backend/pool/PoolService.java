@@ -131,6 +131,15 @@ public class PoolService {
         repository.delete(id);
     }
     @Transactional
+    public void deleteLecture(User user, long id) {
+        var access = repository.lockLecture(id);
+        if (!Long.valueOf(user.id()).equals(access.ownerId()))
+            throw new ApiException(FORBIDDEN, "You do not manage this lecture.");
+        if (access.session().endedAt() == null)
+            throw new ApiException(CONFLICT, "Only completed sessions can be deleted.");
+        repository.deleteLecture(id);
+    }
+    @Transactional
     public Lecture session(User user, long id, SessionAction request) {
         var access = repository.lockLecture(id);
         requireManage(user, id);

@@ -226,11 +226,17 @@ for (const width of [390, 1280])
         path: info.outputPath('student-sessions.png'),
         fullPage: true,
       })
-      for (let i = 0; i < 3; i++)
+      for (let i = 0; i < 3; i++) {
         await s
           .getByRole('button', { name: /^Remove .* from history$/ })
           .first()
           .click()
+        await s
+          .getByRole('dialog')
+          .getByRole('button', { name: 'Remove from history', exact: true })
+          .click()
+        await expect(s.getByRole('dialog')).toHaveCount(0)
+      }
       await expect(
         s.getByText(
           'No saved sessions are available for this course in your history.',

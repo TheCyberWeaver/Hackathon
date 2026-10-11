@@ -65,3 +65,9 @@ export function deleteQuestion(id: string) {
     method: 'DELETE',
   })
 }
+
+export function deleteLecture(id: string) {
+  return request<void>(`/lectures/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  })
+}

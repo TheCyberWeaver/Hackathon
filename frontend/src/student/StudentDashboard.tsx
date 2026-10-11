@@ -3,6 +3,7 @@ import { flushSync } from 'react-dom'
 import { QuestionCard } from './components/QuestionCard'
 import StudentHistory from './components/StudentHistory'
 import CourseHistory from '../components/CourseHistory'
+import SessionRemovalDialog from '../components/SessionRemovalDialog'
 import { historyCourses, lectureCourseKey } from '../lib/courseHistory'
 import {
   useHistoryRoute,
@@ -107,6 +108,9 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
   const [removingHistoryId, setRemovingHistoryId] = useState<string | null>(
     null,
   )
+  const [historyRemovalTarget, setHistoryRemovalTarget] =
+    useState<Lecture | null>(null)
+  const [historyRemovalError, setHistoryRemovalError] = useState('')
   const selectedLecture = viewedLecture
   const requestedLecture =
     lectures.find((lecture) => lecture.id === requestedLectureId) ??
@@ -127,6 +131,7 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
         ? [requestedLecture]
         : [],
     page === 'pastLectures' || readingLecture,
+    readingLecture ? 5000 : 30_000,
   )
   const courses = historyCourses(lectures)
   const selectedCourseKey =
@@ -340,12 +345,14 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
     historyMutationPending.current = true
     historyVersion.current++
     setRemovingHistoryId(lecture.id)
+    setHistoryRemovalError('')
     try {
       await removeLectureFromHistory(lecture.id)
       setLectures((items) => items.filter((item) => item.id !== lecture.id))
+      setHistoryRemovalTarget(null)
       showToast('Lecture removed from your history.')
     } catch (error) {
-      showToast(
+      setHistoryRemovalError(
         error instanceof Error
           ? error.message
           : 'Could not remove this lecture from your history.',
@@ -591,7 +598,34 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
         .then((lecture) => {
           if (active) setViewedLecture(lecture)
         })
-        .catch(() => {})
+        .catch((error: unknown) => {
+          if (
+            !active ||
+            !(error instanceof ApiRequestError) ||
+            error.status !== 404
+          )
+            return
+          // The session may have ended and been deleted between live polls.
+          // Clear its cached pool as well as history, preserving any other live membership.
+          active = false
+          mutationVersion.current++
+          historyVersion.current++
+          selectedIdRef.current = ''
+          setViewedLecture(null)
+          setLectureId('')
+          setQuestions([])
+          setDraft('')
+          setReportTarget(null)
+          setModerationWarning(null)
+          setJoinedSession((current) =>
+            current?.id === lectureId ? null : current,
+          )
+          setLectures((items) => items.filter((item) => item.id !== lectureId))
+          setLinkedPastLecture((current) =>
+            current?.id === lectureId ? null : current,
+          )
+          setJoinError('This session is no longer available.')
+        })
       return listQuestions(lectureId)
         .then((items) => {
           if (
@@ -1296,9 +1330,10 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
                     onRetryLectures={retryHistory}
                     onRetryQuestions={(id) => void history.retry(id)}
                     onOpenLecture={openPastLecture}
-                    onRemoveLecture={(lecture) =>
-                      void removeFromHistory(lecture)
-                    }
+                    onRemoveLecture={(lecture) => {
+                      setHistoryRemovalError('')
+                      setHistoryRemovalTarget(lecture)
+                    }}
                   />
                 )}
               </CourseHistory>
@@ -1323,6 +1358,15 @@ export default function StudentDashboard({ user }: { user: CurrentUser }) {
         </main>
       )}
 
+      {historyRemovalTarget && (
+        <SessionRemovalDialog
+          lecture={historyRemovalTarget}
+          busy={removingHistoryId !== null}
+          error={historyRemovalError}
+          onCancel={() => setHistoryRemovalTarget(null)}
+          onConfirm={() => void removeFromHistory(historyRemovalTarget)}
+        />
+      )}
       {reportTarget && (
         <div className="dialog-backdrop" onClick={() => setReportTarget(null)}>
           <div

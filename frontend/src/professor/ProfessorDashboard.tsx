@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import {
   changeQuestionStatus,
   deleteQuestion,
+  deleteLecture,
   clearOpenQuestions,
   getSummary,
   listArchive,
@@ -33,6 +34,7 @@ import JoinQrCode from '../components/JoinQrCode'
 import { getSessionInvite, joinUrl, type SharedSession } from '../lib/sessions'
 import SidePanel, { type SidePanelPage } from '../components/SidePanel'
 import CourseHistory from '../components/CourseHistory'
+import SessionRemovalDialog from '../components/SessionRemovalDialog'
 import { historyCourses, sessionStart } from '../lib/courseHistory'
 import {
   useHistoryRoute,
@@ -193,6 +195,8 @@ export default function ProfessorDashboard({
   const [now, setNow] = useState(Date.now)
   const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set())
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null)
+  const [sessionRemovalTarget, setSessionRemovalTarget] =
+    useState<Lecture | null>(null)
   const [endConfirmationOpen, setEndConfirmationOpen] = useState(false)
   const [notice, setNotice] = useState('')
   const dialogRef = useRef<HTMLDialogElement>(null)
@@ -332,8 +336,14 @@ export default function ProfessorDashboard({
     const load = async () => {
       try {
         if (page === 'pastLectures') {
+          if (mutationPending.current) return
+          const version = mutationVersion.current
           const items = await listArchive()
-          if (active) {
+          if (
+            active &&
+            !mutationPending.current &&
+            version === mutationVersion.current
+          ) {
             setArchive(items.filter((item) => item.lecture.canManage))
             setArchiveLoaded(true)
             setArchiveError('')
@@ -476,6 +486,30 @@ export default function ProfessorDashboard({
       mutationVersion.current++
       setBusyId(null)
     }
+  }
+
+  async function removeSession(lecture: Lecture) {
+    const succeeded = await runMutation(
+      'delete-session',
+      async () => {
+        await deleteLecture(lecture.id)
+        setLectures((items) => items.filter((item) => item.id !== lecture.id))
+        setArchive((items) =>
+          items.filter((item) => item.lecture.id !== lecture.id),
+        )
+        if (lectureId === lecture.id) {
+          setQuestions([])
+          setLectureId(
+            lectures.find(
+              (item) =>
+                item.id !== lecture.id && item.startedAt && !item.endedAt,
+            )?.id ?? '',
+          )
+        }
+      },
+      'Session deleted for everyone in the course.',
+    )
+    if (succeeded) setSessionRemovalTarget(null)
   }
 
   async function updateSession(
@@ -1168,67 +1202,90 @@ export default function ProfessorDashboard({
                   const questions = archive.find(
                     (entry) => entry.lecture.id === lecture.id,
                   )?.questions
-                  if (!questions)
-                    return (
-                      <div
-                        key={lecture.id}
-                        className="rounded-lg border border-slate-200 bg-slate-50 p-4"
-                      >
-                        <p>{sessionStart(lecture).toLocaleString('en-GB')}</p>
-                        <p className="text-sm text-slate-500">
-                          {archiveError
-                            ? 'Question count unavailable. Try again above.'
-                            : 'Loading question count…'}
-                        </p>
-                      </div>
-                    )
                   return (
-                    <details
+                    <article
                       key={lecture.id}
-                      className="rounded-lg border border-slate-200 bg-slate-50"
+                      className="professor-history-entry rounded-lg border border-slate-200 bg-slate-50"
                     >
-                      <summary className="cursor-pointer px-4 py-3 marker:text-blue-600 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-blue-600">
-                        <span className="font-semibold [overflow-wrap:anywhere]">
-                          {lecture.title !== courseTitle
-                            ? lecture.title
-                            : sessionStart(lecture).toLocaleDateString(
-                                'en-GB',
-                                { dateStyle: 'medium' },
-                              )}
-                        </span>
-                        <span className="mt-1 block text-xs text-slate-600">
-                          {sessionStart(lecture).toLocaleString('en-GB', {
-                            dateStyle: 'medium',
-                            timeStyle: 'short',
-                          })}{' '}
-                          · {questions.length}{' '}
-                          {questions.length === 1 ? 'question' : 'questions'} ·{' '}
-                          {questions.filter((q) => q.answered).length} answered
-                        </span>
-                      </summary>
-                      <div className="space-y-2 border-t border-slate-200 p-3">
-                        {!questions.length && (
-                          <p className="px-1 text-sm text-slate-500">
-                            No questions in this lecture.
-                          </p>
-                        )}
-                        {questions.map((question) => (
-                          <article
-                            key={question.id}
-                            className="rounded-md border border-slate-200 bg-white px-3 py-2"
-                          >
-                            <p className="text-sm leading-6 [overflow-wrap:anywhere]">
-                              {question.text}
+                      <details>
+                        <summary className="cursor-pointer px-4 py-3 marker:text-blue-600 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-blue-600">
+                          <span className="font-semibold [overflow-wrap:anywhere]">
+                            {lecture.title !== courseTitle
+                              ? lecture.title
+                              : sessionStart(lecture).toLocaleDateString(
+                                  'en-GB',
+                                  { dateStyle: 'medium' },
+                                )}
+                          </span>
+                          <span className="mt-1 block text-xs text-slate-600">
+                            {sessionStart(lecture).toLocaleString('en-GB', {
+                              dateStyle: 'medium',
+                              timeStyle: 'short',
+                            })}
+                            {questions ? (
+                              <>
+                                {' '}
+                                · {questions.length}{' '}
+                                {questions.length === 1
+                                  ? 'question'
+                                  : 'questions'}{' '}
+                                · {questions.filter((q) => q.answered).length}{' '}
+                                answered
+                              </>
+                            ) : archiveError ? (
+                              ' · Question count unavailable. Try again above.'
+                            ) : (
+                              ' · Loading question count…'
+                            )}
+                          </span>
+                        </summary>
+                        <div className="space-y-2 border-t border-slate-200 p-3">
+                          {!questions ? (
+                            <p className="px-1 text-sm text-slate-500">
+                              {archiveError
+                                ? 'Could not load questions. Try again above.'
+                                : 'Loading questions…'}
                             </p>
-                            <span
-                              className={`text-xs ${question.answered ? 'text-emerald-700' : 'text-slate-500'}`}
-                            >
-                              {question.answered ? 'Answered' : 'Unanswered'}
-                            </span>
-                          </article>
-                        ))}
+                          ) : !questions.length ? (
+                            <p className="px-1 text-sm text-slate-500">
+                              No questions in this lecture.
+                            </p>
+                          ) : (
+                            questions.map((question) => (
+                              <article
+                                key={question.id}
+                                className="rounded-md border border-slate-200 bg-white px-3 py-2"
+                              >
+                                <p className="text-sm leading-6 [overflow-wrap:anywhere]">
+                                  {question.text}
+                                </p>
+                                <span
+                                  className={`text-xs ${question.answered ? 'text-emerald-700' : 'text-slate-500'}`}
+                                >
+                                  {question.answered
+                                    ? 'Answered'
+                                    : 'Unanswered'}
+                                </span>
+                              </article>
+                            ))
+                          )}
+                        </div>
+                      </details>
+                      <div className="professor-history-actions">
+                        <button
+                          type="button"
+                          className="professor-history-remove"
+                          aria-label={`Remove ${lecture.title} session for everyone`}
+                          disabled={busyId !== null}
+                          onClick={() => {
+                            setMutationError('')
+                            setSessionRemovalTarget(lecture)
+                          }}
+                        >
+                          Remove
+                        </button>
                       </div>
-                    </details>
+                    </article>
                   )
                 })}
               </div>
@@ -1294,6 +1351,16 @@ export default function ProfessorDashboard({
         )}
       </div>
 
+      {sessionRemovalTarget && (
+        <SessionRemovalDialog
+          lecture={sessionRemovalTarget}
+          everyone
+          busy={busyId !== null}
+          error={mutationError}
+          onCancel={() => setSessionRemovalTarget(null)}
+          onConfirm={() => void removeSession(sessionRemovalTarget)}
+        />
+      )}
       {deleteTarget && (
         <dialog
           ref={dialogRef}

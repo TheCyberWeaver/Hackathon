@@ -159,6 +159,10 @@ for (const mobile of [false, true]) {
           exact: true,
         })
         .click()
+      await p
+        .getByRole('dialog')
+        .getByRole('button', { name: 'Remove from history', exact: true })
+        .click()
       await expect(p.locator('.student-history-entry')).toHaveCount(0)
       expect(
         (await api(peer.context, 'GET', '/student/lectures/history')).map(
