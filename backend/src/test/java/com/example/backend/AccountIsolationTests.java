@@ -1,12 +1,44 @@
 package com.example.backend;
 
 import java.util.*;
+import com.example.backend.pool.PoolRepository;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import static org.junit.jupiter.api.Assertions.*;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = "app.testing-permissions=false")
 class AccountIsolationTests extends AccountApiTestSupport {
+    @Autowired PoolRepository repository;
+
+    @Test void classmatesCannotReadQuestionAuthorsThroughStudentOrProfessorRoutes() throws Exception {
+        String owner = account("professor");
+        String author = account("student");
+        String classmate = account("student");
+        String lecture = create(owner);
+        session(lecture, owner, "start", 200);
+        String path = "/lectures/" + lecture + "/questions";
+        var submitted = send("POST", path, author, "{\"text\":\"Who wrote this?\"}", 201);
+        String id = submitted.get("id").asText();
+        var listed = send("GET", path, classmate, null, 200).get(0);
+        var detail = send("GET", path + "/" + id, classmate, null, 200);
+        var voted = send("POST", "/questions/" + id + "/vote", classmate, "{\"voted\":true}", 200);
+        for (var publicQuestion : List.of(submitted, listed, detail, voted)) {
+            assertEquals(7, publicQuestion.size(), "Public questions must contain only the seven approved fields");
+            assertFalse(publicQuestion.has("authorId"));
+            assertFalse(publicQuestion.has("author_id"));
+            assertFalse(publicQuestion.has("eth_identity_ref"));
+        }
+        assertFalse(listed.get("mine").asBoolean());
+        assertTrue(send("GET", path, author, null, 200).get(0).get("mine").asBoolean());
+        send("GET", "/lectures/" + lecture + "/professor/questions", classmate, null, 403);
+        send("PATCH", "/questions/" + id + "/status", classmate, "{\"status\":\"answered\"}", 403);
+        long classmateId = jdbc.queryForObject("SELECT id FROM users WHERE eth_identity_ref = ?", Long.class, classmate);
+        assertTrue(repository.professorQuestions(Long.parseLong(lecture), classmateId).isEmpty());
+        assertEquals(author, send("GET", "/lectures/" + lecture + "/professor/questions", owner, null, 200)
+            .get(0).get("authorId").asText());
+    }
+
     @Test void everyStoredRoleManagesOnlyItsOwnLecturesAndCanParticipateInSharedLectures() throws Exception {
         String owner = account("student");
         String shared = create(owner);
