@@ -112,6 +112,15 @@ public class PoolRepository {
     public void clearLectureMembers(long lecture) {
         jdbc.update("DELETE FROM lecture_memberships WHERE lecture_id = ?", lecture);
     }
+    public long studentCount(long lecture) {
+        // Membership is unique per user; history and the lecture owner do not count.
+        return jdbc.queryForObject("""
+            SELECT count(*) FROM lecture_memberships m
+            JOIN lectures l ON l.id = m.lecture_id
+            WHERE l.id = ? AND l.started_at IS NOT NULL AND l.ended_at IS NULL
+              AND m.user_id <> l.owner_id
+            """, Long.class, lecture);
+    }
     public long createQuestion(long lecture, long author, String text) {
         return jdbc.queryForObject("INSERT INTO questions (lecture_id, author_id, text) VALUES (?, ?, ?) RETURNING id",
             Long.class, lecture, author, text);

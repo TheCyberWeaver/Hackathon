@@ -91,6 +91,10 @@ public class PoolController {
     public List<ProfessorQuestion> professorQuestions(@RequestHeader(value = "X-User-Id", required = false) String identity, @PathVariable long lecture) {
         return service.professorQuestions(service.identify(identity), lecture);
     }
+    @GetMapping("/lectures/{lecture}/professor/session-stats")
+    public SessionStats sessionStats(@RequestHeader(value = "X-User-Id", required = false) String identity, @PathVariable long lecture) {
+        return service.sessionStats(service.identify(identity), lecture);
+    }
     @PatchMapping("/questions/{id}/status")
     public ProfessorQuestion status(@RequestHeader(value = "X-User-Id", required = false) String identity, @PathVariable long id, @RequestBody Status body) {
         return service.status(service.identify(identity), id, body);

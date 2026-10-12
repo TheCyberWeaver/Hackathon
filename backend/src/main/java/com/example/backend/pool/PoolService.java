@@ -121,6 +121,10 @@ public class PoolService {
         requireManage(user, lecture);
         return repository.professorQuestions(lecture, user.id());
     }
+    public SessionStats sessionStats(User user, long lecture) {
+        requireManage(user, lecture);
+        return new SessionStats(repository.studentCount(lecture));
+    }
     @Transactional
     public ProfessorQuestion status(User user, long id, Status request) {
         if (request == null || request.status() == null || !List.of("open", "selected", "answered").contains(request.status()))
